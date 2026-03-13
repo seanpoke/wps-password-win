@@ -75,6 +75,14 @@ namespace WpsPasswordManager.Monitor
                 return dialogHandle;
             }
             
+            // 尝试查找"文档已加密"窗口（解密对话框）
+            dialogHandle = FindWindow("#32770", "文档已加密");
+            if (dialogHandle != IntPtr.Zero)
+            {
+                LogWindowInfo("找到文档已加密窗口（解密对话框）", dialogHandle);
+                return dialogHandle;
+            }
+            
             // 兼容环境模糊匹配所有窗口（包括子窗口）
             dialogHandle = FindWindowByPartialTitleAll("密码");
             if (dialogHandle != IntPtr.Zero)
@@ -83,7 +91,16 @@ namespace WpsPasswordManager.Monitor
             }
             else
             {
-                Logger.Debug("未找到密码对话框");
+                // 尝试模糊匹配"文档已加密"
+                dialogHandle = FindWindowByPartialTitleAll("文档已加密");
+                if (dialogHandle != IntPtr.Zero)
+                {
+                    LogWindowInfo("通过模糊匹配找到文档已加密窗口", dialogHandle);
+                }
+                else
+                {
+                    Logger.Debug("未找到密码对话框");
+                }
             }
             return dialogHandle;
         }
@@ -188,6 +205,18 @@ namespace WpsPasswordManager.Monitor
         // 枚举所有顶级窗口
         [DllImport("user32.dll")]
         private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+        
+        // Win32 API 定义：设置窗口为前台窗口
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+        
+        // Win32 API 定义：获取焦点窗口
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr GetFocus();
+        
+        // Win32 API 定义：模拟键盘事件
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
 
         // 定位密码输入框
         public IntPtr FindPasswordEdit(IntPtr dialogHandle)
@@ -200,51 +229,49 @@ namespace WpsPasswordManager.Monitor
 
             Logger.Debug($"开始定位密码输入框，对话框句柄: {dialogHandle}");
 
-            // 尝试查找Qt5控件
-            IntPtr editHandle = FindWindowEx(dialogHandle, IntPtr.Zero, "Qt5QWindow", null);
-            if (editHandle != IntPtr.Zero)
+            // 尝试使用 FindWindowEx 查找所有子窗口
+            IntPtr childHandle = IntPtr.Zero;
+            do
             {
-                Logger.Debug($"找到Qt5窗口: {editHandle}");
-                // 在Qt5窗口中查找输入框
-                IntPtr qtEditHandle = FindQtEditControl(editHandle);
-                if (qtEditHandle != IntPtr.Zero)
+                childHandle = FindWindowEx(dialogHandle, childHandle, null, null);
+                if (childHandle != IntPtr.Zero)
                 {
-                    Logger.Debug($"在Qt5窗口中找到输入框: {qtEditHandle}");
-                    return qtEditHandle;
+                    // 获取窗口类名
+                    StringBuilder className = new StringBuilder(256);
+                    GetClassName(childHandle, className, className.Capacity);
+                    string classNameStr = className.ToString();
+                    
+                    // 获取窗口文本
+                    StringBuilder windowText = new StringBuilder(256);
+                    GetWindowText(childHandle, windowText, windowText.Capacity);
+                    string windowTextStr = windowText.ToString();
+                    
+                    Logger.Debug($"检查窗口: 句柄={childHandle}, 类名={classNameStr}, 文本={windowTextStr}");
+                    
+                    // 尝试向窗口发送 WM_SETTEXT 消息，看是否能设置文本
+                    bool canSetText = SetWindowText(childHandle, "test");
+                    if (canSetText)
+                    {
+                        Logger.Debug($"找到可设置文本的窗口: 句柄={childHandle}, 类名={classNameStr}");
+                        return childHandle;
+                    }
+                    
+                    // 递归查找子窗口
+                    IntPtr grandChildHandle = FindPasswordEdit(childHandle);
+                    if (grandChildHandle != IntPtr.Zero)
+                    {
+                        return grandChildHandle;
+                    }
                 }
-            }
-            
-            // 尝试直接查找编辑控件
-            editHandle = FindWindowEx(dialogHandle, IntPtr.Zero, "Edit", null);
-            if (editHandle != IntPtr.Zero)
-            {
-                Logger.Debug($"通过直接查找找到编辑控件: {editHandle}");
-                return editHandle;
-            }
-            
-            // 尝试查找其他可能的输入框类名
-            string[] possibleClassNames = { "Edit", "TextBox", "QLineEdit", "LineEdit", "RichEdit", "RichEdit20W", "RichEdit50W" };
-            foreach (string className in possibleClassNames)
-            {
-                editHandle = FindWindowEx(dialogHandle, IntPtr.Zero, className, null);
-                if (editHandle != IntPtr.Zero)
-                {
-                    Logger.Debug($"通过类名 {className} 找到输入框: {editHandle}");
-                    return editHandle;
-                }
-            }
-            
-            // 递归查找所有子窗口
-            editHandle = FindEditControlRecursive(dialogHandle);
-            if (editHandle != IntPtr.Zero)
-            {
-                Logger.Debug($"通过递归查找找到输入框: {editHandle}");
-                return editHandle;
-            }
+            } while (childHandle != IntPtr.Zero);
             
             Logger.Warning("未找到密码输入框");
             return IntPtr.Zero;
         }
+        
+        // Win32 API 定义：设置窗口文本
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        private static extern bool SetWindowText(IntPtr hWnd, string lpString);
         
         // 查找Qt编辑控件
         private IntPtr FindQtEditControl(IntPtr parentHandle)
