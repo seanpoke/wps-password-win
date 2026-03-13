@@ -60,7 +60,20 @@ namespace WpsPasswordManager.Simulator
             SetForegroundWindow(dialogHandle);
             System.Threading.Thread.Sleep(100);
             
-            // 直接输入密码（第一个输入框）
+            // 清空第一个输入框
+            // 模拟Ctrl+A选择所有文本
+            keybd_event(0x11, 0, 0, UIntPtr.Zero); // Ctrl键
+            keybd_event(0x41, 0, 0, UIntPtr.Zero); // A键
+            keybd_event(0x41, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+            keybd_event(0x11, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+            System.Threading.Thread.Sleep(50);
+            
+            // 模拟Delete键
+            keybd_event(0x2E, 0, 0, UIntPtr.Zero);
+            keybd_event(0x2E, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+            System.Threading.Thread.Sleep(50);
+            
+            // 输入密码（第一个输入框）
             foreach (char c in password)
             {
                 SimulateKeyPress(c);
@@ -70,6 +83,19 @@ namespace WpsPasswordManager.Simulator
             // 按一次Tab键，切换到「再次输入密码(P)」输入框
             keybd_event(0x09, 0, 0, UIntPtr.Zero); // Tab键
             keybd_event(0x09, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+            System.Threading.Thread.Sleep(50);
+            
+            // 清空第二个输入框
+            // 模拟Ctrl+A选择所有文本
+            keybd_event(0x11, 0, 0, UIntPtr.Zero); // Ctrl键
+            keybd_event(0x41, 0, 0, UIntPtr.Zero); // A键
+            keybd_event(0x41, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+            keybd_event(0x11, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+            System.Threading.Thread.Sleep(50);
+            
+            // 模拟Delete键
+            keybd_event(0x2E, 0, 0, UIntPtr.Zero);
+            keybd_event(0x2E, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
             System.Threading.Thread.Sleep(50);
             
             // 输入确认密码
