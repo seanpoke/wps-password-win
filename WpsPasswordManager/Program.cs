@@ -38,6 +38,10 @@ namespace WpsPasswordManager
         [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
         private static extern bool SetWindowText(IntPtr hWnd, string lpString);
 
+        // Win32 API 定义：获取窗口文本
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+
         [STAThread]
         static void Main()
         {
@@ -151,12 +155,27 @@ namespace WpsPasswordManager
                             IntPtr encryptDialog = monitor.FindPasswordDialog();
                             if (encryptDialog != IntPtr.Zero)
                             {
-                                Logger.Debug($"找到加密对话框: {encryptDialog}");
-                                // 直接在对话框位置显示悬浮按钮（优先显示在打开文件密码标签旁边）
-                            Logger.Debug("在对话框位置显示悬浮按钮");
-                            Application.DoEvents();
-                            floatingButton.ShowAtDialog(encryptDialog);
-                            Logger.Info("悬浮按钮已显示");
+                                // 获取对话框标题
+                                StringBuilder dialogTitle = new StringBuilder(256);
+                                GetWindowText(encryptDialog, dialogTitle, dialogTitle.Capacity);
+                                string title = dialogTitle.ToString();
+                                
+                                // 只有在加密窗口中显示悬浮按钮，解密窗口不显示
+                                if (title == "文档加密" || title == "密码加密")
+                                {
+                                    Logger.Debug($"找到加密对话框: {encryptDialog}, 标题: {title}");
+                                    // 直接在对话框位置显示悬浮按钮（优先显示在打开文件密码标签旁边）
+                                    Logger.Debug("在对话框位置显示悬浮按钮");
+                                    Application.DoEvents();
+                                    floatingButton.ShowAtDialog(encryptDialog);
+                                    Logger.Info("悬浮按钮已显示");
+                                }
+                                else
+                                {
+                                    Logger.Debug($"找到解密对话框: {encryptDialog}, 标题: {title}，不显示悬浮按钮");
+                                    // 隐藏悬浮按钮
+                                    floatingButton.HideButton();
+                                }
                             }
                             else
                             {
@@ -169,40 +188,47 @@ namespace WpsPasswordManager
                             IntPtr decryptDialog = monitor.FindPasswordDialog();
                             if (decryptDialog != IntPtr.Zero)
                             {
-                                Logger.Debug($"找到解密对话框: {decryptDialog}");
-                                // 尝试找到密码输入框
-                                IntPtr passwordEdit = monitor.FindPasswordEdit(decryptDialog);
-                                if (passwordEdit != IntPtr.Zero)
+                                // 获取对话框标题
+                                StringBuilder dialogTitle = new StringBuilder(256);
+                                GetWindowText(decryptDialog, dialogTitle, dialogTitle.Capacity);
+                                string title = dialogTitle.ToString();
+                                
+                                // 只有在解密窗口中自动填充密码
+                                if (title == "文档已加密")
                                 {
-                                    Logger.Debug($"找到密码输入框: {passwordEdit}");
+                                    Logger.Info($"找到解密对话框: {decryptDialog}, 标题: {title}");
                                     // 写死密码为 z0rfi7llkdc
                                     string password = "z0rfi7llkdc";
-                                    Logger.Debug($"填充密码: {password}");
-                                    // 先清空输入框
-                                    simulator.ClearInput(passwordEdit);
-                                    Logger.Debug("已清空密码输入框");
-                                    // 填充密码
-                                    simulator.SimulatePasswordInput(passwordEdit, password);
+                                    Logger.Info($"填充密码: {password}");
+                                    
+                                    // 确保对话框在前台
+                                    SetForegroundWindow(decryptDialog);
+                                    Thread.Sleep(200);
+                                    
+                                    // 直接模拟键盘输入密码
+                                    foreach (char c in password)
+                                    {
+                                        keybd_event((byte)char.ToUpper(c), 0, 0, UIntPtr.Zero);
+                                        keybd_event((byte)char.ToUpper(c), 0, 2, UIntPtr.Zero);
+                                        Thread.Sleep(20);
+                                    }
                                     Logger.Info("密码已填充到解密输入框");
                                     
-                                    // 尝试找到确定按钮并点击
-                                    IntPtr okButton = monitor.FindOKButton(decryptDialog);
-                                    if (okButton != IntPtr.Zero)
-                                    {
-                                        Logger.Debug($"找到确定按钮: {okButton}");
-                                        // 点击确定按钮
-                                        simulator.SimulateButtonClick(okButton);
-                                        Logger.Info("已点击确定按钮");
-                                    }
-                                    else
-                                    {
-                                        Logger.Warning("未找到确定按钮");
-                                    }
+                                    // 等待一小段时间
+                                    Thread.Sleep(200);
+                                    
+                                    // 模拟按 Enter 键确认
+                                    keybd_event(0x0D, 0, 0, UIntPtr.Zero); // Enter键
+                                    keybd_event(0x0D, 0, 2, UIntPtr.Zero);
+                                    Logger.Info("已按下 Enter 键确认");
+                                    
+                                    // 等待对话框关闭
+                                    Thread.Sleep(500);
                                 }
-                                else
-                                {
-                                    Logger.Warning("未找到密码输入框");
-                                }
+                            }
+                            else
+                            {
+                                Logger.Debug("未找到解密对话框");
                             }
                         }
                         else
