@@ -1368,6 +1368,14 @@ private static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, I
         {
             try
             {
+                // 定义常见的文档目录
+                string[] commonDocFolders = {
+                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                    Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) + "\\WPS Cloud Files",
+                    Environment.GetFolderPath(Environment.SpecialFolder.Desktop) + "\\test"
+                };
+                
                 // 尝试获取当前活动的WPS窗口
                 IntPtr activeWindow = GetForegroundWindow();
                 if (activeWindow != IntPtr.Zero)
@@ -1383,6 +1391,34 @@ private static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, I
                     {
                         string docName = title.Replace(" - WPS Office", "");
                         Logger.Debug($"从活动窗口标题中提取的文档名: {docName}");
+                        
+                        // 尝试在常见的文档目录中查找与该文档名匹配的文件
+                        foreach (string folder in commonDocFolders)
+                        {
+                            try
+                            {
+                                if (System.IO.Directory.Exists(folder))
+                                {
+                                    string[] wpsFiles = System.IO.Directory.GetFiles(folder, "*.docx").Concat(
+                                        System.IO.Directory.GetFiles(folder, "*.doc")).Concat(
+                                        System.IO.Directory.GetFiles(folder, "*.xlsx")).Concat(
+                                        System.IO.Directory.GetFiles(folder, "*.xls")).Concat(
+                                        System.IO.Directory.GetFiles(folder, "*.pptx")).Concat(
+                                        System.IO.Directory.GetFiles(folder, "*.ppt")).ToArray();
+                                    
+                                    foreach (string file in wpsFiles)
+                                    {
+                                        string fileName = Path.GetFileName(file);
+                                        if (fileName.Equals(docName, StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            Logger.Debug($"从活动窗口标题匹配到文档: {file}");
+                                            return file;
+                                        }
+                                    }
+                                }
+                            }
+                            catch { }
+                        }
                     }
                 }
                 
@@ -1408,6 +1444,34 @@ private static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, I
                         {
                             string docName = mainTitle.Replace(" - WPS Office", "");
                             Logger.Debug($"从主窗口标题中提取的文档名: {docName}");
+                            
+                            // 尝试在常见的文档目录中查找与该文档名匹配的文件
+                            foreach (string folder in commonDocFolders)
+                            {
+                                try
+                                {
+                                    if (System.IO.Directory.Exists(folder))
+                                    {
+                                        string[] wpsFiles = System.IO.Directory.GetFiles(folder, "*.docx").Concat(
+                                            System.IO.Directory.GetFiles(folder, "*.doc")).Concat(
+                                            System.IO.Directory.GetFiles(folder, "*.xlsx")).Concat(
+                                            System.IO.Directory.GetFiles(folder, "*.xls")).Concat(
+                                            System.IO.Directory.GetFiles(folder, "*.pptx")).Concat(
+                                            System.IO.Directory.GetFiles(folder, "*.ppt")).ToArray();
+                                        
+                                        foreach (string file in wpsFiles)
+                                        {
+                                            string fileName = Path.GetFileName(file);
+                                            if (fileName.Equals(docName, StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                Logger.Debug($"从WPS进程窗口标题匹配到文档: {file}");
+                                                return file;
+                                            }
+                                        }
+                                    }
+                                }
+                                catch { }
+                            }
                         }
                     }
                     catch (Exception ex)
@@ -1447,12 +1511,7 @@ private static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, I
                 }
                 
                 // 尝试在常见的文档目录中查找WPS文档
-                string[] commonDocFolders = {
-                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                    Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) + "\\WPS Cloud Files",
-                    Environment.GetFolderPath(Environment.SpecialFolder.Desktop) + "\\test"
-                };
+                // 使用已定义的 commonDocFolders 变量
                 
                 foreach (string folder in commonDocFolders)
                 {

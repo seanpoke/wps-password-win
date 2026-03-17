@@ -114,100 +114,15 @@ namespace WpsPasswordManager.Business
             {
                 try
                 {
-                    // 尝试使用System.IO.Packaging直接操作ZIP文件
-                    try
+                    // 直接使用备用数据流写入密码
+                    if (WritePasswordToWindowsMetadata(filePath, password))
                     {
-                        using (Package package = Package.Open(filePath, FileMode.OpenOrCreate, FileAccess.ReadWrite))
-                        {
-                            // 检查是否存在自定义属性部分
-                            Uri customPropsUri = new Uri("/docProps/custom.xml", UriKind.Relative);
-                            PackagePart customPropsPart;
-                            
-                            if (package.PartExists(customPropsUri))
-                            {
-                                customPropsPart = package.GetPart(customPropsUri);
-                            }
-                            else
-                            {
-                                // 创建自定义属性部分
-                                customPropsPart = package.CreatePart(customPropsUri, "application/vnd.openxmlformats-officedocument.custom-properties+xml");
-                                
-                                // 写入初始XML
-                                using (Stream stream = customPropsPart.GetStream())
-                                using (StreamWriter writer = new StreamWriter(stream))
-                                {
-                                    writer.Write(@"<?xml version=""1.0"" encoding=""UTF-8"" standalone=""yes""?>
-<Properties xmlns=""http://schemas.openxmlformats.org/officeDocument/2006/custom-properties"" xmlns:vt=""http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"">
-</Properties>");
-                                }
-                            }
-                            
-                            // 读取并修改XML
-                            XElement customPropsXml;
-                            using (Stream stream = customPropsPart.GetStream())
-                            using (StreamReader reader = new StreamReader(stream))
-                            {
-                                customPropsXml = XElement.Parse(reader.ReadToEnd());
-                            }
-                            
-                            // 查找或创建密码属性
-                            XNamespace ns = "http://schemas.openxmlformats.org/officeDocument/2006/custom-properties";
-                            XNamespace vt = "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes";
-                            
-                            var passwordProp = customPropsXml.Elements(ns + "Property")
-                                .FirstOrDefault(p => (string)p.Attribute("name") == PasswordPropertyName);
-                            
-                            if (passwordProp == null)
-                            {
-                                // 创建新属性
-                                passwordProp = new XElement(ns + "Property",
-                                    new XAttribute("fmtid", "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}"),
-                                    new XAttribute("pid", customPropsXml.Elements(ns + "Property").Count() + 2),
-                                    new XAttribute("name", PasswordPropertyName),
-                                    new XElement(vt + "lpwstr", password)
-                                );
-                                customPropsXml.Add(passwordProp);
-                            }
-                            else
-                            {
-                                // 更新现有属性
-                                var lpwstr = passwordProp.Element(vt + "lpwstr");
-                                if (lpwstr != null)
-                                {
-                                    lpwstr.Value = password;
-                                }
-                                else
-                                {
-                                    passwordProp.Add(new XElement(vt + "lpwstr", password));
-                                }
-                            }
-                            
-                            // 写回XML
-                            using (Stream stream = customPropsPart.GetStream(FileMode.Create, FileAccess.Write))
-                            using (StreamWriter writer = new StreamWriter(stream))
-                            {
-                                customPropsXml.Save(writer);
-                            }
-                            
-                            Logger.Info($"密码已成功写入到 {filePath} 的元数据中");
-                            return true;
-                        }
+                        Logger.Info($"密码已成功写入到 {filePath} 的备用数据流中");
+                        return true;
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        // 如果System.IO.Packaging失败，尝试使用其他方法
-                        Logger.Warning($"System.IO.Packaging失败: {ex.Message}，尝试使用其他方法");
-                        
-                        // 对于非ZIP格式的文档，尝试使用Windows API写入元数据
-                        if (WritePasswordToWindowsMetadata(filePath, password))
-                        {
-                            Logger.Info($"密码已成功写入到 {filePath} 的Windows元数据中");
-                            return true;
-                        }
-                        else
-                        {
-                            throw ex;
-                        }
+                        throw new Exception("无法写入备用数据流");
                     }
                 }
                 catch (Exception ex)
@@ -231,10 +146,7 @@ namespace WpsPasswordManager.Business
         {
             try
             {
-                // 这里可以使用Windows API来写入文件的扩展属性
-                // 由于不同版本的Windows和文件系统可能有不同的实现，这里只做一个简单的尝试
-                
-                // 对于NTFS文件系统，可以使用Alternate Data Streams
+                // 使用备用方法：对于NTFS文件系统，可以使用Alternate Data Streams
                 string adsPath = $"{filePath}:WpsPasswordManager";
                 System.IO.File.WriteAllText(adsPath, password);
                 
@@ -275,63 +187,14 @@ namespace WpsPasswordManager.Business
             {
                 try
                 {
-                    // 尝试使用System.IO.Packaging直接操作ZIP文件
-                    try
+                    // 直接使用备用数据流读取密码
+                    string password = ReadPasswordFromWindowsMetadata(filePath);
+                    if (!string.IsNullOrEmpty(password))
                     {
-                        using (Package package = Package.Open(filePath, FileMode.Open, FileAccess.Read))
-                        {
-                            // 检查是否存在自定义属性部分
-                            Uri customPropsUri = new Uri("/docProps/custom.xml", UriKind.Relative);
-                            if (package.PartExists(customPropsUri))
-                            {
-                                PackagePart customPropsPart = package.GetPart(customPropsUri);
-                                
-                                // 读取XML
-                                XElement customPropsXml;
-                                using (Stream stream = customPropsPart.GetStream())
-                                using (StreamReader reader = new StreamReader(stream))
-                                {
-                                    customPropsXml = XElement.Parse(reader.ReadToEnd());
-                                }
-                                
-                                // 查找密码属性
-                                XNamespace ns = "http://schemas.openxmlformats.org/officeDocument/2006/custom-properties";
-                                XNamespace vt = "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes";
-                                
-                                var passwordProp = customPropsXml.Elements(ns + "Property")
-                                    .FirstOrDefault(p => (string)p.Attribute("name") == PasswordPropertyName);
-                                
-                                if (passwordProp != null)
-                                {
-                                    var lpwstr = passwordProp.Element(vt + "lpwstr");
-                                    if (lpwstr != null)
-                                    {
-                                        string password = lpwstr.Value;
-                                        Logger.Info($"从 {filePath} 的元数据中读取到密码");
-                                        return password;
-                                    }
-                                }
-                            }
-                            return null;
-                        }
+                        Logger.Info($"从 {filePath} 的备用数据流中读取到密码");
+                        return password;
                     }
-                    catch (Exception ex)
-                    {
-                        // 如果System.IO.Packaging失败，尝试使用其他方法
-                        Logger.Warning($"System.IO.Packaging失败: {ex.Message}，尝试使用其他方法");
-                        
-                        // 对于非ZIP格式的文档，尝试使用Windows API读取元数据
-                        string password = ReadPasswordFromWindowsMetadata(filePath);
-                        if (!string.IsNullOrEmpty(password))
-                        {
-                            Logger.Info($"从 {filePath} 的Windows元数据中读取到密码");
-                            return password;
-                        }
-                        else
-                        {
-                            throw ex;
-                        }
-                    }
+                    return null;
                 }
                 catch (Exception ex)
                 {
@@ -353,7 +216,7 @@ namespace WpsPasswordManager.Business
         {
             try
             {
-                // 对于NTFS文件系统，可以使用Alternate Data Streams
+                // 使用备用方法：对于NTFS文件系统，可以使用Alternate Data Streams
                 string adsPath = $"{filePath}:WpsPasswordManager";
                 if (System.IO.File.Exists(adsPath))
                 {
