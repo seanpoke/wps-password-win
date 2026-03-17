@@ -84,6 +84,9 @@ namespace WpsPasswordManager
         // 鼠标钩子变量
         private static HookProc _mouseHookProc;
         private static IntPtr _mouseHook;
+        
+        // 记录已经尝试过自动填充密码的文档路径，确保每个文档只尝试一次
+        private static HashSet<string> attemptedDocuments = new HashSet<string>();
 
         // 常量定义
         private const int WH_MOUSE_LL = 14;
@@ -643,42 +646,53 @@ namespace WpsPasswordManager
                                     if (!string.IsNullOrEmpty(documentPath))
                                     {
                                         Logger.Info($"获取到文档路径: {documentPath}");
-                                        // 从文档元数据中读取密码
-                                        string password = metadataManager.ReadPasswordFromMetadata(documentPath);
-                                        if (!string.IsNullOrEmpty(password))
+                                        
+                                        // 检查该文档是否已经尝试过自动填充密码
+                                        if (!attemptedDocuments.Contains(documentPath))
                                         {
-                                            Logger.Info($"从文档元数据中读取到密码: {password}");
+                                            // 从文档元数据中读取密码
+                                            string password = metadataManager.ReadPasswordFromMetadata(documentPath);
+                                            if (!string.IsNullOrEmpty(password))
+                                            {
+                                                Logger.Info($"从文档元数据中读取到密码: {password}");
+                                                
+                                                // 确保对话框在前台
+                                                SetForegroundWindow(decryptDialog);
+                                                Thread.Sleep(200);
+                                                
+                                                // 直接模拟键盘输入密码
+                                                foreach (char c in password)
+                                                {
+                                                    keybd_event((byte)char.ToUpper(c), 0, 0, UIntPtr.Zero);
+                                                    keybd_event((byte)char.ToUpper(c), 0, 2, UIntPtr.Zero);
+                                                    Thread.Sleep(20);
+                                                }
+                                                Logger.Info("密码已填充到解密输入框");
+                                                
+                                                // 等待一小段时间
+                                                Thread.Sleep(200);
+                                                
+                                                // 模拟按 Enter 键确认
+                                                keybd_event(0x0D, 0, 0, UIntPtr.Zero); // Enter键
+                                                keybd_event(0x0D, 0, 2, UIntPtr.Zero);
+                                                Logger.Info("已按下 Enter 键确认");
+                                                
+                                                // 等待对话框关闭
+                                                Thread.Sleep(500);
+                                            }
+                                            else
+                                            {
+                                                Logger.Info("从文档元数据中读取密码失败，跳过自动填充");
+                                            }
+                                            
+                                            // 标记该文档已经尝试过自动填充密码
+                                            attemptedDocuments.Add(documentPath);
+                                            Logger.Info($"已标记文档 {documentPath} 为已尝试自动填充密码");
                                         }
                                         else
                                         {
-                                            // 如果从元数据中读取失败，使用默认密码
-                                            password = "z0rfi7llkdc";
-                                            Logger.Info($"从文档元数据中读取密码失败，使用默认密码: {password}");
+                                            Logger.Info($"文档 {documentPath} 已经尝试过自动填充密码，跳过");
                                         }
-                                        
-                                        // 确保对话框在前台
-                                        SetForegroundWindow(decryptDialog);
-                                        Thread.Sleep(200);
-                                        
-                                        // 直接模拟键盘输入密码
-                                        foreach (char c in password)
-                                        {
-                                            keybd_event((byte)char.ToUpper(c), 0, 0, UIntPtr.Zero);
-                                            keybd_event((byte)char.ToUpper(c), 0, 2, UIntPtr.Zero);
-                                            Thread.Sleep(20);
-                                        }
-                                        Logger.Info("密码已填充到解密输入框");
-                                        
-                                        // 等待一小段时间
-                                        Thread.Sleep(200);
-                                        
-                                        // 模拟按 Enter 键确认
-                                        keybd_event(0x0D, 0, 0, UIntPtr.Zero); // Enter键
-                                        keybd_event(0x0D, 0, 2, UIntPtr.Zero);
-                                        Logger.Info("已按下 Enter 键确认");
-                                        
-                                        // 等待对话框关闭
-                                        Thread.Sleep(500);
                                     }
                                     else
                                     {
@@ -788,6 +802,37 @@ namespace WpsPasswordManager
                             {
                                 passwordCache.Remove(documentPath);
                                 Logger.Info($"从缓存中移除文档: {documentPath}");
+                                
+                                // 同时从尝试记录中移除，以便下次打开时重新尝试
+                                if (attemptedDocuments.Contains(documentPath))
+                                {
+                                    attemptedDocuments.Remove(documentPath);
+                                    Logger.Info($"从尝试记录中移除文档: {documentPath}");
+                                }
+                            }
+                        }
+                        
+                        // 检查尝试记录中的文档是否已关闭
+                        if (attemptedDocuments.Count > 0)
+                        {
+                            List<string> attemptedDocsToRemove = new List<string>();
+                            
+                            foreach (string documentPath in attemptedDocuments)
+                            {
+                                // 检查文档是否仍然打开
+                                if (!IsDocumentOpen(documentPath))
+                                {
+                                    // 文档已关闭，从尝试记录中移除
+                                    attemptedDocsToRemove.Add(documentPath);
+                                    Logger.Info($"文档已关闭，从尝试记录中移除: {documentPath}");
+                                }
+                            }
+                            
+                            // 从尝试记录中移除已关闭的文档
+                            foreach (string documentPath in attemptedDocsToRemove)
+                            {
+                                attemptedDocuments.Remove(documentPath);
+                                Logger.Info($"已从尝试记录中移除文档: {documentPath}");
                             }
                         }
                     }
