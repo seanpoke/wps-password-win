@@ -34,10 +34,10 @@ namespace WpsPasswordManager.UI
 
             this.Controls.Add(_messageLabel);
 
-            // 创建定时器，3秒后自动关闭
+            // 创建定时器，10秒后自动关闭
             _closeTimer = new System.Windows.Forms.Timer
             {
-                Interval = 3000
+                Interval = 10000
             };
             _closeTimer.Tick += (sender, e) =>
             {

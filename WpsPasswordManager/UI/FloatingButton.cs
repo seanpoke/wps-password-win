@@ -11,6 +11,7 @@ namespace WpsPasswordManager.UI
         private Button _generateButton;
         private IntPtr _passwordEditHandle;
         private WpsMonitor _monitor;
+        private bool _isVisible = false;
 
         // Win32 API 定义
         [DllImport("user32.dll")]
@@ -65,8 +66,13 @@ namespace WpsPasswordManager.UI
             // 设置窗口为最顶层
             SetWindowPos(this.Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
             base.Show();
-            // 确保按钮获得焦点
-            _generateButton.Focus();
+            // 只有在按钮首次显示时才设置焦点，避免重复设置焦点导致鼠标自动移动
+            if (!_isVisible)
+            {
+                // 移除焦点设置，避免鼠标自动移动到按钮上
+                // _generateButton.Focus();
+                _isVisible = true;
+            }
         }
 
         public void ShowAtPasswordBox(IntPtr passwordEditHandle)
@@ -87,8 +93,12 @@ namespace WpsPasswordManager.UI
             int x = (int)(rect.Right + 5 * dpiScale);
             int y = (int)(rect.Top * dpiScale);
 
-            Logger.Debug($"显示悬浮按钮，位置: X={x}, Y={y}, DPI缩放: {dpiScale}");
-            this.Location = new System.Drawing.Point(x, y);
+            // 只有在位置发生变化时才更新位置
+            if (this.Location.X != x || this.Location.Y != y)
+            {
+                Logger.Debug($"显示悬浮按钮，位置: X={x}, Y={y}, DPI缩放: {dpiScale}");
+                this.Location = new System.Drawing.Point(x, y);
+            }
             Show(); // 调用重写的 Show 方法
         }
 
@@ -101,35 +111,20 @@ namespace WpsPasswordManager.UI
                 return;
             }
 
-            // 尝试查找「打开文件密码(O)」标签
-            IntPtr labelHandle = _monitor.FindOpenPasswordLabel(dialogHandle);
-            if (labelHandle != IntPtr.Zero)
-            {
-                // 获取标签位置
-                WpsMonitor.RECT labelRect = _monitor.GetWindowRect(labelHandle);
-                float dpiScale = _monitor.GetDpiScale();
-
-                // 计算按钮位置（标签右侧5px）
-                int x = (int)(labelRect.Right + 5 * dpiScale);
-                int y = (int)(labelRect.Top * dpiScale);
-
-                Logger.Debug($"显示悬浮按钮在打开文件密码标签旁边，位置: X={x}, Y={y}, DPI缩放: {dpiScale}");
-                this.Location = new System.Drawing.Point(x, y);
-                Show(); // 调用重写的 Show 方法
-                return;
-            }
-
-            // 如果未找到标签，使用默认位置
             // 获取对话框位置
             WpsMonitor.RECT rect = _monitor.GetWindowRect(dialogHandle);
-            float dpiScaleDefault = _monitor.GetDpiScale();
+            float dpiScale = _monitor.GetDpiScale();
 
-            // 计算按钮位置（对话框右侧中间位置）
-            int xDefault = (int)(rect.Right - 100 * dpiScaleDefault);
-            int yDefault = (int)((rect.Top + rect.Bottom) / 2 * dpiScaleDefault - 14);
+            // 计算按钮位置（对话框右侧紧靠着窗口，垂直居中）
+            int x = (int)(rect.Right - 5 * dpiScale); // 距离窗口右侧5px
+            int y = (int)((rect.Top + rect.Bottom) / 2 * dpiScale - this.Height / 2); // 垂直居中
 
-            Logger.Debug($"显示悬浮按钮在对话框位置，位置: X={xDefault}, Y={yDefault}, DPI缩放: {dpiScaleDefault}");
-            this.Location = new System.Drawing.Point(xDefault, yDefault);
+            // 只有在位置发生变化时才更新位置
+            if (this.Location.X != x || this.Location.Y != y)
+            {
+                Logger.Debug($"显示悬浮按钮在对话框右侧，位置: X={x}, Y={y}, DPI缩放: {dpiScale}");
+                this.Location = new System.Drawing.Point(x, y);
+            }
             Show(); // 调用重写的 Show 方法
         }
 
@@ -137,6 +132,8 @@ namespace WpsPasswordManager.UI
         {
             Logger.Debug("隐藏悬浮按钮");
             this.Hide();
+            // 重置可见状态
+            _isVisible = false;
         }
 
         protected override void OnDeactivate(EventArgs e)
