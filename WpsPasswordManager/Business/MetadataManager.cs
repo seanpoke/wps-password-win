@@ -15,7 +15,12 @@ namespace WpsPasswordManager.Business
     public class MetadataManager
     {
         private const string PasswordPropertyName = "WpsPasswordManager";
+        private const string UidPropertyName = "WpsPasswordManagerUid";
         private const string ExternalStorageFile = "passwords.json";
+        private const string UidCacheFile = "uid_cache.json";
+        
+        // UID缓存，用于存储文档的UID
+        private Dictionary<string, string> uidCache;
         
         // 外部存储，用于存储非ZIP格式文档的密码
         private Dictionary<string, string> externalPasswordStore;
@@ -23,6 +28,43 @@ namespace WpsPasswordManager.Business
         public MetadataManager()
         {
             LoadExternalPasswordStore();
+            LoadUidCache();
+        }
+        
+        // 加载UID缓存
+        private void LoadUidCache()
+        {
+            try
+            {
+                if (File.Exists(UidCacheFile))
+                {
+                    string json = File.ReadAllText(UidCacheFile);
+                    uidCache = JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new Dictionary<string, string>();
+                }
+                else
+                {
+                    uidCache = new Dictionary<string, string>();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"加载UID缓存失败: {ex.Message}");
+                uidCache = new Dictionary<string, string>();
+            }
+        }
+        
+        // 保存UID缓存
+        private void SaveUidCache()
+        {
+            try
+            {
+                string json = JsonSerializer.Serialize(uidCache, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(UidCacheFile, json);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"保存UID缓存失败: {ex.Message}");
+            }
         }
         
         // 加载外部密码存储
@@ -286,6 +328,203 @@ namespace WpsPasswordManager.Business
             {
                 return false;
             }
+        }
+        
+        // 生成UID
+        private string GenerateUid()
+        {
+            long timestamp = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+            string uuid = Guid.NewGuid().ToString();
+            return $"{timestamp}_{uuid}";
+        }
+        
+        // 从文档元数据读取UID
+        public string ReadUidFromMetadata(string filePath)
+        {
+            // 检查文件是否存在
+            if (!System.IO.File.Exists(filePath))
+            {
+                Logger.Error($"文件不存在: {filePath}");
+                return null;
+            }
+
+            // 检查文件扩展名
+            string extension = System.IO.Path.GetExtension(filePath).ToLower();
+            if (!IsSupportedFormat(extension))
+            {
+                Logger.Warning($"不支持的文件格式: {extension}");
+                return null;
+            }
+
+            int retryCount = 3;
+            int delayMs = 500;
+
+            while (retryCount > 0)
+            {
+                try
+                {
+                    // 直接使用备用数据流读取UID
+                    string uid = ReadUidFromWindowsMetadata(filePath);
+                    if (!string.IsNullOrEmpty(uid))
+                    {
+                        Logger.Info($"从 {filePath} 的备用数据流中读取到UID");
+                        return uid;
+                    }
+                    return null;
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"读取UID元数据失败: {ex.Message}");
+                    retryCount--;
+                    if (retryCount > 0)
+                    {
+                        System.Threading.Thread.Sleep(delayMs);
+                    }
+                }
+            }
+
+            Logger.Error($"多次尝试后仍无法读取 {filePath} 的UID元数据");
+            return null;
+        }
+        
+        // 使用Windows API读取UID元数据
+        private string ReadUidFromWindowsMetadata(string filePath)
+        {
+            try
+            {
+                // 使用备用方法：对于NTFS文件系统，可以使用Alternate Data Streams
+                string adsPath = $"{filePath}:{UidPropertyName}";
+                if (System.IO.File.Exists(adsPath))
+                {
+                    string uid = System.IO.File.ReadAllText(adsPath);
+                    Logger.Info($"从 {filePath} 的备用数据流中读取到UID");
+                    return uid;
+                }
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"读取Windows UID元数据失败: {ex.Message}");
+                return null;
+            }
+        }
+        
+        // 写入UID到文档元数据
+        public bool WriteUidToMetadata(string filePath, string uid)
+        {
+            // 检查文件是否存在
+            if (!System.IO.File.Exists(filePath))
+            {
+                Logger.Error($"文件不存在: {filePath}");
+                return false;
+            }
+
+            // 检查文件扩展名
+            string extension = System.IO.Path.GetExtension(filePath).ToLower();
+            if (!IsSupportedFormat(extension))
+            {
+                Logger.Warning($"不支持的文件格式: {extension}");
+                return false;
+            }
+
+            int retryCount = 3;
+            int delayMs = 500;
+
+            while (retryCount > 0)
+            {
+                try
+                {
+                    // 直接使用备用数据流写入UID
+                    if (WriteUidToWindowsMetadata(filePath, uid))
+                    {
+                        Logger.Info($"UID已成功写入到 {filePath} 的备用数据流中");
+                        return true;
+                    }
+                    else
+                    {
+                        throw new Exception("无法写入备用数据流");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"写入UID元数据失败: {ex.Message}");
+                    retryCount--;
+                    if (retryCount > 0)
+                    {
+                        Logger.Debug($"重试写入UID元数据，剩余次数: {retryCount}");
+                        System.Threading.Thread.Sleep(delayMs);
+                    }
+                }
+            }
+
+            Logger.Error($"多次尝试后仍无法写入UID元数据到 {filePath}");
+            return false;
+        }
+        
+        // 使用Windows API写入UID元数据
+        private bool WriteUidToWindowsMetadata(string filePath, string uid)
+        {
+            try
+            {
+                // 使用备用方法：对于NTFS文件系统，可以使用Alternate Data Streams
+                string adsPath = $"{filePath}:{UidPropertyName}";
+                System.IO.File.WriteAllText(adsPath, uid);
+                
+                Logger.Info($"UID已成功写入到 {filePath} 的备用数据流中");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"写入Windows UID元数据失败: {ex.Message}");
+                return false;
+            }
+        }
+        
+        // 获取文档的UID
+        public string GetDocumentUid(string filePath)
+        {
+            Logger.Info($"开始获取文档UID: {filePath}");
+            // 首先尝试从元数据中读取UID
+            string uid = ReadUidFromMetadata(filePath);
+            if (!string.IsNullOrEmpty(uid))
+            {
+                Logger.Info($"从元数据中读取到UID: {uid}");
+                // 如果读取到UID，将其放入缓存
+                uidCache[filePath] = uid;
+                SaveUidCache();
+                return uid;
+            }
+            
+            // 如果元数据中没有UID，尝试从缓存中读取
+            if (uidCache.TryGetValue(filePath, out string cachedUid))
+            {
+                Logger.Info($"从缓存中读取到UID: {cachedUid}");
+                return cachedUid;
+            }
+            
+            // 如果缓存中也没有，生成新的UID并放入缓存
+            string newUid = GenerateUid();
+            Logger.Info($"生成新的UID: {newUid}");
+            uidCache[filePath] = newUid;
+            SaveUidCache();
+            return newUid;
+        }
+        
+        // 保存文档的UID到元数据（在文档关闭时调用）
+        public bool SaveDocumentUid(string filePath)
+        {
+            // 从缓存中获取UID
+            if (uidCache.TryGetValue(filePath, out string uid))
+            {
+                // 写入到元数据
+                bool success = WriteUidToMetadata(filePath, uid);
+                if (success)
+                {
+                    Logger.Info($"UID已成功保存到 {filePath} 的元数据中");
+                }
+                return success;
+            }
+            return false;
         }
 
         // 根据文件类型打开文档
