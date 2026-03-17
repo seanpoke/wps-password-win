@@ -319,12 +319,16 @@ namespace WpsPasswordManager.Monitor
         private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
 
         // Win32 API 定义：发送消息
-        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-        private static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, StringBuilder lParam);
+[DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+private static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, StringBuilder lParam);
         
-        // Win32 API 定义：发送消息（设置文本）
-        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-        private static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, string lParam);
+// Win32 API 定义：发送消息（设置文本）
+[DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+private static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, string lParam);
+        
+// Win32 API 定义：发送消息（通用）
+[DllImport("user32.dll", SetLastError = true)]
+private static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
         
         // 常量定义
         private const uint WM_GETTEXT = 0x000D;
@@ -833,6 +837,15 @@ namespace WpsPasswordManager.Monitor
                     return buttonHandle;
                 }
                 
+                // 尝试查找Qt5按钮
+                buttonHandle = FindQt5Button(dialogHandle, buttonText);
+                if (buttonHandle != IntPtr.Zero)
+                {
+                    Logger.Info($"找到Qt5{buttonText}按钮");
+                    LogWindowInfo($"找到Qt5{buttonText}按钮", buttonHandle);
+                    return buttonHandle;
+                }
+                
                 // 枚举所有子窗口，查找可能的按钮
                 buttonHandle = FindButtonByEnumeration(dialogHandle, buttonText);
                 if (buttonHandle != IntPtr.Zero)
@@ -843,7 +856,15 @@ namespace WpsPasswordManager.Monitor
                 }
             }
             
-            // 不再尝试查找任意按钮，只查找带有特定文本的按钮
+            // 尝试查找所有可能的按钮控件，不限制文本
+            Logger.Debug("尝试查找所有可能的按钮控件");
+            IntPtr anyButton = FindAnyButton(dialogHandle);
+            if (anyButton != IntPtr.Zero)
+            {
+                Logger.Info("找到任意按钮");
+                LogWindowInfo("找到任意按钮", anyButton);
+                return anyButton;
+            }
             
             // 枚举所有子窗口，记录详细信息
             Logger.Debug("开始枚举所有子窗口，查找应用按钮");
@@ -939,6 +960,87 @@ namespace WpsPasswordManager.Monitor
                     return false;
                 }
                 
+                return true;
+            }, IntPtr.Zero);
+            
+            return foundHandle;
+        }
+        
+        // 专门针对Qt5窗口的按钮查找方法
+        private IntPtr FindQt5Button(IntPtr parentHandle, string buttonText)
+        {
+            IntPtr foundHandle = IntPtr.Zero;
+            
+            // 尝试使用不同的Qt5按钮类名
+            string[] qtButtonClasses = { "QPushButton", "QToolButton", "QAbstractButton", "Button", "PushButton" };
+            
+            foreach (string qtClass in qtButtonClasses)
+            {
+                IntPtr buttonHandle = FindWindowEx(parentHandle, IntPtr.Zero, qtClass, buttonText);
+                if (buttonHandle != IntPtr.Zero)
+                {
+                    Logger.Info($"找到Qt5 {buttonText}按钮: {buttonHandle}");
+                    return buttonHandle;
+                }
+            }
+            
+            // 尝试使用FindWindowEx递归查找所有子窗口
+            IntPtr childHandle = IntPtr.Zero;
+            do
+            {
+                childHandle = FindWindowEx(parentHandle, childHandle, null, null);
+                if (childHandle != IntPtr.Zero)
+                {
+                    // 获取窗口类名
+                    StringBuilder className = new StringBuilder(256);
+                    GetClassName(childHandle, className, className.Capacity);
+                    string classNameStr = className.ToString();
+                    
+                    // 获取窗口文本
+                    StringBuilder windowText = new StringBuilder(256);
+                    GetWindowText(childHandle, windowText, windowText.Capacity);
+                    string windowTextStr = windowText.ToString();
+                    
+                    // 检查是否为Qt按钮且文本匹配
+                    if ((classNameStr.Contains("QPushButton") || classNameStr.Contains("QToolButton") || 
+                         classNameStr.Contains("Button") || classNameStr.Contains("PushButton")) && 
+                        windowTextStr == buttonText)
+                    {
+                        Logger.Info($"通过FindWindowEx找到Qt5 {buttonText}按钮: {childHandle}");
+                        return childHandle;
+                    }
+                    
+                    // 递归查找子窗口
+                    IntPtr grandChildHandle = FindQt5Button(childHandle, buttonText);
+                    if (grandChildHandle != IntPtr.Zero)
+                    {
+                        return grandChildHandle;
+                    }
+                }
+            } while (childHandle != IntPtr.Zero);
+            
+            // 尝试使用EnumChildWindows作为备用方案
+            EnumChildWindows(parentHandle, (hwnd, lParam) =>
+            {
+                StringBuilder className = new StringBuilder(256);
+                GetClassName(hwnd, className, className.Capacity);
+                string classNameStr = className.ToString();
+                
+                StringBuilder windowText = new StringBuilder(256);
+                GetWindowText(hwnd, windowText, windowText.Capacity);
+                string windowTextStr = windowText.ToString();
+                
+                // 检查是否为Qt按钮且文本匹配
+                if ((classNameStr.Contains("QPushButton") || classNameStr.Contains("QToolButton") || 
+                     classNameStr.Contains("Button") || classNameStr.Contains("PushButton")) && 
+                    windowTextStr == buttonText)
+                {
+                    Logger.Info($"通过EnumChildWindows找到Qt5 {buttonText}按钮: {hwnd}");
+                    foundHandle = hwnd;
+                    return false;
+                }
+                
+                // 继续递归查找
                 return true;
             }, IntPtr.Zero);
             
@@ -1160,6 +1262,22 @@ namespace WpsPasswordManager.Monitor
                     {
                         Logger.Debug($"通过 WM_GETTEXT 获取到输入框文本: {text}");
                         return text;
+                    }
+                    else
+                    {
+                        // 尝试使用 SendMessage WM_GETTEXTLENGTH 获取文本长度，然后获取文本
+                        int textLength = (int)SendMessage(editHandle, 0x000E, IntPtr.Zero, IntPtr.Zero); // WM_GETTEXTLENGTH
+                        if (textLength > 0)
+                        {
+                            StringBuilder sb3 = new StringBuilder(textLength + 1);
+                            SendMessage(editHandle, WM_GETTEXT, (IntPtr)(textLength + 1), sb3);
+                            string text3 = sb3.ToString();
+                            if (!string.IsNullOrEmpty(text3))
+                            {
+                                Logger.Debug($"通过 WM_GETTEXTLENGTH + WM_GETTEXT 获取到输入框文本: {text3}");
+                                return text3;
+                            }
+                        }
                     }
                 }
             }

@@ -235,6 +235,10 @@ namespace WpsPasswordManager
                 string lastDialogTitle = string.Empty;
                 // 记录上一次显示悬浮按钮的对话框句柄
                 IntPtr lastShownDialog = IntPtr.Zero;
+                // 记录是否检测到应用按钮点击
+                bool isApplyButtonClicked = false;
+                // 记录密码加密窗口的位置
+                RECT passwordDialogRect = new RECT();
                 
                 while (true)
                 {
@@ -367,154 +371,128 @@ namespace WpsPasswordManager
                                                 bool isButtonClicked = monitor.IsButtonClicked(applyButton);
                                                 long checkButtonEnd = DateTime.Now.Ticks;
                                                 Logger.Debug($"检查应用按钮状态耗时: {(checkButtonEnd - checkButtonStart) / 10000}ms");
+                                                
+                                                // 如果传统方法未检测到，尝试使用UI Automation
+                                                if (!isButtonClicked)
+                                                {
+                                                    // 获取鼠标位置
+                                                    POINT mousePos;
+                                                    if (GetCursorPos(out mousePos))
+                                                    {
+                                                        isButtonClicked = IsApplyButtonUsingUIAutomation(encryptDialog, mousePos);
+                                                    }
+                                                }
+                                                
                                                 if (isButtonClicked)
                                                 {
                                                     Logger.Info("检测到应用按钮点击");
+                                                    isApplyButtonClicked = true;
                                                     
-                                                    // 显示弹框提示
-                                                    try
-                                                    {
-                                                        System.Threading.Thread notificationThread = new System.Threading.Thread(() =>
-                                                        {
-                                                            try
-                                                            {
-                                                                NotificationForm tempNotificationForm = new NotificationForm();
-                                                                tempNotificationForm.ShowNotification("检测到应用按钮点击，正在处理...");
-                                                                Application.Run();
-                                                            }
-                                                            catch (Exception ex)
-                                                            {
-                                                                Logger.Error($"显示弹框时出错: {ex.Message}");
-                                                            }
-                                                        });
-                                                        notificationThread.SetApartmentState(System.Threading.ApartmentState.STA);
-                                                        notificationThread.Start();
-                                                    }
-                                                    catch (Exception ex)
-                                                    {
-                                                        Logger.Error($"显示弹框时出错: {ex.Message}");
-                                                    }
+                                                    // 立即获取密码，确保在窗口关闭前获取到最新值
+                                                    string latestPassword = string.Empty;
+                                                    int retryCount = 0;
+                                                    const int maxRetries = 3;
                                                     
-                                                    // 尝试获取文档路径并写入密码
-                                                    try
+                                                    // 重试几次，确保能获取到密码
+                                                    while (string.IsNullOrEmpty(latestPassword) && retryCount < maxRetries)
                                                     {
-                                                        // 尝试获取文档路径
-                                                        long getPathStart = DateTime.Now.Ticks;
-                                                        string documentPath = monitor.GetDocumentPath(IntPtr.Zero);
-                                                        long getPathEnd = DateTime.Now.Ticks;
-                                                        Logger.Debug($"获取文档路径耗时: {(getPathEnd - getPathStart) / 10000}ms");
+                                                        retryCount++;
+                                                        Logger.Info($"尝试获取密码 (第{retryCount}次)");
                                                         
-                                                        if (!string.IsNullOrEmpty(documentPath))
+                                                        if (passwordEdit != IntPtr.Zero)
                                                         {
-                                                            Logger.Info($"获取到文档路径: {documentPath}");
-                                                            
-                                                            // 检查文件是否存在
-                                                            if (System.IO.File.Exists(documentPath))
+                                                            latestPassword = monitor.GetInputText(passwordEdit);
+                                                            if (!string.IsNullOrEmpty(latestPassword))
                                                             {
-                                                                Logger.Info($"文件存在: {documentPath}");
-                                                                
-                                                                // 检查是否有密码
-                                                                if (!string.IsNullOrEmpty(lastPassword))
-                                                                {
-                                                                    // 写入密码到文档元数据
-                                                                    long writePasswordStart = DateTime.Now.Ticks;
-                                                                    bool success = metadataManager.WritePasswordToMetadata(documentPath, lastPassword);
-                                                                    long writePasswordEnd = DateTime.Now.Ticks;
-                                                                    Logger.Debug($"写入密码到文档元数据耗时: {(writePasswordEnd - writePasswordStart) / 10000}ms");
-                                                                    if (success)
-                                                                    {
-                                                                        Logger.Info($"密码已成功写入文档元数据: {documentPath}");
-                                                                        // 显示成功提示
-                                                                        System.Threading.Thread notificationThread = new System.Threading.Thread(() =>
-                                                                        {
-                                                                            NotificationForm tempNotificationForm = new NotificationForm();
-                                                                            tempNotificationForm.ShowNotification("密码已成功写入文档元数据");
-                                                                            Application.Run();
-                                                                        });
-                                                                        notificationThread.SetApartmentState(System.Threading.ApartmentState.STA);
-                                                                        notificationThread.Start();
-                                                                    }
-                                                                    else
-                                                                    {
-                                                                        Logger.Error("写入密码到文档元数据失败");
-                                                                        // 显示失败提示
-                                                                        System.Threading.Thread notificationThread = new System.Threading.Thread(() =>
-                                                                        {
-                                                                            NotificationForm tempNotificationForm = new NotificationForm();
-                                                                            tempNotificationForm.ShowNotification("写入密码到文档元数据失败");
-                                                                            Application.Run();
-                                                                        });
-                                                                        notificationThread.SetApartmentState(System.Threading.ApartmentState.STA);
-                                                                        notificationThread.Start();
-                                                                    }
-                                                                }
-                                                                else
-                                                                {
-                                                                    Logger.Warning("未获取到密码");
-                                                                    // 显示提示
-                                                                    System.Threading.Thread notificationThread = new System.Threading.Thread(() =>
-                                                                    {
-                                                                        NotificationForm tempNotificationForm = new NotificationForm();
-                                                                        tempNotificationForm.ShowNotification("未获取到密码，但检测到应用按钮点击");
-                                                                        Application.Run();
-                                                                    });
-                                                                    notificationThread.SetApartmentState(System.Threading.ApartmentState.STA);
-                                                                    notificationThread.Start();
-                                                                }
-                                                            }
-                                                            else
-                                                            {
-                                                                Logger.Error($"文件不存在: {documentPath}");
-                                                                // 显示失败提示
-                                                                System.Threading.Thread notificationThread = new System.Threading.Thread(() =>
-                                                                {
-                                                                    NotificationForm tempNotificationForm = new NotificationForm();
-                                                                    tempNotificationForm.ShowNotification("文件不存在，无法写入密码");
-                                                                    Application.Run();
-                                                                });
-                                                                notificationThread.SetApartmentState(System.Threading.ApartmentState.STA);
-                                                                notificationThread.Start();
+                                                                Logger.Info($"通过传统方法获取到密码: {latestPassword}");
+                                                                break;
                                                             }
                                                         }
-                                                        else
+                                                        
+                                                        // 尝试使用UI Automation获取密码
+                                                        latestPassword = GetPasswordFromDialog(encryptDialog);
+                                                        if (!string.IsNullOrEmpty(latestPassword))
                                                         {
-                                                            Logger.Warning("无法获取文档路径");
-                                                            // 显示失败提示
-                                                            System.Threading.Thread notificationThread = new System.Threading.Thread(() =>
-                                                            {
-                                                                NotificationForm tempNotificationForm = new NotificationForm();
-                                                                tempNotificationForm.ShowNotification("无法获取文档路径");
-                                                                Application.Run();
-                                                            });
-                                                            notificationThread.SetApartmentState(System.Threading.ApartmentState.STA);
-                                                            notificationThread.Start();
+                                                            Logger.Info($"通过UI Automation获取到密码: {latestPassword}");
+                                                            break;
                                                         }
+                                                        
+                                                        // 短暂延迟后重试
+                                                        Thread.Sleep(100);
                                                     }
-                                                    catch (Exception ex)
+                                                    
+                                                    if (!string.IsNullOrEmpty(latestPassword))
                                                     {
-                                                        Logger.Error($"处理应用按钮点击时出错: {ex.Message}");
-                                                        // 即使出错也要显示提示
-                                                        try
-                                                        {
-                                                            System.Threading.Thread notificationThread = new System.Threading.Thread(() =>
-                                                            {
-                                                                NotificationForm tempNotificationForm = new NotificationForm();
-                                                                tempNotificationForm.ShowNotification("检测到应用按钮点击，但处理过程中出错");
-                                                                Application.Run();
-                                                            });
-                                                            notificationThread.SetApartmentState(System.Threading.ApartmentState.STA);
-                                                            notificationThread.Start();
-                                                        }
-                                                        catch (Exception ex2)
-                                                        {
-                                                            Logger.Error($"显示错误提示时出错: {ex2.Message}");
-                                                        }
+                                                        lastPassword = latestPassword;
+                                                        Logger.Info($"更新密码为最新值: {lastPassword}");
                                                     }
+                                                    else
+                                                    {
+                                                        Logger.Warning("无法获取密码，将使用之前存储的密码");
+                                                    }
+                                                    
+                                                    // 移除点击时的弹框，只在窗口关闭后显示密码弹框
                                                 }
                                             }
                                             else
                                             {
                                                 Logger.Warning("未找到应用按钮");
+                                                // 即使未找到应用按钮，也尝试使用位置检测
+                                                POINT mousePos;
+                                                if (GetCursorPos(out mousePos))
+                                                {
+                                                    bool isButtonClickedByPosition = IsApplyButtonByPosition(encryptDialog, mousePos);
+                                                    if (isButtonClickedByPosition)
+                                                    {
+                                                        Logger.Info("通过位置检测到应用按钮点击");
+                                                        isApplyButtonClicked = true;
+                                                        
+                                                        // 立即获取密码，确保在窗口关闭前获取到最新值
+                                                        string latestPassword = string.Empty;
+                                                        int retryCount = 0;
+                                                        const int maxRetries = 3;
+                                                        
+                                                        // 重试几次，确保能获取到密码
+                                                        while (string.IsNullOrEmpty(latestPassword) && retryCount < maxRetries)
+                                                        {
+                                                            retryCount++;
+                                                            Logger.Info($"尝试获取密码 (第{retryCount}次)");
+                                                            
+                                                            if (passwordEdit != IntPtr.Zero)
+                                                            {
+                                                                latestPassword = monitor.GetInputText(passwordEdit);
+                                                                if (!string.IsNullOrEmpty(latestPassword))
+                                                                {
+                                                                    Logger.Info($"通过传统方法获取到密码: {latestPassword}");
+                                                                    break;
+                                                                }
+                                                            }
+                                                            
+                                                            // 尝试使用UI Automation获取密码
+                                                            latestPassword = GetPasswordFromDialog(encryptDialog);
+                                                            if (!string.IsNullOrEmpty(latestPassword))
+                                                            {
+                                                                Logger.Info($"通过UI Automation获取到密码: {latestPassword}");
+                                                                break;
+                                                            }
+                                                            
+                                                            // 短暂延迟后重试
+                                                            Thread.Sleep(100);
+                                                        }
+                                                        
+                                                        if (!string.IsNullOrEmpty(latestPassword))
+                                                        {
+                                                            lastPassword = latestPassword;
+                                                            Logger.Info($"更新密码为最新值: {lastPassword}");
+                                                        }
+                                                        else
+                                                        {
+                                                            Logger.Warning("无法获取密码，将使用之前存储的密码");
+                                                        }
+                                                        
+                                                        // 移除点击时的弹框，只在窗口关闭后显示密码弹框
+                                                    }
+                                                }
                                             }
                                         }
                                 }
@@ -544,10 +522,162 @@ namespace WpsPasswordManager
                                 {
                                     Logger.Info("密码加密窗口已关闭");
                                     
+                                    // 检查是否是因为点击了应用按钮导致窗口关闭
+                                    if (isApplyButtonClicked && !string.IsNullOrEmpty(lastPassword))
+                                    {
+                                        Logger.Info("应用按钮点击导致窗口关闭，显示密码弹框");
+                                        
+                                        // 保存密码到局部变量，避免被重置
+                                        string passwordToShow = lastPassword;
+                                        
+                                        // 显示包含密码的弹框
+                                        try
+                                        {
+                                            System.Threading.Thread passwordNotificationThread = new System.Threading.Thread(() =>
+                                            {
+                                                try
+                                                {
+                                                    NotificationForm tempNotificationForm = new NotificationForm();
+                                                    tempNotificationForm.ShowNotification($"密码: {passwordToShow}");
+                                                    Application.Run();
+                                                }
+                                                catch (Exception ex)
+                                                {
+                                                    Logger.Error($"显示密码弹框时出错: {ex.Message}");
+                                                }
+                                            });
+                                            passwordNotificationThread.SetApartmentState(System.Threading.ApartmentState.STA);
+                                            passwordNotificationThread.Start();
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            Logger.Error($"显示密码弹框时出错: {ex.Message}");
+                                        }
+                                        
+                                        // 尝试获取文档路径并写入密码（已注释）
+                                        /*
+                                        try
+                                        {
+                                            // 尝试获取文档路径
+                                            long getPathStart = DateTime.Now.Ticks;
+                                            string documentPath = monitor.GetDocumentPath(IntPtr.Zero);
+                                            long getPathEnd = DateTime.Now.Ticks;
+                                            Logger.Debug($"获取文档路径耗时: {(getPathEnd - getPathStart) / 10000}ms");
+                                            
+                                            if (!string.IsNullOrEmpty(documentPath))
+                                            {
+                                                Logger.Info($"获取到文档路径: {documentPath}");
+                                                
+                                                // 检查文件是否存在
+                                                if (System.IO.File.Exists(documentPath))
+                                                {
+                                                    Logger.Info($"文件存在: {documentPath}");
+                                                    
+                                                    // 检查是否有密码
+                                                    if (!string.IsNullOrEmpty(lastPassword))
+                                                    {
+                                                        // 写入密码到文档元数据
+                                                        long writePasswordStart = DateTime.Now.Ticks;
+                                                        bool success = metadataManager.WritePasswordToMetadata(documentPath, lastPassword);
+                                                        long writePasswordEnd = DateTime.Now.Ticks;
+                                                        Logger.Debug($"写入密码到文档元数据耗时: {(writePasswordEnd - writePasswordStart) / 10000}ms");
+                                                        if (success)
+                                                        {
+                                                            Logger.Info($"密码已成功写入文档元数据: {documentPath}");
+                                                            // 显示成功提示
+                                                            System.Threading.Thread notificationThread = new System.Threading.Thread(() =>
+                                                            {
+                                                                NotificationForm tempNotificationForm = new NotificationForm();
+                                                                tempNotificationForm.ShowNotification("密码已成功写入文档元数据");
+                                                                Application.Run();
+                                                            });
+                                                            notificationThread.SetApartmentState(System.Threading.ApartmentState.STA);
+                                                            notificationThread.Start();
+                                                        }
+                                                        else
+                                                        {
+                                                            Logger.Error("写入密码到文档元数据失败");
+                                                            // 显示失败提示
+                                                            System.Threading.Thread notificationThread = new System.Threading.Thread(() =>
+                                                            {
+                                                                NotificationForm tempNotificationForm = new NotificationForm();
+                                                                tempNotificationForm.ShowNotification("写入密码到文档元数据失败");
+                                                                Application.Run();
+                                                            });
+                                                            notificationThread.SetApartmentState(System.Threading.ApartmentState.STA);
+                                                            notificationThread.Start();
+                                                        }
+                                                    }
+                                                    else
+                                                    {
+                                                        Logger.Warning("未获取到密码");
+                                                        // 显示提示
+                                                        System.Threading.Thread notificationThread = new System.Threading.Thread(() =>
+                                                        {
+                                                            NotificationForm tempNotificationForm = new NotificationForm();
+                                                            tempNotificationForm.ShowNotification("未获取到密码，但检测到应用按钮点击");
+                                                            Application.Run();
+                                                        });
+                                                        notificationThread.SetApartmentState(System.Threading.ApartmentState.STA);
+                                                        notificationThread.Start();
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    Logger.Error($"文件不存在: {documentPath}");
+                                                    // 显示失败提示
+                                                    System.Threading.Thread notificationThread = new System.Threading.Thread(() =>
+                                                    {
+                                                        NotificationForm tempNotificationForm = new NotificationForm();
+                                                        tempNotificationForm.ShowNotification("文件不存在，无法写入密码");
+                                                        Application.Run();
+                                                    });
+                                                    notificationThread.SetApartmentState(System.Threading.ApartmentState.STA);
+                                                    notificationThread.Start();
+                                                }
+                                            }
+                                            else
+                                            {
+                                                Logger.Warning("无法获取文档路径");
+                                                // 显示失败提示
+                                                System.Threading.Thread notificationThread = new System.Threading.Thread(() =>
+                                                {
+                                                    NotificationForm tempNotificationForm = new NotificationForm();
+                                                    tempNotificationForm.ShowNotification("无法获取文档路径");
+                                                    Application.Run();
+                                                });
+                                                notificationThread.SetApartmentState(System.Threading.ApartmentState.STA);
+                                                notificationThread.Start();
+                                            }
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            Logger.Error($"处理应用按钮点击时出错: {ex.Message}");
+                                            // 即使出错也要显示提示
+                                            try
+                                            {
+                                                System.Threading.Thread notificationThread = new System.Threading.Thread(() =>
+                                                {
+                                                    NotificationForm tempNotificationForm = new NotificationForm();
+                                                    tempNotificationForm.ShowNotification("检测到应用按钮点击，但处理过程中出错");
+                                                    Application.Run();
+                                                });
+                                                notificationThread.SetApartmentState(System.Threading.ApartmentState.STA);
+                                                notificationThread.Start();
+                                            }
+                                            catch (Exception ex2)
+                                            {
+                                                Logger.Error($"显示错误提示时出错: {ex2.Message}");
+                                            }
+                                        }
+                                        */
+                                    }
+                                    
                                     // 重置记录
                                     lastPasswordEncryptDialog = IntPtr.Zero;
                                     lastPassword = string.Empty;
                                     lastDialogTitle = string.Empty;
+                                    isApplyButtonClicked = false;
                                     Logger.Info("重置窗口记录");
                                 }
                             }
@@ -1341,6 +1471,486 @@ namespace WpsPasswordManager
             catch (Exception ex)
             {
                 Logger.Error($"检查应用按钮时出错: {ex.Message}");
+            }
+            
+            Logger.Debug("未检测到应用按钮点击");
+            return false;
+        }
+        
+        // 使用UI Automation检查是否点击了应用按钮
+        private static bool IsApplyButtonUsingUIAutomation(IntPtr dialogHandle, POINT mousePos)
+        {
+            try
+            {
+                Logger.Debug("开始使用UI Automation检查应用按钮点击");
+                
+                // 加载UIAutomationClient程序集
+                System.Reflection.Assembly uiaClient = null;
+                try
+                {
+                    uiaClient = System.Reflection.Assembly.Load("UIAutomationClient, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35");
+                    Logger.Debug("成功加载UIAutomationClient程序集 (带版本)");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"加载UIAutomationClient程序集 (带版本) 时出错: {ex.Message}");
+                    try
+                    {
+                        uiaClient = System.Reflection.Assembly.Load("UIAutomationClient");
+                        Logger.Debug("成功加载UIAutomationClient程序集 (无版本)");
+                    }
+                    catch (Exception ex2)
+                    {
+                        Logger.Error($"加载UIAutomationClient程序集 (无版本) 时出错: {ex2.Message}");
+                        // 尝试使用备用方法
+                        return IsApplyButtonByPosition(dialogHandle, mousePos);
+                    }
+                }
+                
+                // 加载UIAutomationTypes程序集
+                System.Reflection.Assembly uiaTypes = null;
+                try
+                {
+                    uiaTypes = System.Reflection.Assembly.Load("UIAutomationTypes, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35");
+                    Logger.Debug("成功加载UIAutomationTypes程序集 (带版本)");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"加载UIAutomationTypes程序集 (带版本) 时出错: {ex.Message}");
+                    try
+                    {
+                        uiaTypes = System.Reflection.Assembly.Load("UIAutomationTypes");
+                        Logger.Debug("成功加载UIAutomationTypes程序集 (无版本)");
+                    }
+                    catch (Exception ex2)
+                    {
+                        Logger.Error($"加载UIAutomationTypes程序集 (无版本) 时出错: {ex2.Message}");
+                        // 尝试使用备用方法
+                        return IsApplyButtonByPosition(dialogHandle, mousePos);
+                    }
+                }
+                
+                // 获取AutomationElement类
+                Type automationElementType = uiaClient.GetType("System.Windows.Automation.AutomationElement");
+                if (automationElementType == null)
+                {
+                    Logger.Warning("无法获取AutomationElement类型");
+                    // 尝试使用备用方法
+                    return IsApplyButtonByPosition(dialogHandle, mousePos);
+                }
+                Logger.Debug("成功获取AutomationElement类型");
+                
+                // 获取对话框元素
+                object dialogElement = null;
+                try
+                {
+                    dialogElement = automationElementType.GetMethod("FromHandle").Invoke(null, new object[] { dialogHandle });
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"获取对话框元素时出错: {ex.Message}");
+                    // 尝试使用备用方法
+                    return IsApplyButtonByPosition(dialogHandle, mousePos);
+                }
+                
+                if (dialogElement == null)
+                {
+                    Logger.Warning("无法获取对话框的AutomationElement");
+                    // 尝试使用备用方法
+                    return IsApplyButtonByPosition(dialogHandle, mousePos);
+                }
+                Logger.Debug("成功获取对话框的AutomationElement");
+                
+                // 获取TreeScope枚举
+                Type treeScopeType = uiaTypes.GetType("System.Windows.Automation.TreeScope");
+                if (treeScopeType == null)
+                {
+                    Logger.Warning("无法获取TreeScope类型");
+                    // 尝试使用备用方法
+                    return IsApplyButtonByPosition(dialogHandle, mousePos);
+                }
+                object treeScopeDescendants = Enum.Parse(treeScopeType, "Descendants");
+                Logger.Debug("成功获取TreeScope.Descendants");
+                
+                // 获取ControlType类
+                Type controlTypeType = uiaTypes.GetType("System.Windows.Automation.ControlType");
+                if (controlTypeType == null)
+                {
+                    Logger.Warning("无法获取ControlType类型");
+                    // 尝试使用备用方法
+                    return IsApplyButtonByPosition(dialogHandle, mousePos);
+                }
+                System.Reflection.FieldInfo buttonField = controlTypeType.GetField("Button");
+                if (buttonField == null)
+                {
+                    Logger.Warning("无法获取Button字段");
+                    // 尝试使用备用方法
+                    return IsApplyButtonByPosition(dialogHandle, mousePos);
+                }
+                object buttonControlType = buttonField.GetValue(null);
+                Logger.Debug("成功获取ControlType.Button");
+                
+                // 获取PropertyCondition类
+                Type propertyConditionType = null;
+                try
+                {
+                    propertyConditionType = uiaClient.GetType("System.Windows.Automation.PropertyCondition");
+                    if (propertyConditionType == null)
+                    {
+                        propertyConditionType = uiaTypes.GetType("System.Windows.Automation.PropertyCondition");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"获取PropertyCondition类型时出错: {ex.Message}");
+                    // 尝试使用备用方法
+                    return IsApplyButtonByPosition(dialogHandle, mousePos);
+                }
+                if (propertyConditionType == null)
+                {
+                    Logger.Warning("无法获取PropertyCondition类型");
+                    // 尝试使用备用方法
+                    return IsApplyButtonByPosition(dialogHandle, mousePos);
+                }
+                Logger.Debug("成功获取PropertyCondition类型");
+                
+                // 获取ControlTypeProperty
+                object controlTypeProperty = null;
+                try
+                {
+                    System.Reflection.PropertyInfo controlTypePropertyInfo = automationElementType.GetProperty("ControlTypeProperty");
+                    if (controlTypePropertyInfo != null)
+                    {
+                        controlTypeProperty = controlTypePropertyInfo.GetValue(null);
+                    }
+                    else
+                    {
+                        System.Reflection.FieldInfo controlTypePropertyField = automationElementType.GetField("ControlTypeProperty", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                        if (controlTypePropertyField != null)
+                        {
+                            controlTypeProperty = controlTypePropertyField.GetValue(null);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"获取ControlTypeProperty时出错: {ex.Message}");
+                    // 尝试使用备用方法
+                    return IsApplyButtonByPosition(dialogHandle, mousePos);
+                }
+                if (controlTypeProperty == null)
+                {
+                    Logger.Warning("无法获取ControlTypeProperty");
+                    // 尝试使用备用方法
+                    return IsApplyButtonByPosition(dialogHandle, mousePos);
+                }
+                Logger.Debug("成功获取ControlTypeProperty");
+                
+                // 创建按钮条件
+                object buttonCondition = Activator.CreateInstance(propertyConditionType, new object[] { controlTypeProperty, buttonControlType });
+                if (buttonCondition == null)
+                {
+                    Logger.Warning("无法创建按钮条件");
+                    // 尝试使用备用方法
+                    return IsApplyButtonByPosition(dialogHandle, mousePos);
+                }
+                Logger.Debug("成功创建按钮条件");
+                
+                // 查找所有按钮
+                System.Reflection.MethodInfo findAllMethod = automationElementType.GetMethod("FindAll");
+                if (findAllMethod == null)
+                {
+                    Logger.Warning("无法获取FindAll方法");
+                    // 尝试使用备用方法
+                    return IsApplyButtonByPosition(dialogHandle, mousePos);
+                }
+                Logger.Debug("成功获取FindAll方法");
+                
+                object buttons = null;
+                try
+                {
+                    buttons = findAllMethod.Invoke(dialogElement, new object[] { treeScopeDescendants, buttonCondition });
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"查找按钮时出错: {ex.Message}");
+                    // 尝试使用备用方法
+                    return IsApplyButtonByPosition(dialogHandle, mousePos);
+                }
+                
+                if (buttons == null)
+                {
+                    Logger.Warning("无法找到按钮");
+                    // 尝试使用备用方法
+                    return IsApplyButtonByPosition(dialogHandle, mousePos);
+                }
+                Logger.Debug("成功调用FindAll方法");
+                
+                // 获取按钮数量
+                int count = 0;
+                try
+                {
+                    System.Reflection.PropertyInfo countProperty = buttons.GetType().GetProperty("Count");
+                    if (countProperty != null)
+                    {
+                        count = (int)countProperty.GetValue(buttons);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"获取按钮数量时出错: {ex.Message}");
+                    // 尝试使用备用方法
+                    return IsApplyButtonByPosition(dialogHandle, mousePos);
+                }
+                Logger.Info($"找到 {count} 个按钮");
+                
+                // 检查每个按钮
+                for (int i = 0; i < count; i++)
+                {
+                    object button = null;
+                    try
+                    {
+                        System.Reflection.MethodInfo getItemMethod = buttons.GetType().GetMethod("get_Item");
+                        if (getItemMethod != null)
+                        {
+                            button = getItemMethod.Invoke(buttons, new object[] { i });
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"获取按钮 #{i} 时出错: {ex.Message}");
+                        continue;
+                    }
+                    if (button == null)
+                    {
+                        continue;
+                    }
+                    
+                    // 获取按钮的Current属性
+                    object current = null;
+                    try
+                    {
+                        System.Reflection.PropertyInfo currentProperty = button.GetType().GetProperty("Current");
+                        if (currentProperty != null)
+                        {
+                            current = currentProperty.GetValue(button);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"获取按钮 #{i} 的Current属性时出错: {ex.Message}");
+                        continue;
+                    }
+                    if (current == null)
+                    {
+                        continue;
+                    }
+                    
+                    // 获取按钮名称
+                    string name = null;
+                    try
+                    {
+                        System.Reflection.PropertyInfo nameProperty = current.GetType().GetProperty("Name");
+                        if (nameProperty != null)
+                        {
+                            name = (string)nameProperty.GetValue(current);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"获取按钮 #{i} 的名称时出错: {ex.Message}");
+                        continue;
+                    }
+                    if (name == null)
+                    {
+                        continue;
+                    }
+                    Logger.Debug($"按钮 #{i} 名称: {name}");
+                    
+                    // 检查是否是应用按钮
+                    if (name == "应用" || name == "确定" || name == "OK")
+                    {
+                        // 获取按钮位置
+                        object boundingRectangle = null;
+                        try
+                        {
+                            System.Reflection.PropertyInfo boundingRectangleProperty = current.GetType().GetProperty("BoundingRectangle");
+                            if (boundingRectangleProperty != null)
+                            {
+                                boundingRectangle = boundingRectangleProperty.GetValue(current);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Error($"获取按钮 #{i} 的位置时出错: {ex.Message}");
+                            continue;
+                        }
+                        if (boundingRectangle == null)
+                        {
+                            continue;
+                        }
+                        
+                        // 获取矩形坐标
+                        int left = 0, top = 0, right = 0, bottom = 0;
+                        try
+                        {
+                            System.Reflection.PropertyInfo leftProperty = boundingRectangle.GetType().GetProperty("Left");
+                            System.Reflection.PropertyInfo topProperty = boundingRectangle.GetType().GetProperty("Top");
+                            System.Reflection.PropertyInfo rightProperty = boundingRectangle.GetType().GetProperty("Right");
+                            System.Reflection.PropertyInfo bottomProperty = boundingRectangle.GetType().GetProperty("Bottom");
+                            
+                            if (leftProperty != null && topProperty != null && rightProperty != null && bottomProperty != null)
+                            {
+                                left = Convert.ToInt32(leftProperty.GetValue(boundingRectangle));
+                                top = Convert.ToInt32(topProperty.GetValue(boundingRectangle));
+                                right = Convert.ToInt32(rightProperty.GetValue(boundingRectangle));
+                                bottom = Convert.ToInt32(bottomProperty.GetValue(boundingRectangle));
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Error($"获取按钮 #{i} 的坐标时出错: {ex.Message}");
+                            continue;
+                        }
+                        
+                        Logger.Debug($"应用按钮位置: 左={left}, 上={top}, 右={right}, 下={bottom}");
+                        Logger.Debug($"鼠标位置: X={mousePos.X}, Y={mousePos.Y}");
+                        
+                        // 检查鼠标是否在按钮范围内
+                        bool isInButton = mousePos.X >= left && mousePos.X <= right &&
+                                         mousePos.Y >= top && mousePos.Y <= bottom;
+                        
+                        Logger.Debug($"鼠标是否在按钮范围内: {isInButton}");
+                        
+                        if (isInButton)
+                        {
+                            Logger.Info("检测到点击应用按钮");
+                            return true;
+                        }
+                    }
+                }
+                
+                // 尝试查找所有元素，不仅仅是按钮
+                try
+                {
+                    // 创建一个条件来查找所有元素
+                    object trueCondition = Activator.CreateInstance(propertyConditionType, new object[] { null, null });
+                    if (trueCondition != null)
+                    {
+                        object allElements = findAllMethod.Invoke(dialogElement, new object[] { treeScopeDescendants, trueCondition });
+                        if (allElements != null)
+                        {
+                            int allCount = (int)allElements.GetType().GetProperty("Count").GetValue(allElements);
+                            Logger.Info($"找到 {allCount} 个元素");
+                            
+                            // 检查前10个元素
+                            int checkCount = Math.Min(allCount, 10);
+                            for (int i = 0; i < checkCount; i++)
+                            {
+                                object element = allElements.GetType().GetMethod("get_Item").Invoke(allElements, new object[] { i });
+                                if (element != null)
+                                {
+                                    object current = element.GetType().GetProperty("Current").GetValue(element);
+                                    if (current != null)
+                                    {
+                                        string name = (string)current.GetType().GetProperty("Name").GetValue(current);
+                                        string className = (string)current.GetType().GetProperty("ClassName").GetValue(current);
+                                        Logger.Debug($"元素 #{i} 名称: {name}, 类名: {className}");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"查找所有元素时出错: {ex.Message}");
+                }
+                
+                // 如果UI Automation失败，尝试使用备用方法
+                return IsApplyButtonByPosition(dialogHandle, mousePos);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"使用UI Automation检查应用按钮时出错: {ex.Message}");
+                Logger.Error($"异常堆栈: {ex.StackTrace}");
+                // 尝试使用备用方法
+                return IsApplyButtonByPosition(dialogHandle, mousePos);
+            }
+        }
+        
+        // 备用方法：通过位置检测应用按钮点击
+        private static bool IsApplyButtonByPosition(IntPtr dialogHandle, POINT mousePos)
+        {
+            try
+            {
+                Logger.Debug("使用备用方法：通过位置检测应用按钮点击");
+                
+                // 首先检查鼠标是否在对话框范围内
+                RECT dialogRect = new RECT();
+                if (GetWindowRect(dialogHandle, ref dialogRect))
+                {
+                    Logger.Debug($"对话框矩形: 左={dialogRect.Left}, 上={dialogRect.Top}, 右={dialogRect.Right}, 下={dialogRect.Bottom}");
+                    
+                    bool isInDialog = mousePos.X >= dialogRect.Left && mousePos.X <= dialogRect.Right &&
+                                     mousePos.Y >= dialogRect.Top && mousePos.Y <= dialogRect.Bottom;
+                    
+                    if (isInDialog)
+                    {
+                        Logger.Debug($"鼠标在对话框范围内: {isInDialog}");
+                        
+                        // 计算按钮区域 - 更精确的按钮位置估计
+                        int dialogHeight = dialogRect.Bottom - dialogRect.Top;
+                        int dialogWidth = dialogRect.Right - dialogRect.Left;
+                        
+                        // 通常应用按钮位于右下角，高度约为30-40像素
+                        int buttonHeight = 40;
+                        int buttonWidth = 80;
+                        
+                        // 计算应用按钮的大致位置
+                        int buttonLeft = dialogRect.Right - buttonWidth - 20; // 右边距20
+                        int buttonTop = dialogRect.Bottom - buttonHeight - 15; // 下边距15
+                        int buttonRight = dialogRect.Right - 20;
+                        int buttonBottom = dialogRect.Bottom - 15;
+                        
+                        Logger.Debug($"应用按钮区域: 左={buttonLeft}, 上={buttonTop}, 右={buttonRight}, 下={buttonBottom}");
+                        
+                        // 检查鼠标是否在应用按钮区域
+                        bool isInButtonArea = mousePos.X >= buttonLeft && mousePos.X <= buttonRight &&
+                                             mousePos.Y >= buttonTop && mousePos.Y <= buttonBottom;
+                        
+                        Logger.Debug($"鼠标是否在应用按钮区域: {isInButtonArea}");
+                        
+                        if (isInButtonArea)
+                        {
+                            Logger.Info("检测到点击应用按钮区域");
+                            return true;
+                        }
+                        else
+                        {
+                            // 备用方案：检查是否在对话框的右下角区域
+                            bool isInBottomRight = mousePos.X >= dialogRect.Right - 150 && 
+                                                  mousePos.Y >= dialogRect.Bottom - 80;
+                            if (isInBottomRight)
+                            {
+                                Logger.Info("检测到点击对话框右下角区域（备用检测）");
+                                return true;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        Logger.Debug($"鼠标不在对话框范围内: {isInDialog}");
+                    }
+                }
+                else
+                {
+                    Logger.Debug("无法获取对话框矩形");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"使用备用方法检查应用按钮时出错: {ex.Message}");
             }
             
             Logger.Debug("未检测到应用按钮点击");
