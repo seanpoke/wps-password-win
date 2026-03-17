@@ -119,6 +119,12 @@ namespace WpsPasswordManager
             public int Bottom;
         }
 
+        // 本地缓存，用于存储文档路径和对应的密码
+        private static System.Collections.Generic.Dictionary<string, string> passwordCache = new System.Collections.Generic.Dictionary<string, string>();
+        
+        // 监控文档关闭事件的线程
+        private static Thread documentCloseMonitorThread;
+
         [STAThread]
         static void Main()
         {
@@ -239,6 +245,8 @@ namespace WpsPasswordManager
                 bool isApplyButtonClicked = false;
                 // 记录密码加密窗口的位置
                 RECT passwordDialogRect = new RECT();
+                // 记录当前打开的文档路径
+                string currentDocumentPath = string.Empty;
                 
                 while (true)
                 {
@@ -431,6 +439,25 @@ namespace WpsPasswordManager
                                                         Logger.Warning("无法获取密码，将使用之前存储的密码");
                                                     }
                                                     
+                                                    // 将密码写入本地缓存
+                                                    currentDocumentPath = monitor.GetDocumentPath(IntPtr.Zero);
+                                                    if (!string.IsNullOrEmpty(currentDocumentPath))
+                                                    {
+                                                        if (passwordCache.ContainsKey(currentDocumentPath))
+                                                        {
+                                                            passwordCache[currentDocumentPath] = lastPassword;
+                                                        }
+                                                        else
+                                                        {
+                                                            passwordCache.Add(currentDocumentPath, lastPassword);
+                                                        }
+                                                        Logger.Info($"密码已写入本地缓存: {currentDocumentPath}");
+                                                    }
+                                                    else
+                                                    {
+                                                        Logger.Warning("无法获取文档路径，无法写入缓存");
+                                                    }
+                                                    
                                                     // 移除点击时的弹框，只在窗口关闭后显示密码弹框
                                                 }
                                             }
@@ -490,6 +517,25 @@ namespace WpsPasswordManager
                                                             Logger.Warning("无法获取密码，将使用之前存储的密码");
                                                         }
                                                         
+                                                        // 将密码写入本地缓存
+                                                        currentDocumentPath = monitor.GetDocumentPath(IntPtr.Zero);
+                                                        if (!string.IsNullOrEmpty(currentDocumentPath))
+                                                        {
+                                                            if (passwordCache.ContainsKey(currentDocumentPath))
+                                                            {
+                                                                passwordCache[currentDocumentPath] = lastPassword;
+                                                            }
+                                                            else
+                                                            {
+                                                                passwordCache.Add(currentDocumentPath, lastPassword);
+                                                            }
+                                                            Logger.Info($"密码已写入本地缓存: {currentDocumentPath}");
+                                                        }
+                                                        else
+                                                        {
+                                                            Logger.Warning("无法获取文档路径，无法写入缓存");
+                                                        }
+                                                        
                                                         // 移除点击时的弹框，只在窗口关闭后显示密码弹框
                                                     }
                                                 }
@@ -529,6 +575,7 @@ namespace WpsPasswordManager
                                         
                                         // 保存密码到局部变量，避免被重置
                                         string passwordToShow = lastPassword;
+                                        string documentPath = currentDocumentPath;
                                         
                                         // 显示包含密码的弹框
                                         try
@@ -537,6 +584,13 @@ namespace WpsPasswordManager
                                             {
                                                 try
                                                 {
+                                                    // 尝试获取文档路径
+                                                    if (string.IsNullOrEmpty(documentPath))
+                                                    {
+                                                        documentPath = monitor.GetDocumentPath(IntPtr.Zero);
+                                                    }
+                                                    
+                                                    // 显示密码弹框
                                                     NotificationForm tempNotificationForm = new NotificationForm();
                                                     tempNotificationForm.ShowNotification($"密码: {passwordToShow}");
                                                     Application.Run();
@@ -544,6 +598,10 @@ namespace WpsPasswordManager
                                                 catch (Exception ex)
                                                 {
                                                     Logger.Error($"显示密码弹框时出错: {ex.Message}");
+                                                    // 显示原始密码
+                                                    NotificationForm tempNotificationForm = new NotificationForm();
+                                                    tempNotificationForm.ShowNotification($"密码: {passwordToShow}");
+                                                    Application.Run();
                                                 }
                                             });
                                             passwordNotificationThread.SetApartmentState(System.Threading.ApartmentState.STA);
@@ -554,123 +612,7 @@ namespace WpsPasswordManager
                                             Logger.Error($"显示密码弹框时出错: {ex.Message}");
                                         }
                                         
-                                        // 尝试获取文档路径并写入密码（已注释）
-                                        /*
-                                        try
-                                        {
-                                            // 尝试获取文档路径
-                                            long getPathStart = DateTime.Now.Ticks;
-                                            string documentPath = monitor.GetDocumentPath(IntPtr.Zero);
-                                            long getPathEnd = DateTime.Now.Ticks;
-                                            Logger.Debug($"获取文档路径耗时: {(getPathEnd - getPathStart) / 10000}ms");
-                                            
-                                            if (!string.IsNullOrEmpty(documentPath))
-                                            {
-                                                Logger.Info($"获取到文档路径: {documentPath}");
-                                                
-                                                // 检查文件是否存在
-                                                if (System.IO.File.Exists(documentPath))
-                                                {
-                                                    Logger.Info($"文件存在: {documentPath}");
-                                                    
-                                                    // 检查是否有密码
-                                                    if (!string.IsNullOrEmpty(lastPassword))
-                                                    {
-                                                        // 写入密码到文档元数据
-                                                        long writePasswordStart = DateTime.Now.Ticks;
-                                                        bool success = metadataManager.WritePasswordToMetadata(documentPath, lastPassword);
-                                                        long writePasswordEnd = DateTime.Now.Ticks;
-                                                        Logger.Debug($"写入密码到文档元数据耗时: {(writePasswordEnd - writePasswordStart) / 10000}ms");
-                                                        if (success)
-                                                        {
-                                                            Logger.Info($"密码已成功写入文档元数据: {documentPath}");
-                                                            // 显示成功提示
-                                                            System.Threading.Thread notificationThread = new System.Threading.Thread(() =>
-                                                            {
-                                                                NotificationForm tempNotificationForm = new NotificationForm();
-                                                                tempNotificationForm.ShowNotification("密码已成功写入文档元数据");
-                                                                Application.Run();
-                                                            });
-                                                            notificationThread.SetApartmentState(System.Threading.ApartmentState.STA);
-                                                            notificationThread.Start();
-                                                        }
-                                                        else
-                                                        {
-                                                            Logger.Error("写入密码到文档元数据失败");
-                                                            // 显示失败提示
-                                                            System.Threading.Thread notificationThread = new System.Threading.Thread(() =>
-                                                            {
-                                                                NotificationForm tempNotificationForm = new NotificationForm();
-                                                                tempNotificationForm.ShowNotification("写入密码到文档元数据失败");
-                                                                Application.Run();
-                                                            });
-                                                            notificationThread.SetApartmentState(System.Threading.ApartmentState.STA);
-                                                            notificationThread.Start();
-                                                        }
-                                                    }
-                                                    else
-                                                    {
-                                                        Logger.Warning("未获取到密码");
-                                                        // 显示提示
-                                                        System.Threading.Thread notificationThread = new System.Threading.Thread(() =>
-                                                        {
-                                                            NotificationForm tempNotificationForm = new NotificationForm();
-                                                            tempNotificationForm.ShowNotification("未获取到密码，但检测到应用按钮点击");
-                                                            Application.Run();
-                                                        });
-                                                        notificationThread.SetApartmentState(System.Threading.ApartmentState.STA);
-                                                        notificationThread.Start();
-                                                    }
-                                                }
-                                                else
-                                                {
-                                                    Logger.Error($"文件不存在: {documentPath}");
-                                                    // 显示失败提示
-                                                    System.Threading.Thread notificationThread = new System.Threading.Thread(() =>
-                                                    {
-                                                        NotificationForm tempNotificationForm = new NotificationForm();
-                                                        tempNotificationForm.ShowNotification("文件不存在，无法写入密码");
-                                                        Application.Run();
-                                                    });
-                                                    notificationThread.SetApartmentState(System.Threading.ApartmentState.STA);
-                                                    notificationThread.Start();
-                                                }
-                                            }
-                                            else
-                                            {
-                                                Logger.Warning("无法获取文档路径");
-                                                // 显示失败提示
-                                                System.Threading.Thread notificationThread = new System.Threading.Thread(() =>
-                                                {
-                                                    NotificationForm tempNotificationForm = new NotificationForm();
-                                                    tempNotificationForm.ShowNotification("无法获取文档路径");
-                                                    Application.Run();
-                                                });
-                                                notificationThread.SetApartmentState(System.Threading.ApartmentState.STA);
-                                                notificationThread.Start();
-                                            }
-                                        }
-                                        catch (Exception ex)
-                                        {
-                                            Logger.Error($"处理应用按钮点击时出错: {ex.Message}");
-                                            // 即使出错也要显示提示
-                                            try
-                                            {
-                                                System.Threading.Thread notificationThread = new System.Threading.Thread(() =>
-                                                {
-                                                    NotificationForm tempNotificationForm = new NotificationForm();
-                                                    tempNotificationForm.ShowNotification("检测到应用按钮点击，但处理过程中出错");
-                                                    Application.Run();
-                                                });
-                                                notificationThread.SetApartmentState(System.Threading.ApartmentState.STA);
-                                                notificationThread.Start();
-                                            }
-                                            catch (Exception ex2)
-                                            {
-                                                Logger.Error($"显示错误提示时出错: {ex2.Message}");
-                                            }
-                                        }
-                                        */
+                                        Logger.Info("密码已显示，等待文档关闭后写入元数据");
                                     }
                                     
                                     // 重置记录
@@ -780,8 +722,119 @@ namespace WpsPasswordManager
             Logger.Info("插件已启动，正在监控WPS进程");
             trayIcon.ShowBalloonTip("WPS 密码自动填充插件", "插件已启动，正在监控WPS进程...");
 
+            // 启动文档关闭监控线程
+            documentCloseMonitorThread = new Thread(() =>
+            {
+                MetadataManager metadataManager = new MetadataManager();
+                
+                // 记录每个文档的尝试次数
+                Dictionary<string, int> retryCounts = new Dictionary<string, int>();
+                const int maxRetries = 3;
+                
+                while (true)
+                {
+                    try
+                    {
+                        // 检查缓存中是否有密码
+                        if (passwordCache.Count > 0)
+                        {
+                            // 遍历缓存中的文档路径
+                            List<string> documentsToRemove = new List<string>();
+                            
+                            foreach (var entry in passwordCache)
+                            {
+                                string documentPath = entry.Key;
+                                string password = entry.Value;
+                                
+                                // 检查文档是否仍然打开
+                                if (!IsDocumentOpen(documentPath))
+                                {
+                                    // 文档已关闭，将密码写入元数据
+                                    Logger.Info($"文档已关闭，将密码写入元数据: {documentPath}");
+                                    
+                                    // 检查尝试次数
+                                    if (!retryCounts.ContainsKey(documentPath))
+                                    {
+                                        retryCounts[documentPath] = 0;
+                                    }
+                                    
+                                    if (retryCounts[documentPath] < maxRetries)
+                                    {
+                                        retryCounts[documentPath]++;
+                                        bool writeSuccess = metadataManager.WritePasswordToMetadata(documentPath, password);
+                                        if (writeSuccess)
+                                        {
+                                            Logger.Info($"密码已成功写入文档元数据: {documentPath}");
+                                            documentsToRemove.Add(documentPath);
+                                            retryCounts.Remove(documentPath);
+                                        }
+                                        else
+                                        {
+                                            Logger.Error($"无法将密码写入文档元数据 (尝试 {retryCounts[documentPath]}/{maxRetries}): {documentPath}");
+                                        }
+                                    }
+                                    else
+                                    {
+                                        // 达到最大尝试次数，从缓存中移除
+                                        Logger.Error($"达到最大尝试次数，无法将密码写入文档元数据: {documentPath}");
+                                        documentsToRemove.Add(documentPath);
+                                        retryCounts.Remove(documentPath);
+                                    }
+                                }
+                            }
+                            
+                            // 从缓存中移除已处理的文档
+                            foreach (string documentPath in documentsToRemove)
+                            {
+                                passwordCache.Remove(documentPath);
+                                Logger.Info($"从缓存中移除文档: {documentPath}");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"文档关闭监控线程错误: {ex.Message}");
+                    }
+                    
+                    Thread.Sleep(1000); // 1秒检查一次
+                }
+            });
+            
+            documentCloseMonitorThread.IsBackground = true;
+            documentCloseMonitorThread.Start();
+            Logger.Info("文档关闭监控线程已启动");
+
             // 运行应用程序
             Application.Run();
+        }
+        
+        // 检查文档是否打开
+        private static bool IsDocumentOpen(string documentPath)
+        {
+            if (string.IsNullOrEmpty(documentPath) || !System.IO.File.Exists(documentPath))
+            {
+                return false;
+            }
+            
+            try
+            {
+                // 尝试以独占方式打开文件
+                using (System.IO.FileStream fs = System.IO.File.Open(documentPath, System.IO.FileMode.Open, System.IO.FileAccess.ReadWrite, System.IO.FileShare.None))
+                {
+                    // 文件可以打开，说明没有被其他进程锁定
+                    return false;
+                }
+            }
+            catch (System.IO.IOException)
+            {
+                // 文件被锁定，说明仍然打开
+                return true;
+            }
+            catch (Exception)
+            {
+                // 其他错误，返回false
+                return false;
+            }
         }
 
         // 暂时注释掉鼠标钩子安装方法

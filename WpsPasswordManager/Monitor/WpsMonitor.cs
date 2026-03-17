@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using WpsPasswordManager.Utils;
@@ -1376,6 +1377,13 @@ private static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, I
                     GetWindowText(activeWindow, windowTitle, windowTitle.Capacity);
                     string title = windowTitle.ToString();
                     Logger.Debug($"当前活动窗口: {activeWindow}, 标题: {title}");
+                    
+                    // 尝试从活动窗口标题中提取文档名
+                    if (!string.IsNullOrEmpty(title) && title.Contains(" - WPS Office"))
+                    {
+                        string docName = title.Replace(" - WPS Office", "");
+                        Logger.Debug($"从活动窗口标题中提取的文档名: {docName}");
+                    }
                 }
                 
                 // 尝试获取所有WPS进程，查找包含文档路径的进程
@@ -1401,41 +1409,76 @@ private static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, I
                             string docName = mainTitle.Replace(" - WPS Office", "");
                             Logger.Debug($"从主窗口标题中提取的文档名: {docName}");
                         }
-                        
-                        // 这里使用一个简单的方法：查找最近打开的WPS文档
-                        // 实际应用中，可能需要使用更复杂的方法来获取文档路径
-                        string recentDocsPath = Environment.GetFolderPath(Environment.SpecialFolder.Recent);
-                        Logger.Debug($"最近文档路径: {recentDocsPath}");
-                        
-                        // 查找最近的WPS文档
-                        string[] recentFiles = Directory.GetFiles(recentDocsPath, "*.lnk");
-                        Array.Sort(recentFiles, (a, b) => File.GetLastWriteTime(b).CompareTo(File.GetLastWriteTime(a)));
-                        
-                        foreach (string lnkPath in recentFiles)
-                        {
-                            try
-                            {
-                                // 解析快捷方式，获取目标文件路径
-                                string targetPath = ResolveShortcut(lnkPath);
-                                if (!string.IsNullOrEmpty(targetPath) && 
-                                    (targetPath.EndsWith(".docx", StringComparison.OrdinalIgnoreCase) ||
-                                     targetPath.EndsWith(".doc", StringComparison.OrdinalIgnoreCase) ||
-                                     targetPath.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) ||
-                                     targetPath.EndsWith(".xls", StringComparison.OrdinalIgnoreCase) ||
-                                     targetPath.EndsWith(".pptx", StringComparison.OrdinalIgnoreCase) ||
-                                     targetPath.EndsWith(".ppt", StringComparison.OrdinalIgnoreCase)))
-                                {
-                                    Logger.Debug($"找到最近的WPS文档: {targetPath}");
-                                    return targetPath;
-                                }
-                            }
-                            catch { }
-                        }
                     }
                     catch (Exception ex)
                     {
                         Logger.Error($"处理WPS进程 {wpsProcess.Id} 时出错: {ex.Message}");
                     }
+                }
+                
+                // 尝试查找最近打开的WPS文档
+                string recentDocsPath = Environment.GetFolderPath(Environment.SpecialFolder.Recent);
+                Logger.Debug($"最近文档路径: {recentDocsPath}");
+                
+                // 查找最近的WPS文档
+                string[] recentFiles = Directory.GetFiles(recentDocsPath, "*.lnk");
+                Array.Sort(recentFiles, (a, b) => File.GetLastWriteTime(b).CompareTo(File.GetLastWriteTime(a)));
+                
+                foreach (string lnkPath in recentFiles)
+                {
+                    try
+                    {
+                        // 解析快捷方式，获取目标文件路径
+                        string targetPath = ResolveShortcut(lnkPath);
+                        if (!string.IsNullOrEmpty(targetPath) && 
+                            (targetPath.EndsWith(".docx", StringComparison.OrdinalIgnoreCase) ||
+                             targetPath.EndsWith(".doc", StringComparison.OrdinalIgnoreCase) ||
+                             targetPath.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) ||
+                             targetPath.EndsWith(".xls", StringComparison.OrdinalIgnoreCase) ||
+                             targetPath.EndsWith(".pptx", StringComparison.OrdinalIgnoreCase) ||
+                             targetPath.EndsWith(".ppt", StringComparison.OrdinalIgnoreCase)) &&
+                            System.IO.File.Exists(targetPath))
+                        {
+                            Logger.Debug($"找到最近的WPS文档: {targetPath}");
+                            return targetPath;
+                        }
+                    }
+                    catch { }
+                }
+                
+                // 尝试在常见的文档目录中查找WPS文档
+                string[] commonDocFolders = {
+                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                    Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) + "\\WPS Cloud Files",
+                    Environment.GetFolderPath(Environment.SpecialFolder.Desktop) + "\\test"
+                };
+                
+                foreach (string folder in commonDocFolders)
+                {
+                    try
+                    {
+                        if (System.IO.Directory.Exists(folder))
+                        {
+                            string[] wpsFiles = System.IO.Directory.GetFiles(folder, "*.docx").Concat(
+                                System.IO.Directory.GetFiles(folder, "*.doc")).Concat(
+                                System.IO.Directory.GetFiles(folder, "*.xlsx")).Concat(
+                                System.IO.Directory.GetFiles(folder, "*.xls")).Concat(
+                                System.IO.Directory.GetFiles(folder, "*.pptx")).Concat(
+                                System.IO.Directory.GetFiles(folder, "*.ppt")).ToArray();
+                            
+                            // 按修改时间排序，返回最近修改的文件
+                            Array.Sort(wpsFiles, (a, b) => System.IO.File.GetLastWriteTime(b).CompareTo(System.IO.File.GetLastWriteTime(a)));
+                            
+                            if (wpsFiles.Length > 0)
+                            {
+                                string recentFile = wpsFiles[0];
+                                Logger.Debug($"在 {folder} 中找到最近的WPS文档: {recentFile}");
+                                return recentFile;
+                            }
+                        }
+                    }
+                    catch { }
                 }
             }
             catch (Exception ex)
