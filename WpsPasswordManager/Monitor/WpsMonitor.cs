@@ -1,8 +1,11 @@
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using WpsPasswordManager.Utils;
+
+#pragma warning disable CS8600, CS8601, CS8602, CS8603, CS8604, CS8605, CS8618, CS8625
 
 namespace WpsPasswordManager.Monitor
 {
@@ -59,50 +62,100 @@ namespace WpsPasswordManager.Monitor
         // 查找 WPS 密码对话框
         public IntPtr FindPasswordDialog()
         {
-            // 双基准环境特征匹配
-            IntPtr dialogHandle = FindWindow("#32770", "文档加密");
-            if (dialogHandle != IntPtr.Zero)
+            Logger.Debug("开始查找密码对话框");
+            
+            // 尝试查找所有可能的密码对话框标题
+            string[] dialogTitles = { "密码加密", "文档加密", "文档已加密", "密码" };
+            
+            foreach (string title in dialogTitles)
             {
-                LogWindowInfo("找到文档加密窗口", dialogHandle);
-                return dialogHandle;
+                // 尝试使用不同的类名查找窗口
+                string[] classNames = { "Qt5QWindow", "#32770", "", "QWidget", "QDialog" };
+                
+                foreach (string className in classNames)
+                {
+                    IntPtr handle = FindWindow(className, title);
+                    if (handle != IntPtr.Zero)
+                    {
+                        LogWindowInfo($"找到{title}窗口（类名: {className}）", handle);
+                        return handle;
+                    }
+                }
             }
             
-            // 尝试查找"密码加密"窗口
-            dialogHandle = FindWindow("#32770", "密码加密");
+            // 快速尝试：只查找WPS进程的窗口，不递归检查子窗口
+            Logger.Debug("尝试查找WPS进程的密码相关窗口");
+            IntPtr dialogHandle = FindWpsPasswordDialogByEnumeration();
             if (dialogHandle != IntPtr.Zero)
             {
-                LogWindowInfo("找到密码加密窗口", dialogHandle);
+                LogWindowInfo("通过枚举找到WPS密码相关窗口", dialogHandle);
                 return dialogHandle;
-            }
-            
-            // 尝试查找"文档已加密"窗口（解密对话框）
-            dialogHandle = FindWindow("#32770", "文档已加密");
-            if (dialogHandle != IntPtr.Zero)
-            {
-                LogWindowInfo("找到文档已加密窗口（解密对话框）", dialogHandle);
-                return dialogHandle;
-            }
-            
-            // 兼容环境模糊匹配所有窗口（包括子窗口）
-            dialogHandle = FindWindowByPartialTitleAll("密码");
-            if (dialogHandle != IntPtr.Zero)
-            {
-                LogWindowInfo("通过模糊匹配找到密码相关窗口", dialogHandle);
             }
             else
             {
-                // 尝试模糊匹配"文档已加密"
-                dialogHandle = FindWindowByPartialTitleAll("文档已加密");
-                if (dialogHandle != IntPtr.Zero)
+                Logger.Debug("未找到密码对话框");
+            }
+            return IntPtr.Zero;
+        }
+        
+        // 通过枚举所有WPS窗口查找密码对话框
+        private IntPtr FindWpsPasswordDialogByEnumeration()
+        {
+            IntPtr foundHandle = IntPtr.Zero;
+            
+            // 先获取所有WPS进程的ID列表
+            System.Collections.Generic.HashSet<int> wpsProcessIds = new System.Collections.Generic.HashSet<int>();
+            try
+            {
+                Process[] wpsProcesses = Process.GetProcessesByName("wps");
+                foreach (Process process in wpsProcesses)
                 {
-                    LogWindowInfo("通过模糊匹配找到文档已加密窗口", dialogHandle);
-                }
-                else
-                {
-                    Logger.Debug("未找到密码对话框");
+                    wpsProcessIds.Add(process.Id);
                 }
             }
-            return dialogHandle;
+            catch { }
+            
+            // 如果没有WPS进程，直接返回
+            if (wpsProcessIds.Count == 0)
+            {
+                return IntPtr.Zero;
+            }
+            
+            // 枚举所有顶级窗口
+            EnumWindows((IntPtr hWnd, IntPtr lParam) =>
+            {
+                // 获取窗口标题
+                StringBuilder windowTitle = new StringBuilder(256);
+                GetWindowText(hWnd, windowTitle, windowTitle.Capacity);
+                string title = windowTitle.ToString();
+                
+                // 检查窗口标题是否包含密码相关关键词
+                if (!title.Contains("密码") && !title.Contains("加密") && !title.Contains("解密"))
+                {
+                    return true; // 继续枚举
+                }
+                
+                // 获取窗口类名
+                StringBuilder className = new StringBuilder(256);
+                GetClassName(hWnd, className, className.Capacity);
+                string classStr = className.ToString();
+                
+                // 检查是否是WPS进程的窗口
+                uint processId;
+                GetWindowThreadProcessId(hWnd, out processId);
+                
+                // 只检查进程ID是否在WPS进程ID列表中，避免每次都调用Process.GetProcessById
+                if (wpsProcessIds.Contains((int)processId))
+                {
+                    Logger.Debug($"找到WPS窗口: 句柄={hWnd}, 标题={title}, 类名={classStr}");
+                    foundHandle = hWnd;
+                    return false; // 找到后停止枚举
+                }
+                
+                return true; // 继续枚举
+            }, IntPtr.Zero);
+            
+            return foundHandle;
         }
 
         // 记录窗口详细信息
@@ -167,7 +220,7 @@ namespace WpsPasswordManager.Monitor
                 // 只处理 WPS 进程
                 if (process.ProcessName.ToLower() == "wps")
                 {
-                    // 枚举进程的所有窗口
+                    // 枚举进程的所有顶级窗口
                     EnumWindowsProc callback = (IntPtr windowHandle, IntPtr lParam) =>
                     {
                         uint processId;
@@ -175,12 +228,21 @@ namespace WpsPasswordManager.Monitor
                         
                         if (processId == process.Id)
                         {
+                            // 检查当前窗口
                             StringBuilder windowTitle = new StringBuilder(256);
                             GetWindowText(windowHandle, windowTitle, windowTitle.Capacity);
                             
                             if (windowTitle.ToString().Contains(partialTitle))
                             {
                                 hWnd = windowHandle;
+                                return false; // 找到后停止枚举
+                            }
+                            
+                            // 递归检查子窗口
+                            IntPtr childWnd = FindChildWindowByPartialTitle(windowHandle, partialTitle);
+                            if (childWnd != IntPtr.Zero)
+                            {
+                                hWnd = childWnd;
                                 return false; // 找到后停止枚举
                             }
                         }
@@ -198,6 +260,40 @@ namespace WpsPasswordManager.Monitor
             
             return hWnd;
         }
+        
+        // 递归查找子窗口
+        private IntPtr FindChildWindowByPartialTitle(IntPtr parentHandle, string partialTitle)
+        {
+            IntPtr hWnd = IntPtr.Zero;
+            
+            // 枚举子窗口
+            EnumChildWindowsProc callback = (IntPtr windowHandle, IntPtr lParam) =>
+            {
+                // 检查当前窗口
+                StringBuilder windowTitle = new StringBuilder(256);
+                GetWindowText(windowHandle, windowTitle, windowTitle.Capacity);
+                
+                if (windowTitle.ToString().Contains(partialTitle))
+                {
+                    hWnd = windowHandle;
+                    return false; // 找到后停止枚举
+                }
+                
+                // 递归检查子窗口
+                IntPtr childWnd = FindChildWindowByPartialTitle(windowHandle, partialTitle);
+                if (childWnd != IntPtr.Zero)
+                {
+                    hWnd = childWnd;
+                    return false; // 找到后停止枚举
+                }
+                
+                return true; // 继续枚举
+            };
+            
+            EnumChildWindows(parentHandle, callback, IntPtr.Zero);
+            
+            return hWnd;
+        }
 
         // 枚举窗口的委托
         private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
@@ -205,6 +301,10 @@ namespace WpsPasswordManager.Monitor
         // 枚举所有顶级窗口
         [DllImport("user32.dll")]
         private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+        
+        // 获取当前活动窗口
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
         
         // Win32 API 定义：设置窗口为前台窗口
         [DllImport("user32.dll", SetLastError = true)]
@@ -218,6 +318,18 @@ namespace WpsPasswordManager.Monitor
         [DllImport("user32.dll", SetLastError = true)]
         private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
 
+        // Win32 API 定义：发送消息
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        private static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, StringBuilder lParam);
+        
+        // Win32 API 定义：发送消息（设置文本）
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        private static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, string lParam);
+        
+        // 常量定义
+        private const uint WM_GETTEXT = 0x000D;
+        private const uint WM_SETTEXT = 0x000C;
+
         // 定位密码输入框
         public IntPtr FindPasswordEdit(IntPtr dialogHandle)
         {
@@ -229,33 +341,72 @@ namespace WpsPasswordManager.Monitor
 
             Logger.Debug($"开始定位密码输入框，对话框句柄: {dialogHandle}");
 
-            // 尝试使用 FindWindowEx 查找所有子窗口
+            // 获取窗口类名，检查是否为Qt窗口
+            StringBuilder dialogClassName = new StringBuilder(256);
+            GetClassName(dialogHandle, dialogClassName, dialogClassName.Capacity);
+            string dialogClass = dialogClassName.ToString();
+            Logger.Debug($"对话框类名: {dialogClass}");
+
+            // 1. 尝试使用 EnumChildWindows 枚举所有子窗口
+            IntPtr foundHandle = IntPtr.Zero;
+            int windowCount = 0;
+            
+            EnumChildWindows(dialogHandle, (hwnd, lParam) =>
+            {
+                windowCount++;
+                // 获取窗口类名
+                StringBuilder className = new StringBuilder(256);
+                GetClassName(hwnd, className, className.Capacity);
+                string classNameStr = className.ToString();
+                
+                // 获取窗口文本
+                StringBuilder windowText = new StringBuilder(256);
+                GetWindowText(hwnd, windowText, windowText.Capacity);
+                string windowTextStr = windowText.ToString();
+                
+                Logger.Debug($"检查窗口 {windowCount}: 句柄={hwnd}, 类名={classNameStr}, 文本={windowTextStr}");
+                
+                // 检查是否为编辑控件
+                if (IsEditControl(classNameStr))
+                {
+                    // 尝试读取文本，确认是否为输入框
+                    StringBuilder testText = new StringBuilder(256);
+                    SendMessage(hwnd, WM_GETTEXT, (IntPtr)256, testText);
+                    string text = testText.ToString();
+                    
+                    // 即使文本为空，只要能读取，也认为是输入框
+                    Logger.Debug($"找到可能的输入框: 句柄={hwnd}, 类名={classNameStr}, 文本={text}");
+                    foundHandle = hwnd;
+                    return false; // 找到后停止枚举
+                }
+                
+                // 递归查找子窗口
+                IntPtr childFoundHandle = FindPasswordEdit(hwnd);
+                if (childFoundHandle != IntPtr.Zero)
+                {
+                    foundHandle = childFoundHandle;
+                    return false; // 找到后停止枚举
+                }
+                
+                return true; // 继续枚举
+            }, IntPtr.Zero);
+            
+            if (foundHandle != IntPtr.Zero)
+            {
+                Logger.Info($"成功找到密码输入框: {foundHandle}");
+                return foundHandle;
+            }
+            
+            // 2. 尝试使用 FindWindowEx 查找所有子窗口
             IntPtr childHandle = IntPtr.Zero;
+            int childCount = 0;
             do
             {
                 childHandle = FindWindowEx(dialogHandle, childHandle, null, null);
                 if (childHandle != IntPtr.Zero)
                 {
-                    // 获取窗口类名
-                    StringBuilder className = new StringBuilder(256);
-                    GetClassName(childHandle, className, className.Capacity);
-                    string classNameStr = className.ToString();
-                    
-                    // 获取窗口文本
-                    StringBuilder windowText = new StringBuilder(256);
-                    GetWindowText(childHandle, windowText, windowText.Capacity);
-                    string windowTextStr = windowText.ToString();
-                    
-                    Logger.Debug($"检查窗口: 句柄={childHandle}, 类名={classNameStr}, 文本={windowTextStr}");
-                    
-                    // 尝试向窗口发送 WM_SETTEXT 消息，看是否能设置文本
-                    bool canSetText = SetWindowText(childHandle, "test");
-                    if (canSetText)
-                    {
-                        Logger.Debug($"找到可设置文本的窗口: 句柄={childHandle}, 类名={classNameStr}");
-                        return childHandle;
-                    }
-                    
+                    childCount++;
+                    Logger.Debug($"检查子窗口 {childCount}: 句柄={childHandle}");
                     // 递归查找子窗口
                     IntPtr grandChildHandle = FindPasswordEdit(childHandle);
                     if (grandChildHandle != IntPtr.Zero)
@@ -265,8 +416,36 @@ namespace WpsPasswordManager.Monitor
                 }
             } while (childHandle != IntPtr.Zero);
             
+            // 3. 尝试直接查找Qt输入框
+            IntPtr qtEdit = FindQtEditControl(dialogHandle);
+            if (qtEdit != IntPtr.Zero)
+            {
+                Logger.Info($"找到Qt输入框: {qtEdit}");
+                return qtEdit;
+            }
+            
             Logger.Warning("未找到密码输入框");
             return IntPtr.Zero;
+        }
+        
+        // 检查是否为编辑控件
+        private bool IsEditControl(string className)
+        {
+            string[] editControlClasses = {
+                "Edit", "TextBox", "RichEdit", "RichEdit20W", "RichEdit50W",
+                "QLineEdit", "QTextEdit", "QPlainTextEdit", "LineEdit", "TextEdit",
+                "INPUT", "edit", "text", "Text", "Edit", "qt", "Qt",
+                "QWidget", "QDialog", "QMainWindow", "QFrame"
+            };
+            
+            foreach (string controlClass in editControlClasses)
+            {
+                if (className == controlClass || className.Contains(controlClass))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
         
         // Win32 API 定义：设置窗口文本
@@ -278,39 +457,61 @@ namespace WpsPasswordManager.Monitor
         {
             try
             {
-                IntPtr childHandle = IntPtr.Zero;
-                do
+                Logger.Debug($"开始查找Qt编辑控件，父窗口句柄: {parentHandle}");
+                
+                // 枚举所有子窗口
+                IntPtr foundHandle = IntPtr.Zero;
+                EnumChildWindows(parentHandle, (hwnd, lParam) =>
                 {
-                    childHandle = FindWindowEx(parentHandle, childHandle, null, null);
-                    if (childHandle != IntPtr.Zero)
+                    // 获取窗口类名
+                    StringBuilder className = new StringBuilder(256);
+                    GetClassName(hwnd, className, className.Capacity);
+                    string classNameStr = className.ToString();
+                    
+                    // 获取窗口文本
+                    StringBuilder windowText = new StringBuilder(256);
+                    GetWindowText(hwnd, windowText, windowText.Capacity);
+                    string windowTextStr = windowText.ToString();
+                    
+                    Logger.Debug($"检查Qt窗口: 句柄={hwnd}, 类名={classNameStr}, 文本={windowTextStr}");
+                    
+                    // 检查是否为Qt编辑控件
+                    if (classNameStr.Contains("QLineEdit") || 
+                        classNameStr.Contains("QTextEdit") || 
+                        classNameStr.Contains("QPlainTextEdit") || 
+                        classNameStr.Contains("LineEdit") ||
+                        classNameStr.Contains("Edit") ||
+                        classNameStr.Contains("Text"))
                     {
-                        // 获取窗口类名
-                        StringBuilder className = new StringBuilder(256);
-                        GetClassName(childHandle, className, className.Capacity);
-                        string classNameStr = className.ToString();
+                        // 尝试向窗口发送 WM_GETTEXT 消息，看是否能获取文本
+                        StringBuilder testText = new StringBuilder(256);
+                        SendMessage(hwnd, WM_GETTEXT, (IntPtr)256, testText);
+                        string text = testText.ToString();
                         
-                        // 检查是否为Qt编辑控件
-                        if (classNameStr.Contains("QLineEdit") || classNameStr.Contains("QTextEdit") || 
-                            classNameStr.Contains("QPlainTextEdit") || classNameStr.Contains("LineEdit"))
-                        {
-                            Logger.Debug($"找到Qt编辑控件: 句柄={childHandle}, 类名={classNameStr}");
-                            return childHandle;
-                        }
-                        
-                        // 递归查找子窗口
-                        IntPtr foundHandle = FindQtEditControl(childHandle);
-                        if (foundHandle != IntPtr.Zero)
-                        {
-                            return foundHandle;
-                        }
+                        // 即使文本为空，只要能读取，也认为是输入框
+                        Logger.Debug($"找到可能的Qt输入框: 句柄={hwnd}, 类名={classNameStr}, 文本={text}");
+                        foundHandle = hwnd;
+                        return false; // 找到后停止枚举
                     }
-                } while (childHandle != IntPtr.Zero);
+                    
+                    // 递归查找子窗口
+                    IntPtr childFoundHandle = FindQtEditControl(hwnd);
+                    if (childFoundHandle != IntPtr.Zero)
+                    {
+                        foundHandle = childFoundHandle;
+                        return false; // 找到后停止枚举
+                    }
+                    
+                    return true; // 继续枚举
+                }, IntPtr.Zero);
+                
+                return foundHandle;
             }
             catch (Exception ex)
             {
                 Logger.Error($"查找Qt编辑控件时出错: {ex.Message}");
+                return IntPtr.Zero;
             }
-            return IntPtr.Zero;
         }
         
         // 递归查找编辑控件（包括所有子窗口）
@@ -598,6 +799,378 @@ namespace WpsPasswordManager.Monitor
             return buttonHandle;
         }
 
+        // 定位「运用」按钮
+        public IntPtr FindApplyButton(IntPtr dialogHandle)
+        {
+            if (dialogHandle == IntPtr.Zero)
+            {
+                Logger.Warning("对话框句柄为空，无法定位运用按钮");
+                return IntPtr.Zero;
+            }
+
+            Logger.Debug($"开始查找应用按钮，对话框句柄: {dialogHandle}");
+
+            // 尝试多种按钮文本
+            string[] buttonTexts = { "应用", "确定", "OK" };
+            
+            foreach (string buttonText in buttonTexts)
+            {
+                // 查找标准按钮
+                IntPtr buttonHandle = FindWindowEx(dialogHandle, IntPtr.Zero, "Button", buttonText);
+                if (buttonHandle != IntPtr.Zero)
+                {
+                    Logger.Info($"找到{buttonText}按钮");
+                    LogWindowInfo($"找到{buttonText}按钮", buttonHandle);
+                    return buttonHandle;
+                }
+                
+                // 尝试查找Qt按钮
+                buttonHandle = FindQtButton(dialogHandle, buttonText);
+                if (buttonHandle != IntPtr.Zero)
+                {
+                    Logger.Info($"找到Qt{buttonText}按钮");
+                    LogWindowInfo($"找到Qt{buttonText}按钮", buttonHandle);
+                    return buttonHandle;
+                }
+                
+                // 枚举所有子窗口，查找可能的按钮
+                buttonHandle = FindButtonByEnumeration(dialogHandle, buttonText);
+                if (buttonHandle != IntPtr.Zero)
+                {
+                    Logger.Info($"通过枚举找到{buttonText}按钮");
+                    LogWindowInfo($"通过枚举找到{buttonText}按钮", buttonHandle);
+                    return buttonHandle;
+                }
+            }
+            
+            // 不再尝试查找任意按钮，只查找带有特定文本的按钮
+            
+            // 枚举所有子窗口，记录详细信息
+            Logger.Debug("开始枚举所有子窗口，查找应用按钮");
+            
+            // 尝试使用FindWindowEx枚举子窗口
+            IntPtr childHandle = IntPtr.Zero;
+            int childCount = 0;
+            do
+            {
+                childHandle = FindWindowEx(dialogHandle, childHandle, null, null);
+                if (childHandle != IntPtr.Zero)
+                {
+                    childCount++;
+                    StringBuilder className = new StringBuilder(256);
+                    GetClassName(childHandle, className, className.Capacity);
+                    string classNameStr = className.ToString();
+                    
+                    StringBuilder windowText = new StringBuilder(256);
+                    GetWindowText(childHandle, windowText, windowText.Capacity);
+                    string windowTextStr = windowText.ToString();
+                    
+                    Logger.Debug($"子窗口 {childCount}: 句柄={childHandle}, 类名={classNameStr}, 文本={windowTextStr}");
+                    
+                    // 递归查找子窗口
+                    FindChildWindows(childHandle, 1);
+                }
+            } while (childHandle != IntPtr.Zero);
+            
+            Logger.Debug($"共找到 {childCount} 个子窗口");
+            
+            // 未找到应用按钮的处理
+            Logger.Warning("未找到应用按钮");
+            return IntPtr.Zero;
+        }
+        
+        // 递归查找子窗口
+        private void FindChildWindows(IntPtr parentHandle, int level)
+        {
+            IntPtr childHandle = IntPtr.Zero;
+            int childCount = 0;
+            do
+            {
+                childHandle = FindWindowEx(parentHandle, childHandle, null, null);
+                if (childHandle != IntPtr.Zero)
+                {
+                    childCount++;
+                    StringBuilder className = new StringBuilder(256);
+                    GetClassName(childHandle, className, className.Capacity);
+                    string classNameStr = className.ToString();
+                    
+                    StringBuilder windowText = new StringBuilder(256);
+                    GetWindowText(childHandle, windowText, windowText.Capacity);
+                    string windowTextStr = windowText.ToString();
+                    
+                    string indent = new string(' ', level * 2);
+                    Logger.Debug($"{indent}子窗口 {childCount}: 句柄={childHandle}, 类名={classNameStr}, 文本={windowTextStr}");
+                    
+                    // 递归查找更深层的子窗口
+                    FindChildWindows(childHandle, level + 1);
+                }
+            } while (childHandle != IntPtr.Zero);
+        }
+        
+        // 查找Qt按钮
+        private IntPtr FindQtButton(IntPtr parentHandle, string buttonText)
+        {
+            IntPtr foundHandle = IntPtr.Zero;
+            
+            EnumChildWindows(parentHandle, (hwnd, lParam) =>
+            {
+                StringBuilder className = new StringBuilder(256);
+                GetClassName(hwnd, className, className.Capacity);
+                string classNameStr = className.ToString();
+                
+                StringBuilder windowText = new StringBuilder(256);
+                GetWindowText(hwnd, windowText, windowText.Capacity);
+                string windowTextStr = windowText.ToString();
+                
+                Logger.Debug($"检查Qt窗口: 句柄={hwnd}, 类名={classNameStr}, 文本={windowTextStr}");
+                
+                // 检查是否为Qt按钮
+                if (IsButtonControl(classNameStr) && windowTextStr == buttonText)
+                {
+                    foundHandle = hwnd;
+                    return false;
+                }
+                
+                // 递归查找子窗口
+                IntPtr childFoundHandle = FindQtButton(hwnd, buttonText);
+                if (childFoundHandle != IntPtr.Zero)
+                {
+                    foundHandle = childFoundHandle;
+                    return false;
+                }
+                
+                return true;
+            }, IntPtr.Zero);
+            
+            return foundHandle;
+        }
+        
+        // 通过枚举查找按钮
+        private IntPtr FindButtonByEnumeration(IntPtr parentHandle, string buttonText)
+        {
+            IntPtr foundHandle = IntPtr.Zero;
+            
+            EnumChildWindows(parentHandle, (hwnd, lParam) =>
+            {
+                StringBuilder windowText = new StringBuilder(256);
+                GetWindowText(hwnd, windowText, windowText.Capacity);
+                string windowTextStr = windowText.ToString();
+                
+                // 检查窗口文本是否匹配
+                if (windowTextStr == buttonText)
+                {
+                    // 检查是否为按钮控件
+                    StringBuilder className = new StringBuilder(256);
+                    GetClassName(hwnd, className, className.Capacity);
+                    string classNameStr = className.ToString();
+                    
+                    if (IsButtonControl(classNameStr))
+                    {
+                        Logger.Debug($"找到按钮控件: 句柄={hwnd}, 类名={classNameStr}, 文本={windowTextStr}");
+                        foundHandle = hwnd;
+                        return false;
+                    }
+                }
+                
+                // 递归查找子窗口
+                IntPtr childFoundHandle = FindButtonByEnumeration(hwnd, buttonText);
+                if (childFoundHandle != IntPtr.Zero)
+                {
+                    foundHandle = childFoundHandle;
+                    return false;
+                }
+                
+                return true;
+            }, IntPtr.Zero);
+            
+            return foundHandle;
+        }
+        
+        // 查找任何按钮
+        private IntPtr FindAnyButton(IntPtr parentHandle)
+        {
+            IntPtr foundHandle = IntPtr.Zero;
+            
+            EnumChildWindows(parentHandle, (hwnd, lParam) =>
+            {
+                StringBuilder className = new StringBuilder(256);
+                GetClassName(hwnd, className, className.Capacity);
+                string classNameStr = className.ToString();
+                
+                StringBuilder windowText = new StringBuilder(256);
+                GetWindowText(hwnd, windowText, windowText.Capacity);
+                string windowTextStr = windowText.ToString();
+                
+                Logger.Debug($"检查按钮窗口: 句柄={hwnd}, 类名={classNameStr}, 文本={windowTextStr}");
+                
+                // 检查是否为按钮控件
+                if (IsButtonControl(classNameStr))
+                {
+                    foundHandle = hwnd;
+                    return false;
+                }
+                
+                // 递归查找子窗口
+                IntPtr childFoundHandle = FindAnyButton(hwnd);
+                if (childFoundHandle != IntPtr.Zero)
+                {
+                    foundHandle = childFoundHandle;
+                    return false;
+                }
+                
+                return true;
+            }, IntPtr.Zero);
+            
+            return foundHandle;
+        }
+        
+        // 检查是否为按钮控件
+        private bool IsButtonControl(string className)
+        {
+            string[] buttonControlClasses = {
+                "Button", "PushButton", "QPushButton", "QToolButton",
+                "button", "pushbutton", "QPushButton", "Button"
+            };
+            
+            foreach (string controlClass in buttonControlClasses)
+            {
+                if (className == controlClass || className.Contains(controlClass))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+        
+        // 检测按钮是否被点击
+        public bool IsButtonClicked(IntPtr buttonHandle)
+        {
+            if (buttonHandle == IntPtr.Zero)
+            {
+                return false;
+            }
+            
+            try
+            {
+                // 获取按钮文本
+                StringBuilder buttonText = new StringBuilder(256);
+                GetWindowText(buttonHandle, buttonText, buttonText.Capacity);
+                string text = buttonText.ToString();
+                
+                // 检查按钮文本是否为应用按钮
+                string[] validButtonTexts = { "应用", "确定", "OK" };
+                bool isValidButton = false;
+                foreach (string validText in validButtonTexts)
+                {
+                    if (text == validText)
+                    {
+                        isValidButton = true;
+                        break;
+                    }
+                }
+                
+                if (!isValidButton)
+                {
+                    // 不是应用按钮，直接返回false
+                    return false;
+                }
+                
+                // 检查按钮是否有焦点
+                IntPtr focusedWindow = GetFocus();
+                if (focusedWindow == buttonHandle)
+                {
+                    // 检查鼠标左键是否被按下
+                    if (GetAsyncKeyState(VK_LBUTTON) < 0)
+                    {
+                        // 检查鼠标位置是否在按钮范围内
+                        RECT buttonRect = new RECT();
+                        if (GetWindowRect(buttonHandle, ref buttonRect))
+                        {
+                            POINT mousePos;
+                            if (GetCursorPos(out mousePos))
+                            {
+                                bool isMouseOver = mousePos.X >= buttonRect.Left && 
+                                                 mousePos.X <= buttonRect.Right && 
+                                                 mousePos.Y >= buttonRect.Top && 
+                                                 mousePos.Y <= buttonRect.Bottom;
+                                if (isMouseOver)
+                                {
+                                    Logger.Debug("检测到鼠标点击应用按钮");
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"检测按钮状态时出错: {ex.Message}");
+                return false;
+            }
+        }
+        
+        // Win32 API 定义：获取异步键盘状态
+        [DllImport("user32.dll")]
+        private static extern short GetAsyncKeyState(int vKey);
+        
+        // Win32 API 定义：获取光标位置
+        [DllImport("user32.dll")]
+        private static extern bool GetCursorPos(out POINT lpPoint);
+        
+        // 结构体定义
+        [StructLayout(LayoutKind.Sequential)]
+        public struct POINT
+        {
+            public int X;
+            public int Y;
+        }
+        
+        // 常量定义
+        private const int VK_LBUTTON = 0x01;
+
+        // 获取输入框文本
+        public string GetInputText(IntPtr editHandle)
+        {
+            if (editHandle == IntPtr.Zero)
+            {
+                Logger.Warning("输入框句柄为空，无法获取文本");
+                return string.Empty;
+            }
+
+            try
+            {
+                // 尝试使用 GetWindowText 获取文本
+                StringBuilder sb = new StringBuilder(256);
+                int length = GetWindowText(editHandle, sb, sb.Capacity);
+                if (length > 0)
+                {
+                    string text = sb.ToString();
+                    Logger.Debug($"通过 GetWindowText 获取到输入框文本: {text}");
+                    return text;
+                }
+                else
+                {
+                    // 尝试使用 SendMessage WM_GETTEXT 获取文本
+                    StringBuilder sb2 = new StringBuilder(256);
+                    SendMessage(editHandle, WM_GETTEXT, (IntPtr)256, sb2);
+                    string text = sb2.ToString();
+                    if (!string.IsNullOrEmpty(text))
+                    {
+                        Logger.Debug($"通过 WM_GETTEXT 获取到输入框文本: {text}");
+                        return text;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"获取输入框文本时出错: {ex.Message}");
+            }
+
+            return string.Empty;
+        }
+
         // 定位「打开文件密码(O)」标签
         public IntPtr FindOpenPasswordLabel(IntPtr dialogHandle)
         {
@@ -674,9 +1247,100 @@ namespace WpsPasswordManager.Monitor
         // 解析文档路径
         public string GetDocumentPath(IntPtr dialogHandle)
         {
-            // 这里需要根据实际情况实现
-            // 可以通过获取对话框的关联进程，然后分析进程的命令行参数
-            // 或者通过其他方式获取文档路径
+            try
+            {
+                // 尝试获取当前活动的WPS窗口
+                IntPtr activeWindow = GetForegroundWindow();
+                if (activeWindow != IntPtr.Zero)
+                {
+                    // 获取窗口标题
+                    StringBuilder windowTitle = new StringBuilder(256);
+                    GetWindowText(activeWindow, windowTitle, windowTitle.Capacity);
+                    string title = windowTitle.ToString();
+                    Logger.Debug($"当前活动窗口: {activeWindow}, 标题: {title}");
+                }
+                
+                // 尝试获取所有WPS进程，查找包含文档路径的进程
+                Process[] wpsProcesses = Process.GetProcessesByName("wps");
+                foreach (Process wpsProcess in wpsProcesses)
+                {
+                    try
+                    {
+                        // 获取主模块文件路径
+                        string mainModulePath = wpsProcess.MainModule.FileName;
+                        Logger.Debug($"WPS 进程 {wpsProcess.Id} 主模块路径: {mainModulePath}");
+                        
+                        // 尝试获取进程的主窗口标题
+                        StringBuilder mainWindowTitle = new StringBuilder(256);
+                        GetWindowText(wpsProcess.MainWindowHandle, mainWindowTitle, mainWindowTitle.Capacity);
+                        string mainTitle = mainWindowTitle.ToString();
+                        Logger.Debug($"WPS 进程 {wpsProcess.Id} 主窗口标题: {mainTitle}");
+                        
+                        // 尝试从主窗口标题中提取文档路径
+                        // WPS的主窗口标题通常格式为：文档名 - WPS Office
+                        if (!string.IsNullOrEmpty(mainTitle) && mainTitle.Contains(" - WPS Office"))
+                        {
+                            string docName = mainTitle.Replace(" - WPS Office", "");
+                            Logger.Debug($"从主窗口标题中提取的文档名: {docName}");
+                        }
+                        
+                        // 这里使用一个简单的方法：查找最近打开的WPS文档
+                        // 实际应用中，可能需要使用更复杂的方法来获取文档路径
+                        string recentDocsPath = Environment.GetFolderPath(Environment.SpecialFolder.Recent);
+                        Logger.Debug($"最近文档路径: {recentDocsPath}");
+                        
+                        // 查找最近的WPS文档
+                        string[] recentFiles = Directory.GetFiles(recentDocsPath, "*.lnk");
+                        Array.Sort(recentFiles, (a, b) => File.GetLastWriteTime(b).CompareTo(File.GetLastWriteTime(a)));
+                        
+                        foreach (string lnkPath in recentFiles)
+                        {
+                            try
+                            {
+                                // 解析快捷方式，获取目标文件路径
+                                string targetPath = ResolveShortcut(lnkPath);
+                                if (!string.IsNullOrEmpty(targetPath) && 
+                                    (targetPath.EndsWith(".docx", StringComparison.OrdinalIgnoreCase) ||
+                                     targetPath.EndsWith(".doc", StringComparison.OrdinalIgnoreCase) ||
+                                     targetPath.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) ||
+                                     targetPath.EndsWith(".xls", StringComparison.OrdinalIgnoreCase) ||
+                                     targetPath.EndsWith(".pptx", StringComparison.OrdinalIgnoreCase) ||
+                                     targetPath.EndsWith(".ppt", StringComparison.OrdinalIgnoreCase)))
+                                {
+                                    Logger.Debug($"找到最近的WPS文档: {targetPath}");
+                                    return targetPath;
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"处理WPS进程 {wpsProcess.Id} 时出错: {ex.Message}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"获取文档路径时出错: {ex.Message}");
+            }
+            
+            return string.Empty;
+        }
+
+        // 解析快捷方式，获取目标文件路径
+        private string ResolveShortcut(string lnkPath)
+        {
+            try
+            {
+                // 使用Shell32 COM组件解析快捷方式
+                Type shellType = Type.GetTypeFromProgID("WScript.Shell");
+                object shell = Activator.CreateInstance(shellType);
+                object shortcut = shellType.InvokeMember("CreateShortcut", System.Reflection.BindingFlags.InvokeMethod, null, shell, new object[] { lnkPath });
+                string targetPath = shortcut.GetType().InvokeMember("TargetPath", System.Reflection.BindingFlags.GetProperty, null, shortcut, null) as string;
+                return targetPath;
+            }
+            catch { }
             return string.Empty;
         }
 
