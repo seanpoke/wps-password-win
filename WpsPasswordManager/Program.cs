@@ -139,6 +139,23 @@ namespace WpsPasswordManager
 
             Logger.Info("WPS 密码自动填充插件启动");
 
+            // 检查登录状态
+            if (!WpsPasswordManager.UI.LoginForm.IsLoggedIn())
+            {
+                Logger.Info("首次运行，显示登录弹框");
+                WpsPasswordManager.UI.LoginForm loginForm = new WpsPasswordManager.UI.LoginForm();
+                if (loginForm.ShowDialog() != System.Windows.Forms.DialogResult.OK)
+                {
+                    Logger.Info("用户取消登录，退出程序");
+                    return;
+                }
+            }
+            else
+            {
+                string username = WpsPasswordManager.UI.LoginForm.GetUsername();
+                Logger.Info($"用户 {username} 已登录");
+            }
+
             // 暂时注释掉鼠标钩子安装
             // InstallMouseHook();
             // Logger.Info("鼠标钩子已安装");
@@ -164,7 +181,14 @@ namespace WpsPasswordManager
             trayIcon.OpenFolderClicked += (sender, e) =>
             {
                 Logger.Info("用户点击打开文件夹");
-                System.Diagnostics.Process.Start(Environment.CurrentDirectory);
+                try
+                {
+                    System.Diagnostics.Process.Start("explorer.exe", Environment.CurrentDirectory);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"打开文件夹失败: {ex.Message}");
+                }
             };
 
             // 悬浮按钮事件
@@ -958,122 +982,6 @@ namespace WpsPasswordManager
                 return false;
             }
         }
-
-        // 暂时注释掉鼠标钩子安装方法
-        /*
-        private static void InstallMouseHook()
-        {
-            _mouseHookProc = MouseHookCallback;
-            using (Process curProcess = Process.GetCurrentProcess())
-            using (ProcessModule curModule = curProcess.MainModule)
-            {
-                _mouseHook = SetWindowsHookEx(WH_MOUSE_LL, _mouseHookProc, GetModuleHandle(curModule.ModuleName), 0);
-            }
-        }
-        */
-
-        // 鼠标钩子回调函数
-        private static IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
-        {
-            // 暂时注释掉鼠标左键按下的验证和触发逻辑
-            /*
-            if (nCode >= 0 && wParam == (IntPtr)WM_LBUTTONDOWN) // 鼠标左键按下
-            {
-                MSLLHOOKSTRUCT hookStruct = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
-                
-                // 记录鼠标点击位置
-                Logger.Debug($"鼠标左键按下，位置: ({hookStruct.pt.X}, {hookStruct.pt.Y})");
-                
-                // 获取鼠标点击位置的窗口
-                IntPtr hWnd = WindowFromPoint(hookStruct.pt);
-                Logger.Debug($"点击位置的窗口句柄: {hWnd}");
-                
-                // 检查窗口是否有效
-                if (hWnd != IntPtr.Zero)
-                {
-                    // 获取窗口标题
-                    StringBuilder title = new StringBuilder(256);
-                    GetWindowText(hWnd, title, title.Capacity);
-                    string titleStr = title.ToString();
-                    Logger.Debug($"窗口标题: {titleStr}");
-                    
-                    // 检查是否是WPS的密码加密窗口
-                    if (IsWpsPasswordDialog(hWnd))
-                    {
-                        Logger.Debug("找到WPS密码加密窗口");
-                        
-                        // 尝试获取密码提示输入框内容
-                        string passwordHint = GetPasswordHintFromDialog(hWnd);
-                        if (!string.IsNullOrEmpty(passwordHint))
-                        {
-                            Logger.Info($"获取到密码提示: {passwordHint}");
-                        }
-                        
-                        // 检查是否点击了应用按钮
-                        if (IsApplyButton(hWnd, hookStruct.pt))
-                        {
-                            // 打印信息
-                            Console.WriteLine("我是应用按钮");
-                            Logger.Info("检测到应用按钮点击");
-                            Logger.Info("拦截到了鼠标请求");
-                            
-                            // 1. 暂停窗口关闭
-                            SendMessage(hWnd, WM_CANCELMODE, IntPtr.Zero, IntPtr.Zero);
-                            Logger.Debug("发送WM_CANCELMODE消息");
-                            
-                            // 2. 在后台线程中处理密码获取和点击模拟
-                            POINT mousePoint = hookStruct.pt;
-                            IntPtr dialogHandle = hWnd;
-                            ThreadPool.QueueUserWorkItem((state) =>
-                            {
-                                try
-                                {
-                                    // 尝试获取输入框内容
-                                    string password = GetPasswordFromDialog(dialogHandle);
-                                    Logger.Info($"获取到密码: {password}");
-                                    
-                                    // 尝试获取密码提示输入框内容
-                                    string hint = GetPasswordHintFromDialog(dialogHandle);
-                                    if (!string.IsNullOrEmpty(hint))
-                                    {
-                                        Logger.Info($"获取到密码提示: {hint}");
-                                    }
-                                    
-                                    // 3. 放行点击动作（模拟一次点击）
-                                    Thread.Sleep(100); // 短暂延迟，确保窗口状态稳定
-                                    SimulateMouseClick(mousePoint);
-                                    Logger.Debug("模拟鼠标点击");
-                                    
-                                    // 4. 处理密码
-                                    // ProcessPassword(password);
-                                }
-                                catch (Exception ex)
-                                {
-                                    Logger.Error($"后台处理密码时出错: {ex.Message}");
-                                }
-                            });
-                            
-                            // 5. 返回1，表示已经处理了这个消息，不再传递给其他钩子
-                            return (IntPtr)1;
-                        }
-                        else
-                        {
-                            Logger.Debug("未点击应用按钮");
-                        }
-                    }
-                    else
-                    {
-                        Logger.Debug("不是WPS密码加密窗口");
-                    }
-                }
-                else
-                {
-                    Logger.Debug("未找到窗口");
-                }
-            }
-            */
-            return CallNextHookEx(_mouseHook, nCode, wParam, lParam);
-        }
         
         // 从密码对话框获取密码提示
         private static string GetPasswordHintFromDialog(IntPtr dialogHandle)
@@ -1548,110 +1456,7 @@ namespace WpsPasswordManager
                 return string.Empty;
             }
         }
-
-        // 检查是否是WPS的密码加密窗口
-        private static bool IsWpsPasswordDialog(IntPtr hWnd)
-        {
-            if (hWnd == IntPtr.Zero)
-                return false;
-            
-            // 获取窗口标题
-            StringBuilder title = new StringBuilder(256);
-            GetWindowText(hWnd, title, title.Capacity);
-            string titleStr = title.ToString();
-            
-            // 获取窗口类名
-            StringBuilder className = new StringBuilder(256);
-            GetClassName(hWnd, className, className.Capacity);
-            string classNameStr = className.ToString();
-            
-            // 直接检查窗口标题是否包含"密码加密"或"密码"
-            bool isPasswordDialog = titleStr.Contains("密码加密") || titleStr.Contains("密码") || titleStr.Contains("Password");
-            
-            Logger.Debug($"窗口标题: {titleStr}, 类名: {classNameStr}, 是否为密码对话框: {isPasswordDialog}");
-            
-            // 如果标题包含密码相关词汇，则认为是密码加密窗口
-            return isPasswordDialog;
-        }
-
-        // 检查是否点击了应用按钮
-        private static bool IsApplyButton(IntPtr dialogHandle, POINT mousePos)
-        {
-            try
-            {
-                Logger.Debug($"开始检查应用按钮，对话框句柄: {dialogHandle}, 鼠标位置: ({mousePos.X}, {mousePos.Y})");
-                
-                // 首先检查鼠标是否在对话框范围内
-                RECT dialogRect = new RECT();
-                if (GetWindowRect(dialogHandle, ref dialogRect))
-                {
-                    Logger.Debug($"对话框矩形: 左={dialogRect.Left}, 上={dialogRect.Top}, 右={dialogRect.Right}, 下={dialogRect.Bottom}");
-                    
-                    bool isInDialog = mousePos.X >= dialogRect.Left && mousePos.X <= dialogRect.Right &&
-                                     mousePos.Y >= dialogRect.Top && mousePos.Y <= dialogRect.Bottom;
-                    
-                    if (isInDialog)
-                    {
-                        Logger.Debug($"鼠标在对话框范围内: {isInDialog}");
-                        
-                        // 计算按钮区域 - 更精确的按钮位置估计
-                        int dialogHeight = dialogRect.Bottom - dialogRect.Top;
-                        int dialogWidth = dialogRect.Right - dialogRect.Left;
-                        
-                        // 通常应用按钮位于右下角，高度约为30-40像素
-                        int buttonHeight = 40;
-                        int buttonWidth = 80;
-                        
-                        // 计算应用按钮的大致位置
-                        int buttonLeft = dialogRect.Right - buttonWidth - 20; // 右边距20
-                        int buttonTop = dialogRect.Bottom - buttonHeight - 15; // 下边距15
-                        int buttonRight = dialogRect.Right - 20;
-                        int buttonBottom = dialogRect.Bottom - 15;
-                        
-                        Logger.Debug($"应用按钮区域: 左={buttonLeft}, 上={buttonTop}, 右={buttonRight}, 下={buttonBottom}");
-                        
-                        // 检查鼠标是否在应用按钮区域
-                        bool isInButtonArea = mousePos.X >= buttonLeft && mousePos.X <= buttonRight &&
-                                             mousePos.Y >= buttonTop && mousePos.Y <= buttonBottom;
-                        
-                        Logger.Debug($"鼠标是否在应用按钮区域: {isInButtonArea}");
-                        
-                        if (isInButtonArea)
-                        {
-                            Logger.Info("检测到点击应用按钮区域");
-                            return true;
-                        }
-                        else
-                        {
-                            // 备用方案：检查是否在对话框的右下角区域
-                            bool isInBottomRight = mousePos.X >= dialogRect.Right - 150 && 
-                                                  mousePos.Y >= dialogRect.Bottom - 80;
-                            if (isInBottomRight)
-                            {
-                                Logger.Info("检测到点击对话框右下角区域（备用检测）");
-                                return true;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        Logger.Debug($"鼠标不在对话框范围内: {isInDialog}");
-                    }
-                }
-                else
-                {
-                    Logger.Debug("无法获取对话框矩形");
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"检查应用按钮时出错: {ex.Message}");
-            }
-            
-            Logger.Debug("未检测到应用按钮点击");
-            return false;
-        }
-        
+    
         // 使用UI Automation检查是否点击了应用按钮
         private static bool IsApplyButtonUsingUIAutomation(IntPtr dialogHandle, POINT mousePos)
         {
