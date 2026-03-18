@@ -365,7 +365,8 @@ namespace WpsPasswordManager.Monitor
                 "Edit", "TextBox", "RichEdit", "RichEdit20W", "RichEdit50W",
                 "QLineEdit", "QTextEdit", "QPlainTextEdit", "LineEdit", "TextEdit",
                 "INPUT", "edit", "text", "Text", "Edit", "qt", "Qt",
-                "QWidget", "QDialog", "QMainWindow", "QFrame"
+                "QWidget", "QDialog", "QMainWindow", "QFrame",
+                "KDPwdLineEditReveal", "Pwd"
             };
 
             foreach (string controlClass in editControlClasses)
@@ -411,7 +412,9 @@ namespace WpsPasswordManager.Monitor
                         classNameStr.Contains("QPlainTextEdit") ||
                         classNameStr.Contains("LineEdit") ||
                         classNameStr.Contains("Edit") ||
-                        classNameStr.Contains("Text"))
+                        classNameStr.Contains("Text") ||
+                        classNameStr.Contains("KDPwdLineEditReveal") ||
+                        classNameStr.Contains("Pwd"))
                     {
                         // 尝试向窗口发送 WM_GETTEXT 消息，看是否能获取文本
                         StringBuilder testText = new StringBuilder(256);

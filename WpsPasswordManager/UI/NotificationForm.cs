@@ -21,6 +21,7 @@ namespace WpsPasswordManager.UI
             this.ShowInTaskbar = false;
             this.BackColor = System.Drawing.Color.FromArgb(240, 240, 240);
             this.Size = new System.Drawing.Size(300, 100);
+            this.StartPosition = FormStartPosition.Manual;
 
             // 创建消息标签
             _messageLabel = new Label
@@ -50,12 +51,19 @@ namespace WpsPasswordManager.UI
         {
             _messageLabel.Text = message;
 
-            // 定位到屏幕右下角
-            int x = Screen.PrimaryScreen.WorkingArea.Width - this.Width - 10;
-            int y = Screen.PrimaryScreen.WorkingArea.Height - this.Height - 10;
-            this.Location = new System.Drawing.Point(x, y);
-
             this.Show();
+            
+            // 定位到屏幕中间
+            System.Drawing.Rectangle screenBounds = Screen.GetWorkingArea(this);
+            int x = (screenBounds.Width - this.Width) / 2 + screenBounds.Left;
+            int y = (screenBounds.Height - this.Height) / 2 + screenBounds.Top;
+            
+            // 确保坐标不为负数
+            x = Math.Max(0, x);
+            y = Math.Max(0, y);
+            
+            this.Location = new System.Drawing.Point(x, y);
+            
             _closeTimer.Start();
         }
 
