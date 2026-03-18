@@ -134,10 +134,25 @@ namespace WpsPasswordManager
         [STAThread]
         static void Main()
         {
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
+            // 检查进程唯一性
+            bool isNewInstance;
+            using (System.Threading.Mutex mutex = new System.Threading.Mutex(true, "WpsPasswordManagerMutex", out isNewInstance))
+            {
+                if (!isNewInstance)
+                {
+                    // 已存在实例，显示提示信息
+                    System.Windows.Forms.MessageBox.Show(
+                        "WPS 密码自动填充插件已在运行中",
+                        "提示",
+                        System.Windows.Forms.MessageBoxButtons.OK,
+                        System.Windows.Forms.MessageBoxIcon.Information);
+                    return;
+                }
 
-            Logger.Info("WPS 密码自动填充插件启动");
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+
+                Logger.Info("WPS 密码自动填充插件启动");
 
             // 检查登录状态
             if (!WpsPasswordManager.UI.LoginForm.IsLoggedIn())
@@ -623,7 +638,6 @@ namespace WpsPasswordManager
                                                     // 显示密码弹框
                                                     NotificationForm tempNotificationForm = new NotificationForm();
                                                     tempNotificationForm.ShowNotification($"密码: {passwordToShow}");
-                                                    Application.Run();
                                                 }
                                                 catch (Exception ex)
                                                 {
@@ -631,7 +645,6 @@ namespace WpsPasswordManager
                                                     // 显示原始密码
                                                     NotificationForm tempNotificationForm = new NotificationForm();
                                                     tempNotificationForm.ShowNotification($"密码: {passwordToShow}");
-                                                    Application.Run();
                                                 }
                                             });
                                             passwordNotificationThread.SetApartmentState(System.Threading.ApartmentState.STA);
@@ -952,6 +965,7 @@ namespace WpsPasswordManager
 
             // 运行应用程序
             Application.Run();
+            }
         }
         
         // 检查文档是否打开
@@ -2187,7 +2201,7 @@ namespace WpsPasswordManager
         }
         
         // 从密码对话框获取密码
-        private static string GetPasswordFromDialog(IntPtr dialogHandle)
+        public static string GetPasswordFromDialog(IntPtr dialogHandle)
         {
             try
             {
