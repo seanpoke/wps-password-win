@@ -159,7 +159,6 @@ namespace WpsPasswordManager.Business
                     // 直接使用备用数据流写入密码
                     if (WritePasswordToWindowsMetadata(filePath, password))
                     {
-                        Logger.Info($"密码已成功写入到 {filePath} 的备用数据流中");
                         return true;
                     }
                     else
@@ -437,7 +436,6 @@ namespace WpsPasswordManager.Business
                     // 直接使用备用数据流写入UID
                     if (WriteUidToWindowsMetadata(filePath, uid))
                     {
-                        Logger.Info($"UID已成功写入到 {filePath} 的备用数据流中");
                         return true;
                     }
                     else

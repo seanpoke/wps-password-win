@@ -133,36 +133,6 @@ namespace WpsPasswordManager.Simulator
             keybd_event(virtualKey, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
         }
 
-        // 模拟鼠标点击
-        public void SimulateMouseClick(IntPtr windowHandle, int x, int y)
-        {
-            // 确保窗口在前台
-            SetForegroundWindow(windowHandle);
-            System.Threading.Thread.Sleep(50);
-
-            // 设置鼠标位置
-            SetCursorPos(x, y);
-            System.Threading.Thread.Sleep(50);
-
-            // 模拟鼠标点击
-            mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
-            System.Threading.Thread.Sleep(50);
-            mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
-        }
-
-        // 模拟按钮点击
-        public void SimulateButtonClick(IntPtr buttonHandle)
-        {
-            // 确保窗口在前台
-            SetForegroundWindow(buttonHandle);
-            System.Threading.Thread.Sleep(50);
-
-            // 发送鼠标点击消息
-            PostMessage(buttonHandle, WM_LBUTTONDOWN, IntPtr.Zero, IntPtr.Zero);
-            System.Threading.Thread.Sleep(50);
-            PostMessage(buttonHandle, WM_LBUTTONUP, IntPtr.Zero, IntPtr.Zero);
-        }
-
         // 清空输入框
         public void ClearInput(IntPtr editHandle)
         {
