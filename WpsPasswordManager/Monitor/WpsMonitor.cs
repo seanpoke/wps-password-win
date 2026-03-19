@@ -63,7 +63,6 @@ namespace WpsPasswordManager.Monitor
         // 查找 WPS 密码对话框
         public IntPtr FindPasswordDialog()
         {
-            Logger.Debug("开始查找密码对话框");
 
             // 尝试查找所有可能的密码对话框标题
             string[] dialogTitles = { "密码加密", "文档加密", "文档已加密", "密码" };
@@ -85,16 +84,11 @@ namespace WpsPasswordManager.Monitor
             }
 
             // 快速尝试：只查找WPS进程的窗口，不递归检查子窗口
-            Logger.Debug("尝试查找WPS进程的密码相关窗口");
             IntPtr dialogHandle = FindWpsPasswordDialogByEnumeration();
             if (dialogHandle != IntPtr.Zero)
             {
                 LogWindowInfo("通过枚举找到WPS密码相关窗口", dialogHandle);
                 return dialogHandle;
-            }
-            else
-            {
-                Logger.Debug("未找到密码对话框");
             }
             return IntPtr.Zero;
         }

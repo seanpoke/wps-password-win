@@ -266,10 +266,7 @@ namespace WpsPasswordManager
                         Logger.Info("通过模拟操作填充密码");
                     }
                 }
-                else
-                {
-                    Logger.Warning("未找到密码对话框");
-                }
+                
             };
 
             // 获取主线程的同步上下文
@@ -297,22 +294,19 @@ namespace WpsPasswordManager
                 {
                     try
                     {
-                        long startTime = DateTime.Now.Ticks;
-                        Logger.Debug($"循环开始，时间戳: {startTime}");
+                        long startTime = DateTime.Now.Ticks;                        
                         
                         // 检查WPS是否运行
                         long checkWpsStart = DateTime.Now.Ticks;
                         if (monitor.IsWpsRunning())
                         {
                             long checkWpsEnd = DateTime.Now.Ticks;
-                            Logger.Debug($"检查WPS运行状态耗时: {(checkWpsEnd - checkWpsStart) / 10000}ms");
                             
                             Logger.Debug("WPS 正在运行");
                             // 检查加密对话框
                             long findDialogStart = DateTime.Now.Ticks;
                             IntPtr encryptDialog = monitor.FindPasswordDialog();
                             long findDialogEnd = DateTime.Now.Ticks;
-                            Logger.Debug($"查找密码对话框耗时: {(findDialogEnd - findDialogStart) / 10000}ms");
                             if (encryptDialog != IntPtr.Zero)
                             {
                                 // 获取对话框标题
@@ -503,6 +497,10 @@ namespace WpsPasswordManager
                                                         Logger.Warning("无法获取文档路径，无法写入缓存");
                                                     }
                                                     
+                                                    // 模拟Ctrl+S保存操作
+                                                    simulator.SimulateCtrlS();
+                                                    Logger.Info("已模拟Ctrl+S保存操作");
+                                                    
                                                     // 移除点击时的弹框，只在窗口关闭后显示密码弹框
                                                 }
                                             }
@@ -581,6 +579,10 @@ namespace WpsPasswordManager
                                                             Logger.Warning("无法获取文档路径，无法写入缓存");
                                                         }
                                                         
+                                                        // 模拟Ctrl+S保存操作
+                                                        simulator.SimulateCtrlS();
+                                                        Logger.Info("已模拟Ctrl+S保存操作");
+                                                        
                                                         // 移除点击时的弹框，只在窗口关闭后显示密码弹框
                                                     }
                                                 }
@@ -603,8 +605,7 @@ namespace WpsPasswordManager
                                 mainThreadSyncContext?.Post((state) =>
                                 {
                                     floatingButton.HideButton();
-                                }, null);
-                            Logger.Debug("未找到加密对话框，隐藏悬浮按钮");
+                                }, null);                            
                             // 重置显示状态
                             lastShownDialog = IntPtr.Zero;
                             
@@ -751,10 +752,7 @@ namespace WpsPasswordManager
                                     }
                                 }
                             }
-                            else
-                            {
-                                Logger.Debug("未找到解密对话框");
-                            }
+                           
                         }
                         else
                         {
@@ -1330,22 +1328,7 @@ namespace WpsPasswordManager
                             object current = currentProperty.GetValue(hintElement);
                             if (current != null)
                             {
-                                Logger.Debug("获取到Current对象");
-                                // 打印Current对象的所有属性
-                                System.Reflection.PropertyInfo[] properties = current.GetType().GetProperties();
-                                Logger.Debug($"Current对象有 {properties.Length} 个属性");
-                                foreach (System.Reflection.PropertyInfo prop in properties)
-                                {
-                                    try
-                                    {
-                                        object value = prop.GetValue(current);
-                                        Logger.Debug($"Current.{prop.Name} = {value}");
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        Logger.Debug($"获取Current.{prop.Name}时出错: {ex.Message}");
-                                    }
-                                }
+                                Logger.Debug("获取到Current对象");                                                    
                                 
                                 System.Reflection.PropertyInfo valueProperty = current.GetType().GetProperty("Value");
                                 if (valueProperty != null)
@@ -2465,29 +2448,7 @@ namespace WpsPasswordManager
                                     if (name.Contains("打开文件密码"))
                                     {
                                         Logger.Info($"找到【打开文件密码】输入框，开始获取内容，实际名称: {name}");
-                                        
-                                        // 打印当前元素的所有属性，以便调试
-                                        try
-                                        {
-                                            System.Reflection.PropertyInfo[] properties = current.GetType().GetProperties();
-                                            foreach (System.Reflection.PropertyInfo prop in properties)
-                                            {
-                                                try
-                                                {
-                                                    object value = prop.GetValue(current);
-                                                    Logger.Debug($"Current.{prop.Name} = {value}");
-                                                }
-                                                catch (Exception ex)
-                                                {
-                                                    Logger.Debug($"获取Current.{prop.Name}时出错: {ex.Message}");
-                                                }
-                                            }
-                                        }
-                                        catch (Exception ex)
-                                        {
-                                            Logger.Error($"打印属性时出错: {ex.Message}");
-                                        }
-                                        
+
                                         // 检查是否为Qt密码输入框
                                         System.Reflection.PropertyInfo classNameProperty = current.GetType().GetProperty("ClassName");
                                         if (classNameProperty != null)
