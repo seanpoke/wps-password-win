@@ -566,7 +566,6 @@ namespace WpsPasswordManager.UI
 
         public void HideButton()
         {
-            Logger.Debug("隐藏悬浮按钮");
             this.Hide();
             // 重置可见状态
             _isVisible = false;
