@@ -582,7 +582,7 @@ namespace WpsPasswordManager.Business
                     }
 
                     // 从文件末尾开始搜索Magic
-                    long searchStart = Math.Max(0, fileLength - 65536); // 最多搜索64KB
+                    long searchStart = Math.Max(0, fileLength - 1024); // 最多搜索1KB
                     int searchLength = (int)(fileLength - searchStart);
 
                     byte[] buffer = new byte[searchLength];
@@ -671,7 +671,7 @@ namespace WpsPasswordManager.Business
         }
 
         /// <summary>
-        /// 从ZIP文件尾部读取密码
+        /// 从ZIP文件尾部读取密码和UID
         /// </summary>
         private string ReadPasswordFromZipMetadata(string filePath)
         {
@@ -684,45 +684,75 @@ namespace WpsPasswordManager.Business
                     return null;
                 }
 
-                // 查找元数据位置
-                long metadataStart = FindMetadataStartPosition(filePath);
-                if (metadataStart < 0)
-                {
-                    Logger.Debug($"未找到元数据: {filePath}");
-                    return null;
-                }
-
+                // 从ZIP文件尾部读取数据
                 using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
                 {
-                    long metadataLength = fs.Length - metadataStart;
-                    if (metadataLength > 65536 || metadataLength < 15)
+                    // 读取文件尾部的1KB数据，足够包含所有元数据
+                    long fileLength = fs.Length;
+                    long readSize = Math.Min(1024, fileLength);
+                    long startPosition = fileLength - readSize;
+                    
+                    byte[] buffer = new byte[readSize];
+                    fs.Seek(startPosition, SeekOrigin.Begin);
+                    fs.Read(buffer, 0, (int)readSize);
+                    
+                    Logger.Info($"从文件尾部读取 {readSize} 字节数据");
+
+
+                    string password = null;
+                    string uid = null;
+
+                    // 从后向前搜索元数据
+                    byte[] magicBytes = Encoding.ASCII.GetBytes(METADATA_MAGIC);
+                    for (int i = buffer.Length - magicBytes.Length; i >= 0; i--)
                     {
-                        Logger.Warning($"元数据长度异常: {metadataLength}");
-                        return null;
+                        bool found = true;
+                        for (int j = 0; j < magicBytes.Length; j++)
+                        {
+                            if (buffer[i + j] != magicBytes[j])
+                            {
+                                found = false;
+                                break;
+                            }
+                        }
+
+                        if (found)
+                        {
+                            // 提取元数据块
+                            int metadataBlockStart = i;
+                            // 尝试解析元数据块
+                            byte[] metadataBlock = new byte[buffer.Length - metadataBlockStart];
+                            Array.Copy(buffer, metadataBlockStart, metadataBlock, 0, metadataBlock.Length);
+                            
+                            if (TryParseMetadataBlock(metadataBlock, out byte type, out string content))
+                            {
+                                if (type == 1) // Type 1 = Password
+                                {
+                                    password = content;
+                                    Logger.Info($"从ZIP尾部成功读取密码：{password}");
+                                    // 找到密码后停止搜索，只返回最后一个密码（最新的）
+                                    break;
+                                }
+                                else if (type == 2) // Type 2 = UID
+                                {
+                                    uid = content;
+                                    Logger.Info($"从ZIP尾部成功读取UID: {uid}");
+                                    // 将UID放入缓存
+                                    if (!string.IsNullOrEmpty(uid))
+                                    {
+                                        uidCache[filePath] = uid;
+                                        SaveUidCache();
+                                    }
+                                }
+                            }
+                        }
                     }
 
-                    byte[] metadataBlock = new byte[metadataLength];
-                    fs.Seek(metadataStart, SeekOrigin.Begin);
-                    fs.Read(metadataBlock, 0, (int)metadataLength);
-
-                    // 解析元数据块
-                    if (TryParseMetadataBlock(metadataBlock, out byte type, out string content))
-                    {
-                        if (type == 1) // Type 1 = Password
-                        {
-                            Logger.Info($"从ZIP尾部成功读取密码");
-                            return content;
-                        }
-                        else
-                        {
-                            Logger.Warning($"元数据类型不匹配，期望Password(1)，实际: {type}");
-                        }
-                    }
-                    else
-                    {
-                        Logger.Warning("元数据块解析失败");
-                    }
+                    // 返回密码，用于自动填充
+                    return password;
                 }
+                
+                Logger.Debug($"未找到元数据: {filePath}");
             }
             catch (Exception ex)
             {
@@ -823,46 +853,54 @@ namespace WpsPasswordManager.Business
                     return null;
                 }
 
-                // 查找元数据位置
-                long metadataStart = FindMetadataStartPosition(filePath);
-                if (metadataStart < 0)
-                {
-                    Logger.Debug($"未找到UID元数据: {filePath}");
-                    return null;
-                }
-
+                // 从ZIP文件尾部读取数据
                 using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
                 {
-                    long metadataLength = fs.Length - metadataStart;
-                    if (metadataLength > 65536 || metadataLength < 15)
+                    // 读取文件尾部的1KB数据，足够包含所有元数据
+                    long fileLength = fs.Length;
+                    long readSize = Math.Min(1024, fileLength);
+                    long startPosition = fileLength - readSize;
+                    
+                    byte[] buffer = new byte[readSize];
+                    fs.Seek(startPosition, SeekOrigin.Begin);
+                    fs.Read(buffer, 0, (int)readSize);
+                    
+                    // 从后向前搜索元数据
+                    byte[] magicBytes = Encoding.ASCII.GetBytes(METADATA_MAGIC);
+                    for (int i = buffer.Length - magicBytes.Length; i >= 0; i--)
                     {
-                        Logger.Warning($"UID元数据长度异常: {metadataLength}");
-                        return null;
-                    }
-
-                    byte[] metadataBlock = new byte[metadataLength];
-                    fs.Seek(metadataStart, SeekOrigin.Begin);
-                    fs.Read(metadataBlock, 0, (int)metadataLength);
-
-                    // 解析元数据块
-                    if (TryParseMetadataBlock(metadataBlock, out byte type, out string content))
-                    {
-                        if (type == 2) // Type 2 = UID
+                        bool found = true;
+                        for (int j = 0; j < magicBytes.Length; j++)
                         {
-                            Logger.Info($"从ZIP尾部成功读取UID");
-                            return content;
+                            if (buffer[i + j] != magicBytes[j])
+                            {
+                                found = false;
+                                break;
+                            }
                         }
-                        else
+
+                        if (found)
                         {
-                            // 可能是密码元数据，继续查找前一个元数据块
-                            Logger.Debug($"元数据类型不匹配，期望UID(2)，实际: {type}");
+                            // 提取元数据块
+                            int metadataBlockStart = i;
+                            // 尝试解析元数据块
+                            byte[] metadataBlock = new byte[buffer.Length - metadataBlockStart];
+                            Array.Copy(buffer, metadataBlockStart, metadataBlock, 0, metadataBlock.Length);
+                            
+                            if (TryParseMetadataBlock(metadataBlock, out byte type, out string content))
+                            {
+                                if (type == 2) // Type 2 = UID
+                                {
+                                    Logger.Info($"从ZIP尾部成功读取UID: {content}");
+                                    // 找到UID后停止搜索
+                                    return content;
+                                }
+                            }
                         }
-                    }
-                    else
-                    {
-                        Logger.Warning("UID元数据块解析失败");
                     }
                 }
+                
+                Logger.Debug($"未找到UID元数据: {filePath}");
             }
             catch (Exception ex)
             {
