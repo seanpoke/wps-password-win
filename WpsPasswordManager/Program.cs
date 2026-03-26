@@ -128,8 +128,7 @@ namespace WpsPasswordManager
         // 本地缓存，用于存储文档路径和对应的密码
         private static System.Collections.Generic.Dictionary<string, string> passwordCache = new System.Collections.Generic.Dictionary<string, string>();
         
-        // 本地缓存，用于存储文档路径和对应的UID
-        private static System.Collections.Generic.Dictionary<string, string> uidCache = new System.Collections.Generic.Dictionary<string, string>();
+
         
         // 监控文档关闭事件的线程
         private static Thread documentCloseMonitorThread;
@@ -723,12 +722,7 @@ namespace WpsPasswordManager
                                         string uid = metadataManager.GetDocumentUid(documentPath);
                                         Logger.Info($"获取到文档UID: {uid}");
                                         
-                                        // 将文档路径和UID添加到本地缓存
-                                        if (!uidCache.ContainsKey(documentPath))
-                                        {
-                                            uidCache.Add(documentPath, uid);
-                                            Logger.Info($"将文档UID添加到本地缓存: {documentPath}");
-                                        }
+
                                         
                                         // 检查该文档是否已经尝试过自动填充密码
                                         if (!attemptedDocuments.Contains(documentPath))
@@ -859,17 +853,11 @@ namespace WpsPasswordManager
                                         // 保存UID到元数据
                                         bool uidWriteSuccess = metadataManager.SaveDocumentUid(documentPath);
                                         if (writeSuccess && uidWriteSuccess)
-                                        {
-                                            Logger.Info($"密码和UID已成功写入文档元数据: {documentPath}");
-                                            documentsToRemove.Add(documentPath);
-                                            retryCounts.Remove(documentPath);
-                                            // 从UID缓存中移除，避免重复写入
-                                            if (uidCache.ContainsKey(documentPath))
                                             {
-                                                uidCache.Remove(documentPath);
-                                                Logger.Info($"从UID缓存中移除文档: {documentPath}");
+                                                Logger.Info($"密码和UID已成功写入文档元数据: {documentPath}");
+                                                documentsToRemove.Add(documentPath);
+                                                retryCounts.Remove(documentPath);
                                             }
-                                        }
                                         else
                                         {
                                             if (!writeSuccess)
@@ -931,59 +919,7 @@ namespace WpsPasswordManager
                             }
                         }
                         
-                        // 检查UID缓存中的文档是否已关闭
-                        if (uidCache.Count > 0)
-                        {
-                            List<string> uidDocsToRemove = new List<string>();
-                            
-                            foreach (var entry in uidCache)
-                            {
-                                string documentPath = entry.Key;
-                                
-                                // 检查文档是否仍然打开
-                                if (!IsDocumentOpen(documentPath))
-                                {
-                                    // 文档已关闭，将UID写入元数据
-                                    Logger.Info($"文档已关闭，将UID写入元数据: {documentPath}");
-                                    
-                                    // 检查尝试次数
-                                    if (!retryCounts.ContainsKey(documentPath))
-                                    {
-                                        retryCounts[documentPath] = 0;
-                                    }
-                                    
-                                    if (retryCounts[documentPath] < maxRetries)
-                                    {
-                                        retryCounts[documentPath]++;
-                                        bool uidWriteSuccess = metadataManager.SaveDocumentUid(documentPath);
-                                        if (uidWriteSuccess)
-                                        {
-                                            Logger.Info($"UID已成功写入文档元数据: {documentPath}");
-                                            uidDocsToRemove.Add(documentPath);
-                                            retryCounts.Remove(documentPath);
-                                        }
-                                        else
-                                        {
-                                            Logger.Error($"无法将UID写入文档元数据 (尝试 {retryCounts[documentPath]}/{maxRetries}): {documentPath}");
-                                        }
-                                    }
-                                    else
-                                    {
-                                        // 达到最大尝试次数，从缓存中移除
-                                        Logger.Error($"达到最大尝试次数，无法将UID写入文档元数据: {documentPath}");
-                                        uidDocsToRemove.Add(documentPath);
-                                        retryCounts.Remove(documentPath);
-                                    }
-                                }
-                            }
-                            
-                            // 从UID缓存中移除已处理的文档
-                            foreach (string documentPath in uidDocsToRemove)
-                            {
-                                uidCache.Remove(documentPath);
-                                Logger.Info($"从UID缓存中移除文档: {documentPath}");
-                            }
-                        }
+
                     }
                     catch (Exception ex)
                     {

@@ -18,7 +18,7 @@ namespace WpsPasswordManager.Business
         private const string PasswordPropertyName = "WpsPasswordManager";
         private const string UidPropertyName = "WpsPasswordManagerUid";
         private const string ExternalStorageFile = "passwords.json";
-        private const string UidCacheFile = "uid_cache.json";
+
 
         // ZIP文件结构常量
         private const uint ZIP_EOCD_SIGNATURE = 0x06054B50; // End of Central Directory signature "PK\x05\x06"
@@ -26,52 +26,12 @@ namespace WpsPasswordManager.Business
         private const string METADATA_MAGIC = "WPPM"; // WPS Password Manager Magic
         private const ushort METADATA_VERSION = 1; // 元数据格式版本
 
-        // UID缓存，用于存储文档的UID
-        private Dictionary<string, string> uidCache;
-
         // 外部存储，用于存储非ZIP格式文档的密码
         private Dictionary<string, string> externalPasswordStore;
 
         public MetadataManager()
         {
             LoadExternalPasswordStore();
-            LoadUidCache();
-        }
-
-        // 加载UID缓存
-        private void LoadUidCache()
-        {
-            try
-            {
-                if (File.Exists(UidCacheFile))
-                {
-                    string json = File.ReadAllText(UidCacheFile);
-                    uidCache = JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new Dictionary<string, string>();
-                }
-                else
-                {
-                    uidCache = new Dictionary<string, string>();
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"加载UID缓存失败: {ex.Message}");
-                uidCache = new Dictionary<string, string>();
-            }
-        }
-
-        // 保存UID缓存
-        private void SaveUidCache()
-        {
-            try
-            {
-                string json = JsonSerializer.Serialize(uidCache, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(UidCacheFile, json);
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"保存UID缓存失败: {ex.Message}");
-            }
         }
 
         // 加载外部密码存储
@@ -737,12 +697,6 @@ namespace WpsPasswordManager.Business
                                 {
                                     uid = content;
                                     Logger.Info($"从ZIP尾部成功读取UID: {uid}");
-                                    // 将UID放入缓存
-                                    if (!string.IsNullOrEmpty(uid))
-                                    {
-                                        uidCache[filePath] = uid;
-                                        SaveUidCache();
-                                    }
                                 }
                             }
                         }
@@ -1104,32 +1058,21 @@ namespace WpsPasswordManager.Business
             if (!string.IsNullOrEmpty(uid))
             {
                 Logger.Info($"从元数据中读取到UID: {uid}");
-                // 如果读取到UID，将其放入缓存
-                uidCache[filePath] = uid;
-                SaveUidCache();
                 return uid;
             }
 
-            // 如果元数据中没有UID，尝试从缓存中读取
-            if (uidCache.TryGetValue(filePath, out string cachedUid))
-            {
-                Logger.Info($"从缓存中读取到UID: {cachedUid}");
-                return cachedUid;
-            }
-
-            // 如果缓存中也没有，生成新的UID并放入缓存
+            // 如果元数据中没有UID，生成新的UID
             string newUid = GenerateUid();
             Logger.Info($"生成新的UID: {newUid}");
-            uidCache[filePath] = newUid;
-            SaveUidCache();
             return newUid;
         }
 
         // 保存文档的UID到元数据（在文档关闭时调用）
         public bool SaveDocumentUid(string filePath)
         {
-            // 从缓存中获取UID
-            if (uidCache.TryGetValue(filePath, out string uid))
+            // 获取文档的UID
+            string uid = GetDocumentUid(filePath);
+            if (!string.IsNullOrEmpty(uid))
             {
                 // 写入到元数据
                 bool success = WriteUidToMetadata(filePath, uid);
