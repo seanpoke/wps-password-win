@@ -78,6 +78,9 @@ namespace WpsPasswordManager
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool GetWindowRect(IntPtr hWnd, ref RECT lpRect);
 
+        [DllImport("user32.dll")]
+        private static extern bool IsWindow(IntPtr hWnd);
+
         // 钩子回调函数
         private delegate IntPtr HookProc(int nCode, IntPtr wParam, IntPtr lParam);
 
@@ -447,14 +450,24 @@ namespace WpsPasswordManager
                                                     // 立即获取密码，确保在窗口关闭前获取到最新值
                                                     string latestPassword = string.Empty;
                                                     int retryCount = 0;
-                                                    const int maxRetries = 3;
+                                                    const int maxRetries = 5;
                                                     
                                                     // 重试几次，确保能获取到密码
                                                     while (string.IsNullOrEmpty(latestPassword) && retryCount < maxRetries)
                                                     {
                                                         retryCount++;
-                                                        Logger.Info($"尝试获取密码 (第{retryCount}次)");
+                                                        Logger.Info($"尝试获取密码 (第{retryCount}/{maxRetries}次)");
                                                         
+                                                        // 首先尝试使用UI Automation获取密码（更可靠）
+                                                        latestPassword = GetPasswordFromDialog(encryptDialog);
+                                                        if (!string.IsNullOrEmpty(latestPassword))
+                                                        {
+                                                            Logger.Info($"通过UI Automation获取到密码: {latestPassword}");
+                                                            break;
+                                                        }
+                                                        Logger.Warning($"第{retryCount}次尝试: UI Automation获取密码失败");
+                                                        
+                                                        // 然后尝试传统方法
                                                         if (passwordEdit != IntPtr.Zero)
                                                         {
                                                             latestPassword = monitor.GetInputText(passwordEdit);
@@ -463,18 +476,20 @@ namespace WpsPasswordManager
                                                                 Logger.Info($"通过传统方法获取到密码: {latestPassword}");
                                                                 break;
                                                             }
+                                                            Logger.Warning($"第{retryCount}次尝试: 传统方法获取密码失败，passwordEdit={passwordEdit}");
                                                         }
-                                                        
-                                                        // 尝试使用UI Automation获取密码
-                                                        latestPassword = GetPasswordFromDialog(encryptDialog);
-                                                        if (!string.IsNullOrEmpty(latestPassword))
+                                                        else
                                                         {
-                                                            Logger.Info($"通过UI Automation获取到密码: {latestPassword}");
-                                                            break;
+                                                            Logger.Warning($"第{retryCount}次尝试: passwordEdit为空");
                                                         }
                                                         
-                                                        // 短暂延迟后重试
-                                                        Thread.Sleep(100);
+                                                        // 增加延迟后重试，给用户更多时间输入密码
+                                                        Thread.Sleep(200);
+                                                    }
+                                                    
+                                                    if (string.IsNullOrEmpty(latestPassword))
+                                                    {
+                                                        Logger.Error($"经过{maxRetries}次尝试仍无法获取密码，可能原因：1.密码输入框未找到 2.密码为空 3.UI Automation调用失败");
                                                     }
                                                     
                                                     if (!string.IsNullOrEmpty(latestPassword))
@@ -529,44 +544,51 @@ namespace WpsPasswordManager
                                                         // 立即获取密码，确保在窗口关闭前获取到最新值
                                                         string latestPassword = string.Empty;
                                                         int retryCount = 0;
-                                                        const int maxRetries = 3;
+                                                        const int maxRetries = 5;
                                                         
                                                         // 重试几次，确保能获取到密码
                                                         while (string.IsNullOrEmpty(latestPassword) && retryCount < maxRetries)
                                                         {
                                                             retryCount++;
-                                                            Logger.Info($"尝试获取密码 (第{retryCount}次)");
+                                                            Logger.Info($"[位置检测]尝试获取密码 (第{retryCount}/{maxRetries}次)");
                                                             
+                                                            // 首先尝试使用UI Automation获取密码（更可靠）
+                                                            latestPassword = GetPasswordFromDialog(encryptDialog);
+                                                            if (!string.IsNullOrEmpty(latestPassword))
+                                                            {
+                                                                Logger.Info($"[位置检测]通过UI Automation获取到密码: {latestPassword}");
+                                                                break;
+                                                            }
+                                                            Logger.Warning($"[位置检测]第{retryCount}次尝试: UI Automation获取密码失败");
+                                                            
+                                                            // 然后尝试传统方法
                                                             if (passwordEdit != IntPtr.Zero)
                                                             {
                                                                 latestPassword = monitor.GetInputText(passwordEdit);
                                                                 if (!string.IsNullOrEmpty(latestPassword))
                                                                 {
-                                                                    Logger.Info($"通过传统方法获取到密码: {latestPassword}");
+                                                                    Logger.Info($"[位置检测]通过传统方法获取到密码: {latestPassword}");
                                                                     break;
                                                                 }
+                                                                Logger.Warning($"[位置检测]第{retryCount}次尝试: 传统方法获取密码失败，passwordEdit={passwordEdit}");
                                                             }
-                                                            
-                                                            // 尝试使用UI Automation获取密码
-                                                            latestPassword = GetPasswordFromDialog(encryptDialog);
-                                                            if (!string.IsNullOrEmpty(latestPassword))
+                                                            else
                                                             {
-                                                                Logger.Info($"通过UI Automation获取到密码: {latestPassword}");
-                                                                break;
+                                                                Logger.Warning($"[位置检测]第{retryCount}次尝试: passwordEdit为空");
                                                             }
                                                             
-                                                            // 短暂延迟后重试
-                                                            Thread.Sleep(100);
+                                                            // 增加延迟后重试，给用户更多时间输入密码
+                                                            Thread.Sleep(200);
                                                         }
                                                         
-                                                        if (!string.IsNullOrEmpty(latestPassword))
+                                                        if (string.IsNullOrEmpty(latestPassword))
                                                         {
-                                                            lastPassword = latestPassword;
-                                                            Logger.Info($"更新密码为最新值: {lastPassword}");
+                                                            Logger.Error($"[位置检测]经过{maxRetries}次尝试仍无法获取密码，可能原因：1.密码输入框未找到 2.密码为空 3.UI Automation调用失败");
                                                         }
                                                         else
                                                         {
-                                                            Logger.Warning("无法获取密码，将使用之前存储的密码");
+                                                            lastPassword = latestPassword;
+                                                            Logger.Info($"[位置检测]更新密码为最新值: {lastPassword}");
                                                         }
                                                         
                                                         // 将密码写入本地缓存
@@ -2203,45 +2225,61 @@ namespace WpsPasswordManager
         {
             try
             {
-                Logger.Debug("尝试从密码对话框获取密码");
+                Logger.Debug($"[GetPasswordFromDialog] 开始尝试从密码对话框获取密码，对话框句柄: {dialogHandle}");
+                
+                // 首先检查对话框句柄是否有效
+                if (dialogHandle == IntPtr.Zero)
+                {
+                    Logger.Error("[GetPasswordFromDialog] 对话框句柄为空");
+                    return string.Empty;
+                }
+                
+                // 检查对话框是否仍然有效
+                if (!IsWindow(dialogHandle))
+                {
+                    Logger.Error("[GetPasswordFromDialog] 对话框句柄无效或窗口已关闭");
+                    return string.Empty;
+                }
                 
                 // 尝试使用UI Automation获取密码
+                Logger.Debug("[GetPasswordFromDialog] 尝试使用UI Automation获取密码");
                 string password = GetPasswordUsingUIAutomation(dialogHandle);
                 if (!string.IsNullOrEmpty(password))
                 {
-                    Logger.Info($"通过UI Automation获取到密码: {password}");
-                    Logger.Info($"获取到【打开文件密码(O)】输入框内容: {password}");
+                    Logger.Info($"[GetPasswordFromDialog] 通过UI Automation成功获取到密码: {password}");
                     return password;
                 }
                 
-                Logger.Warning("UI Automation获取密码失败，尝试使用传统方法");
+                Logger.Warning("[GetPasswordFromDialog] UI Automation获取密码失败，尝试使用传统方法");
                 
                 // 确保对话框在前台
                 SetForegroundWindow(dialogHandle);
                 Thread.Sleep(100);
                 
                 // 查找密码输入框
+                Logger.Debug("[GetPasswordFromDialog] 开始查找密码输入框");
                 IntPtr passwordEdit = FindPasswordEditInDialog(dialogHandle);
                 if (passwordEdit != IntPtr.Zero)
                 {
+                    Logger.Debug($"[GetPasswordFromDialog] 找到密码输入框，句柄: {passwordEdit}");
                     // 使用SendMessage获取输入框文本
                     string password2 = GetWindowText(passwordEdit);
                     if (!string.IsNullOrEmpty(password2))
                     {
-                        Logger.Info($"通过SendMessage获取到密码: {password2}");
-                        Logger.Info($"获取到【打开文件密码(O)】输入框内容: {password2}");
+                        Logger.Info($"[GetPasswordFromDialog] 通过SendMessage获取到密码: {password2}");
                         return password2;
                     }
                     else
                     {
-                        Logger.Warning("输入框文本为空");
+                        Logger.Warning("[GetPasswordFromDialog] 输入框文本为空");
                     }
                 }
                 else
                 {
-                    Logger.Warning("未找到密码输入框");
+                    Logger.Warning("[GetPasswordFromDialog] 未找到密码输入框");
                 }
                 
+                Logger.Error("[GetPasswordFromDialog] 所有方法都未能获取到密码");
                 return string.Empty;
             }
             catch (Exception ex)
