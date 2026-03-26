@@ -337,6 +337,15 @@ namespace WpsPasswordManager
                                             lastDialogTitle = title;
                                             Logger.Info($"记录密码加密窗口: {encryptDialog}");
                                             
+                                            // 尝试获取文档路径并生成UID
+                                            string documentPath = monitor.GetDocumentPath(IntPtr.Zero);
+                                            if (!string.IsNullOrEmpty(documentPath))
+                                            {
+                                                // 获取文档的UID，确保UID被生成和缓存
+                                                string uid = metadataManager.GetDocumentUid(documentPath);
+                                                Logger.Info($"获取到文档UID: {uid}");
+                                            }
+                                            
                                             // 尝试获取密码提示输入框内容
                                             long getHintStart = DateTime.Now.Ticks;
                                             string passwordHint = GetPasswordHintFromDialog(encryptDialog);
@@ -832,6 +841,12 @@ namespace WpsPasswordManager
                                             Logger.Info($"密码和UID已成功写入文档元数据: {documentPath}");
                                             documentsToRemove.Add(documentPath);
                                             retryCounts.Remove(documentPath);
+                                            // 从UID缓存中移除，避免重复写入
+                                            if (uidCache.ContainsKey(documentPath))
+                                            {
+                                                uidCache.Remove(documentPath);
+                                                Logger.Info($"从UID缓存中移除文档: {documentPath}");
+                                            }
                                         }
                                         else
                                         {

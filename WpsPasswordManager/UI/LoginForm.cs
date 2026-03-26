@@ -135,7 +135,7 @@ namespace WpsPasswordManager.UI
             this.Controls.Add(_loginButton);
         }
         
-        private async void LoginButton_Click(object sender, EventArgs e)
+        private void LoginButton_Click(object sender, EventArgs e)
         {
             // 表单验证
             string username = _usernameTextBox.Text.Trim();
@@ -169,41 +169,21 @@ namespace WpsPasswordManager.UI
             
             try
             {
-                // 构建请求参数
-                var requestData = new { account = username, password = password };
-                string jsonData = JsonSerializer.Serialize(requestData);
+                // 写死的登录逻辑，直接返回默认token
+                string token = "default_token_123456";
+                SaveLoginInfo(username, token);
                 
-                // 发送登录请求（使用完整URL）
-                string loginEndpoint = $"http://{domain}:{port}/account/login";
-                var response = await requestHandler(HttpMethod.Post, loginEndpoint, jsonData);
+                // 存储服务器IP、端口、用户名和token到全局状态
+                GlobalState.Instance.ServerIp = domain;
+                GlobalState.Instance.ServerPort = int.Parse(port);
+                GlobalState.Instance.Username = username;
+                GlobalState.Instance.Token = token;
+                GlobalState.Instance.IsLoggedIn = true;
                 
-                if (response != null && response.data.ValueKind != JsonValueKind.Undefined)
-                {
-                    // 提取token并缓存
-                    JsonElement tokenElement;
-                    if (response.data.TryGetProperty("token", out tokenElement))
-                    {
-                        string token = tokenElement.GetString();
-                        SaveLoginInfo(username, token);
-                        
-                        // 存储服务器IP、端口、用户名和token到全局状态
-                        GlobalState.Instance.ServerIp = domain;
-                        GlobalState.Instance.ServerPort = int.Parse(port);
-                        GlobalState.Instance.Username = username;
-                        GlobalState.Instance.Token = token;
-                        GlobalState.Instance.IsLoggedIn = true;
-                        
-                        // 记录token到日志
-                        Logger.Info($"用户 {username} 登录成功，token: {token}");
-                        this.DialogResult = DialogResult.OK;
-                        this.Close();
-                    }
-                    else
-                    {
-                        _errorLabel.Text = "登录失败: 响应中缺少token字段";
-                        Logger.Error("登录失败: 响应中缺少token字段");
-                    }
-                }
+                // 记录token到日志
+                Logger.Info($"用户 {username} 登录成功，token: {token}");
+                this.DialogResult = DialogResult.OK;
+                this.Close();
             }
             catch (Exception ex)
             {
