@@ -1245,6 +1245,129 @@ namespace WpsPasswordManager.Monitor
                     Environment.GetFolderPath(Environment.SpecialFolder.Desktop) + "\\test"
                 };
 
+                // 尝试获取所有WPS进程，查找包含文档路径的进程
+                Process[] wpsProcesses = Process.GetProcessesByName("wps");
+                foreach (Process wpsProcess in wpsProcesses)
+                {
+                    try
+                    {
+                        // 获取主模块文件路径
+                        string mainModulePath = wpsProcess.MainModule.FileName;
+                        Logger.Debug($"WPS 进程 {wpsProcess.Id} 主模块路径: {mainModulePath}");
+
+                        // 尝试获取进程的主窗口标题
+                        StringBuilder mainWindowTitle = new StringBuilder(256);
+                        GetWindowText(wpsProcess.MainWindowHandle, mainWindowTitle, mainWindowTitle.Capacity);
+                        string mainTitle = mainWindowTitle.ToString();
+                        Logger.Debug($"WPS 进程 {wpsProcess.Id} 主窗口标题: {mainTitle}");
+
+                        // 尝试从主窗口标题中提取文档名
+                        // WPS的主窗口标题通常格式为：文档名 - WPS Office
+                        if (!string.IsNullOrEmpty(mainTitle) && mainTitle.Contains(" - WPS Office"))
+                        {
+                            string docName = mainTitle.Replace(" - WPS Office", "");
+                            Logger.Debug($"从主窗口标题中提取的文档名: {docName}");
+
+                            // 1. 尝试在桌面目录中查找与该文档名匹配的文件
+                            try
+                            {
+                                string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+                                Logger.Debug($"开始搜索桌面目录: {desktopPath}");
+                                
+                                // 使用Directory.GetFiles搜索所有子目录中的文件
+                                string[] desktopFiles = Directory.GetFiles(desktopPath, "*", SearchOption.AllDirectories);
+                                
+                                // 过滤出文件名完全匹配的文件
+                                var matchingFiles = desktopFiles.Where(file => 
+                                {
+                                    try
+                                    {
+                                        return Path.GetFileName(file).Equals(docName, StringComparison.OrdinalIgnoreCase);
+                                    }
+                                    catch
+                                    {
+                                        return false;
+                                    }
+                                }).ToList();
+                                
+                                if (matchingFiles.Count > 0)
+                                {
+                                    // 记录所有匹配的文件及其最后修改时间
+                                    foreach (var file in matchingFiles)
+                                    {
+                                        try
+                                        {
+                                            var lastWriteTime = System.IO.File.GetLastWriteTime(file);
+                                            Logger.Debug($"找到匹配文件: {file}, 最后修改时间: {lastWriteTime}");
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            Logger.Error($"获取文件修改时间时出错: {ex.Message}");
+                                        }
+                                    }
+                                    
+                                    // 按最后修改时间排序，返回最近修改的文件
+                                    matchingFiles.Sort((a, b) => 
+                                    {
+                                        try
+                                        {
+                                            return System.IO.File.GetLastWriteTime(b).CompareTo(System.IO.File.GetLastWriteTime(a));
+                                        }
+                                        catch
+                                        {
+                                            return 0;
+                                        }
+                                    });
+                                    
+                                    string mostRecentFile = matchingFiles[0];
+                                    Logger.Debug($"选择最近修改的文件: {mostRecentFile}");
+                                    return mostRecentFile;
+                                }
+                                else
+                                {
+                                    Logger.Debug("未找到匹配的文件");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger.Error($"搜索桌面子目录时出错: {ex.Message}");
+                            }
+
+                            // 2. 尝试在常见的文档目录中查找与该文档名匹配的文件
+                            foreach (string folder in commonDocFolders)
+                            {
+                                try
+                                {
+                                    if (System.IO.Directory.Exists(folder))
+                                    {
+                                        string[] wpsFiles = System.IO.Directory.GetFiles(folder, "*.docx").Concat(
+                                            System.IO.Directory.GetFiles(folder, "*.doc")).Concat(
+                                            System.IO.Directory.GetFiles(folder, "*.xlsx")).Concat(
+                                            System.IO.Directory.GetFiles(folder, "*.xls")).Concat(
+                                            System.IO.Directory.GetFiles(folder, "*.pptx")).Concat(
+                                            System.IO.Directory.GetFiles(folder, "*.ppt")).ToArray();
+
+                                        foreach (string file in wpsFiles)
+                                        {
+                                            string fileName = Path.GetFileName(file);
+                                            if (fileName.Equals(docName, StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                Logger.Debug($"从WPS进程窗口标题匹配到文档: {file}");
+                                                return file;
+                                            }
+                                        }
+                                    }
+                                }
+                                catch { }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"处理WPS进程 {wpsProcess.Id} 时出错: {ex.Message}");
+                    }
+                }
+
                 // 尝试获取当前活动的WPS窗口
                 IntPtr activeWindow = GetForegroundWindow();
                 if (activeWindow != IntPtr.Zero)
@@ -1288,64 +1411,6 @@ namespace WpsPasswordManager.Monitor
                             }
                             catch { }
                         }
-                    }
-                }
-
-                // 尝试获取所有WPS进程，查找包含文档路径的进程
-                Process[] wpsProcesses = Process.GetProcessesByName("wps");
-                foreach (Process wpsProcess in wpsProcesses)
-                {
-                    try
-                    {
-                        // 获取主模块文件路径
-                        string mainModulePath = wpsProcess.MainModule.FileName;
-                        Logger.Debug($"WPS 进程 {wpsProcess.Id} 主模块路径: {mainModulePath}");
-
-                        // 尝试获取进程的主窗口标题
-                        StringBuilder mainWindowTitle = new StringBuilder(256);
-                        GetWindowText(wpsProcess.MainWindowHandle, mainWindowTitle, mainWindowTitle.Capacity);
-                        string mainTitle = mainWindowTitle.ToString();
-                        Logger.Debug($"WPS 进程 {wpsProcess.Id} 主窗口标题: {mainTitle}");
-
-                        // 尝试从主窗口标题中提取文档路径
-                        // WPS的主窗口标题通常格式为：文档名 - WPS Office
-                        if (!string.IsNullOrEmpty(mainTitle) && mainTitle.Contains(" - WPS Office"))
-                        {
-                            string docName = mainTitle.Replace(" - WPS Office", "");
-                            Logger.Debug($"从主窗口标题中提取的文档名: {docName}");
-
-                            // 尝试在常见的文档目录中查找与该文档名匹配的文件
-                            foreach (string folder in commonDocFolders)
-                            {
-                                try
-                                {
-                                    if (System.IO.Directory.Exists(folder))
-                                    {
-                                        string[] wpsFiles = System.IO.Directory.GetFiles(folder, "*.docx").Concat(
-                                            System.IO.Directory.GetFiles(folder, "*.doc")).Concat(
-                                            System.IO.Directory.GetFiles(folder, "*.xlsx")).Concat(
-                                            System.IO.Directory.GetFiles(folder, "*.xls")).Concat(
-                                            System.IO.Directory.GetFiles(folder, "*.pptx")).Concat(
-                                            System.IO.Directory.GetFiles(folder, "*.ppt")).ToArray();
-
-                                        foreach (string file in wpsFiles)
-                                        {
-                                            string fileName = Path.GetFileName(file);
-                                            if (fileName.Equals(docName, StringComparison.OrdinalIgnoreCase))
-                                            {
-                                                Logger.Debug($"从WPS进程窗口标题匹配到文档: {file}");
-                                                return file;
-                                            }
-                                        }
-                                    }
-                                }
-                                catch { }
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Error($"处理WPS进程 {wpsProcess.Id} 时出错: {ex.Message}");
                     }
                 }
 
