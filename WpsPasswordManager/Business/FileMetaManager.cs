@@ -49,7 +49,10 @@ namespace WpsPasswordManager.Business
                             Logger.Info($"从 {filePath} 的ZIP尾部读取到密码: {content}");
                             // 更新FileMeta中的当前密码
                             var fileMeta = fileMetaFactory.GetFileMeta(filePath);
-                            fileMeta.CurrentPassword = content;
+                            if (fileMeta != null)
+                            {
+                                fileMeta.CurrentPassword = content;
+                            }
                             return content;
                         }
                     }
@@ -104,7 +107,10 @@ namespace WpsPasswordManager.Business
                             Logger.Info($"从 {filePath} 的ZIP尾部读取到UID: {content}");
                             // 更新FileMeta中的UID
                             var fileMeta = fileMetaFactory.GetFileMeta(filePath);
-                            fileMeta.Uid = content;
+                            if (fileMeta != null)
+                            {
+                                fileMeta.Uid = content;
+                            }
                             return content;
                         }
                     }

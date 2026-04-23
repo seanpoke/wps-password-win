@@ -41,7 +41,8 @@ namespace WpsPasswordManager.Business
                 return null;
             }
 
-            return fileMetaMap[filePath];
+            fileMetaMap.TryGetValue(filePath, out FileMeta fileMeta);
+            return fileMeta;
         }
 
         public void UpdatePendingPassword(string filePath, string password)
@@ -111,6 +112,31 @@ namespace WpsPasswordManager.Business
         public int GetFileMetaCount()
         {
             return fileMetaMap.Count;
+        }
+
+        public void AddFileMeta(FileMeta fileMeta)
+        {
+            if (fileMeta != null && !string.IsNullOrEmpty(fileMeta.FilePath))
+            {
+                fileMetaMap.TryAdd(fileMeta.FilePath, fileMeta);
+                Logger.Info($"添加文件元数据: {fileMeta.FilePath}");
+            }
+        }
+
+        /// <summary>
+        /// 创建唯一标识符uid
+        /// 按照uid生成规则.md的要求：时间戳_guid
+        /// </summary>
+        public string CreateUid()
+        {
+            // 获取当前时间戳（毫秒级）
+            long timestamp = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+            // 生成GUID
+            string guid = Guid.NewGuid().ToString();
+            // 组合时间戳和GUID，用下划线连接
+            string uid = $"{timestamp}_{guid}";
+            Logger.Info($"创建新的uid: '{uid}'");
+            return uid;
         }
     }
 }
