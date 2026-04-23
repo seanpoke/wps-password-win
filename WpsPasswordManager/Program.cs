@@ -310,6 +310,47 @@ namespace WpsPasswordManager
                                     if (!string.IsNullOrEmpty(documentPath))
                                     {
                                         Logger.Info($"获取到文档路径: {documentPath}");
+                                        
+                                        // 检查文件元数据是否已存在
+                                        if (!FileMetaFactory.Instance.HasFileMeta(documentPath))
+                                        {
+                                            try
+                                            {
+                                                // 初始化文件元数据
+                                                FileMetaManager fileMetaManager = new FileMetaManager();
+                                                
+                                                // 读取文件尾部的uid信息
+                                                string uid = fileMetaManager.ReadUidFromFile(documentPath);
+                                                // 如果uid不存在，创建新的uid
+                                                if (string.IsNullOrEmpty(uid))
+                                                {
+                                                    uid = FileMetaFactory.Instance.CreateUid();
+                                                }
+                                                
+                                                // 读取文件尾部的密码信息
+                                                string password = fileMetaManager.ReadPasswordFromFile(documentPath);
+                                                
+                                                // 创建并初始化FileMeta对象
+                                                FileMeta fileMeta = new FileMeta(documentPath)
+                                                {
+                                                    Uid = uid,
+                                                    CurrentPassword = password
+                                                };
+                                                
+                                                // 添加到FileMetaFactory
+                                                FileMetaFactory.Instance.AddFileMeta(fileMeta);
+                                                Logger.Info($"文件元数据初始化完成: {documentPath}");
+                                            }
+                                            catch (Exception ex)
+                                            {
+                                                Logger.Error($"文件元数据初始化失败: {ex.Message}");
+                                            }
+                                        }
+                                        else
+                                        {
+                                            Logger.Info($"文件元数据已存在，跳过初始化: {documentPath}");
+                                        }
+                                        
                                         // 启动文件监控
                                         FileMonitor.StartWatchingFile(documentPath);
                                     }
