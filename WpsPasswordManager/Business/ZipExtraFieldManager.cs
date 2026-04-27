@@ -441,6 +441,18 @@ namespace WpsPasswordManager.Business
         /// </summary>
         public bool ReadMetadataFromFileEnd(string filePath, out byte type, out string content)
         {
+            return ReadMetadataFromFileEnd(filePath, 0, out type, out content);
+        }
+
+        /// <summary>
+        /// 从ZIP文件尾部读取元数据，支持按类型过滤
+        /// </summary>
+        /// <param name="filePath">文件路径</param>
+        /// <param name="filterType">要过滤的类型（0表示不过滤，返回第一个找到的）</param>
+        /// <param name="type">输出的元数据类型</param>
+        /// <param name="content">输出的元数据内容</param>
+        public bool ReadMetadataFromFileEnd(string filePath, byte filterType, out byte type, out string content)
+        {
             type = 0;
             content = null;
 
@@ -454,7 +466,29 @@ namespace WpsPasswordManager.Business
                 }
 
                 // 从ZIP文件尾部读取数据
-                using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                FileStream fs = null;
+                try
+                {
+                    // 尝试以读写共享模式打开文件
+                    fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    Logger.Info("成功以读写共享模式打开文件");
+                }
+                catch (Exception ex1)
+                {
+                    try
+                    {
+                        // 如果失败，尝试以只读共享模式打开
+                        fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                        Logger.Info("成功以只读共享模式打开文件");
+                    }
+                    catch (Exception ex2)
+                    {
+                        Logger.Error($"无法打开文件: {ex2.Message}");
+                        return false;
+                    }
+                }
+
+                using (fs)
                 {
                     // 读取文件尾部的1KB数据，足够包含所有元数据
                     long fileLength = fs.Length;
@@ -465,7 +499,7 @@ namespace WpsPasswordManager.Business
                     fs.Seek(startPosition, SeekOrigin.Begin);
                     fs.Read(buffer, 0, (int)readSize);
                     
-                    // 从后向前搜索元数据
+                    // 从后向前搜索元数据（从最后一个WPPM块开始，确保先找到密码再找UID）
                     byte[] magicBytes = Encoding.ASCII.GetBytes(METADATA_MAGIC);
                     for (int i = buffer.Length - magicBytes.Length; i >= 0; i--)
                     {
@@ -489,6 +523,12 @@ namespace WpsPasswordManager.Business
                             
                             if (TryParseMetadataBlock(metadataBlock, out type, out content))
                             {
+                                // 如果指定了类型过滤，且当前类型不匹配，继续搜索
+                                if (filterType != 0 && type != filterType)
+                                {
+                                    Logger.Debug($"找到元数据但类型不匹配: type={type}, filterType={filterType}，继续搜索...");
+                                    continue;
+                                }
                                 return true;
                             }
                         }

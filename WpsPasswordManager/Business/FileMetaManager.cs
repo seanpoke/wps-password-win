@@ -42,12 +42,12 @@ namespace WpsPasswordManager.Business
             {
                 try
                 {
-                    if (zipExtraFieldManager.ReadMetadataFromFileEnd(filePath, out byte type, out string content))
+                    if (zipExtraFieldManager.ReadMetadataFromFileEnd(filePath, 1, out byte type, out string content))
                     {
                         if (type == 1) // Type 1 = Password
                         {
                             Logger.Info($"从 {filePath} 的ZIP尾部读取到密码: {content}");
-                        
+
                             return content;
                         }
                     }
@@ -95,7 +95,7 @@ namespace WpsPasswordManager.Business
             {
                 try
                 {
-                    if (zipExtraFieldManager.ReadMetadataFromFileEnd(filePath, out byte type, out string content))
+                    if (zipExtraFieldManager.ReadMetadataFromFileEnd(filePath, 2, out byte type, out string content))
                     {
                         if (type == 2) // Type 2 = UID
                         {
