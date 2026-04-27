@@ -9,6 +9,8 @@ using WpsPasswordManager.Business;
 using WpsPasswordManager.Simulator;
 using WpsPasswordManager.UI;
 using WpsPasswordManager.Utils;
+using WpsPasswordManager.Services.Request;
+using WpsPasswordManager.Services.Routing;
 
 #pragma warning disable CS8600, CS8601, CS8602, CS8603, CS8604, CS8605, CS8618, CS8625
 
@@ -563,14 +565,71 @@ namespace WpsPasswordManager
                                                     uid = FileMetaFactory.Instance.CreateUid();
                                                 }
                                                 
+                                                // 调用 /doc/owner 接口获取文档信息
+                                                string ownerAccount = null;
+                                                string ownerName = null;
+                                                bool readAuth = false;
+                                                bool writeAuth = false;
+                                                
+                                                try
+                                                {
+                                                    if (GlobalState.Instance.IsLoggedIn && !string.IsNullOrEmpty(GlobalState.Instance.Token))
+                                                    {
+                                                        var httpRequestService = RequestFactory.GetHttpRequestService();
+                                                        var queryParams = new { docId = uid };
+                                                        var response = httpRequestService.GetAsync<DocOwnerInfo>(ApiRoutes.DocOwner, GlobalState.Instance.Token, queryParams).GetAwaiter().GetResult();
+                                                        
+                                                        if (response != null && response.data != null)
+                                                        {
+                                                            ownerAccount = response.data.ownerAccount;
+                                                            ownerName = response.data.ownerName;
+                                                            readAuth = response.data.readAuth;
+                                                            writeAuth = response.data.writeAuth;
+                                                            Logger.Info($"获取文档信息成功: 所有者={ownerName}({ownerAccount}), 读权限={readAuth}, 写权限={writeAuth}");
+                                                        }
+                                                    }
+                                                }
+                                                catch (Exception ex)
+                                                {
+                                                    Logger.Error($"获取文档信息失败: {ex.Message}");
+                                                }
+                                                
                                                 // 读取文件尾部的密码信息
                                                 string password = fileMetaManager.ReadPasswordFromFile(documentPath);
                                                 
+                                                // 如果有读权限且密码不为空，调用 /doc/password 接口获取解密后的密码
+                                                if ((readAuth || writeAuth) && !string.IsNullOrEmpty(password))
+                                                {
+                                                    try
+                                                    {
+                                                        if (GlobalState.Instance.IsLoggedIn && !string.IsNullOrEmpty(GlobalState.Instance.Token))
+                                                        {
+                                                            var httpRequestService = RequestFactory.GetHttpRequestService();
+                                                            var requestData = new { docId = uid, encryPassword = password };
+                                                            var response = httpRequestService.PostAsync<DocPasswordInfo>(ApiRoutes.DocPassword, requestData, GlobalState.Instance.Token).GetAwaiter().GetResult();
+                                                            
+                                                            if (response != null && response.data != null && !string.IsNullOrEmpty(response.data.password))
+                                                            {
+                                                                password = response.data.password;
+                                                                Logger.Info($"获取解密后的密码成功");
+                                                            }
+                                                        }
+                                                    }
+                                                    catch (Exception ex)
+                                                    {
+                                                        Logger.Error($"获取解密后的密码失败: {ex.Message}");
+                                                    }
+                                                }
+
                                                 // 创建并初始化FileMeta对象
                                                 FileMeta fileMeta = new FileMeta(documentPath)
                                                 {
                                                     Uid = uid,
-                                                    CurrentPassword = password
+                                                    CurrentPassword = password,
+                                                    OwnerAccount = ownerAccount,
+                                                    OwnerName = ownerName,
+                                                    ReadAuth = readAuth,
+                                                    WriteAuth = writeAuth
                                                 };
                                                 
                                                 // 添加到FileMetaFactory
