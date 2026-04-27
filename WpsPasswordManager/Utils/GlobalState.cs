@@ -1,5 +1,7 @@
 using System;
 using System.Threading;
+using WpsPasswordManager.Business;
+using WpsPasswordManager.Monitor;
 
 namespace WpsPasswordManager.Utils
 {
@@ -273,6 +275,20 @@ namespace WpsPasswordManager.Utils
         public void ClearUserInfo()
         {
             StorageManager.ClearUserInfo();
+        }
+
+        /// <summary>
+        /// 清除所有资源（文件监听器和文件元数据）
+        /// 当用户注销、登录失败或心跳续期失败时调用
+        /// </summary>
+        public void ClearAllResources()
+        {
+            lock (_lock)
+            {
+                FileMonitor.StopAllWatching();
+                FileMetaFactory.Instance.CleanupAllFileMeta();
+                Logger.Info("所有资源已清理完成");
+            }
         }
     }
 }

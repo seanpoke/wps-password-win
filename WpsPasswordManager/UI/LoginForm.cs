@@ -306,14 +306,12 @@ namespace WpsPasswordManager.UI
                 }
                 else
                 {
-                    // 服务器返回错误或网络请求失败，优先使用服务端返回的错误信息
                     string errorText = !string.IsNullOrEmpty(errorMessage) ? errorMessage : "服务器返回错误或网络连接失败";
                     _errorLabel.Text = "登录失败: " + errorText;
                     Logger.Error($"登录失败: {errorText}");
-                    // 登录失败，设置IsPaused=true（程序检测机制暂停）
                     GlobalState.Instance.IsLoggedIn = false;
+                    GlobalState.Instance.ClearAllResources();
                     Logger.Info("程序检测机制已暂停");
-                    // 启用登录按钮
                     _loginButton.Enabled = true;
                 }
             }
@@ -321,10 +319,9 @@ namespace WpsPasswordManager.UI
             {
                 _errorLabel.Text = "登录失败: " + ex.Message;
                 Logger.Error($"登录失败: {ex.Message}");
-                // 登录失败，设置IsPaused=true（程序检测机制暂停）
                 GlobalState.Instance.IsLoggedIn = false;
+                GlobalState.Instance.ClearAllResources();
                 Logger.Info("程序检测机制已暂停");
-                // 启用登录按钮
                 _loginButton.Enabled = true;
             }
         }
@@ -346,18 +343,17 @@ namespace WpsPasswordManager.UI
                 if (logoutSuccess)
                 {
                     Logger.Info("程序检测机制已暂停");
-                    // 5. 更新界面状态，切换到未登录状态
+                    GlobalState.Instance.ClearAllResources();
                     UpdateUIState();
                     Logger.Info("用户登出成功，资源已清理");
                 }
                 else
                 {
-                    // 登出失败，显示错误信息
                     string errorText = !string.IsNullOrEmpty(errorMessage) ? errorMessage : "登出失败: 系统异常";
                     _errorLabel.Text = "登出失败: " + errorText;
                     Logger.Error($"登出失败: {errorText}");
                     Logger.Info("程序检测机制已暂停");
-                    // 即使登出失败，也更新界面状态，切换到未登录状态
+                    GlobalState.Instance.ClearAllResources();
                     UpdateUIState();
                 }
             }
@@ -367,7 +363,7 @@ namespace WpsPasswordManager.UI
                 _errorLabel.Text = "登出失败: " + errorMessage;
                 Logger.Error($"登出失败: {errorMessage}");
                 Logger.Info("程序检测机制已暂停");
-                // 即使发生异常，也更新界面状态，切换到未登录状态
+                GlobalState.Instance.ClearAllResources();
                 UpdateUIState();
             }
         }
