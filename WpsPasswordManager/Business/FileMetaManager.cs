@@ -47,12 +47,7 @@ namespace WpsPasswordManager.Business
                         if (type == 1) // Type 1 = Password
                         {
                             Logger.Info($"从 {filePath} 的ZIP尾部读取到密码: {content}");
-                            // 更新FileMeta中的当前密码
-                            var fileMeta = fileMetaFactory.GetFileMeta(filePath);
-                            if (fileMeta != null)
-                            {
-                                fileMeta.CurrentPassword = content;
-                            }
+                        
                             return content;
                         }
                     }

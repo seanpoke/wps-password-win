@@ -136,6 +136,12 @@ namespace WpsPasswordManager
         [STAThread]
         static void Main()
         {
+            // 同步调用异步MainAsync方法
+            MainAsync().GetAwaiter().GetResult();
+        }
+        
+        static async Task MainAsync()
+        {
             // 检查进程唯一性
             bool isNewInstance;
             using (System.Threading.Mutex mutex = new System.Threading.Mutex(true, "WpsPasswordManagerMutex", out isNewInstance))
@@ -156,21 +162,238 @@ namespace WpsPasswordManager
 
                 Logger.Info("WPS 密码自动填充插件启动");
 
-                // 检查登录状态
-                if (!WpsPasswordManager.UI.LoginForm.IsLoggedIn())
+
+                
+                // 创建登录窗口
+                WpsPasswordManager.UI.LoginForm loginForm = new WpsPasswordManager.UI.LoginForm();
+                
+                if (WpsPasswordManager.UI.LoginForm.IsLoggedIn())
                 {
-                    Logger.Info("首次运行，显示登录弹框");
-                    WpsPasswordManager.UI.LoginForm loginForm = new WpsPasswordManager.UI.LoginForm();
-                    if (loginForm.ShowDialog() != System.Windows.Forms.DialogResult.OK)
-                    {
-                        Logger.Info("用户取消登录，退出程序");
-                        return;
-                    }
+                    // 已登录状态，弹出注销页面并验证token
+                    Logger.Info("检测到登录状态，显示注销页面并验证token");
+                    
+                    // 显示窗口并设置加载状态
+                    loginForm.Show();
+                    loginForm.SetLoading(true);
+                    
+                    // 异步执行心跳检测，不阻塞UI线程
+                    Task.Run(async () => {
+                        try
+                        {
+                            // 检查服务器配置
+                            string serverAddress = GlobalState.Instance.GetServerAddress();
+                            
+                            // 执行心跳检测
+                            Logger.Info("执行心跳检测");
+                            bool result = await WpsPasswordManager.UI.LoginForm.Heartbeat();
+                            Logger.Info($"心跳检测完成，结果: {result}");
+                            
+                            // 心跳检测完成，更新UI状态
+                            loginForm.Invoke((Action)(() => {
+                                if (result)
+                                {
+                                    // 心跳成功，更新界面并关闭窗口
+                                    loginForm.SetLoading(false);
+                                    loginForm.UpdateUIState();
+                                    string username = WpsPasswordManager.UI.LoginForm.GetUsername();
+                                    Logger.Info($"用户 {username} 已登录，心跳检测成功");
+                                    // 等待用户查看后关闭窗口
+                                    Task.Delay(1000).ContinueWith(_ => {
+                                        loginForm.Invoke((Action)(() => {
+                                            loginForm.Close();
+                                        }));
+                                    });
+                                    GlobalState.Instance.IsLoggedIn = true;
+                                }
+                                else
+                                {
+                                    // token无效或服务器未配置，需要重新登录
+                                    Logger.Info("需要重新登录");
+                                    // 停止程序检测
+                                    GlobalState.Instance.IsLoggedIn = false;
+                                    Logger.Info("程序检测机制已停止");
+                                    // 重置登录状态（不调用Logout，避免再次尝试请求接口）
+                                    GlobalState.Instance.Reset();
+                                    GlobalState.Instance.ClearUserInfo();
+                                    Logger.Info("登录状态已重置");
+                                    loginForm.SetLoading(false);
+                                    loginForm.UpdateUIState();
+                                    Logger.Info("UI状态已更新，准备显示登录窗口");
+                                    // 显示登录窗口
+                                    Logger.Info("显示登录窗口");
+                                    if (loginForm.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+                                    {
+                                        Logger.Info("用户登录成功");
+                                        GlobalState.Instance.IsLoggedIn = true;
+                                    }
+                                    else
+                                    {
+                                        Logger.Info("用户取消登录，退出程序");
+                                        Application.Exit();
+                                    }
+                                }
+                            }));
+                        }
+                        catch (InvalidOperationException ex) when (ex.Message == "服务器IP和端口未设置")
+                        {
+                            // 服务器配置未设置，直接需要重新登录
+                            Logger.Info("服务器配置未设置，需要重新登录");
+                            loginForm.Invoke((Action)(() => {
+                                // 停止程序检测
+                                GlobalState.Instance.IsLoggedIn = false;
+                                Logger.Info("程序检测机制已停止");
+                                // 重置登录状态
+                                GlobalState.Instance.Reset();
+                                GlobalState.Instance.ClearUserInfo();
+                                Logger.Info("登录状态已重置");
+                                loginForm.SetLoading(false);
+                                loginForm.UpdateUIState();
+                                Logger.Info("UI状态已更新，准备显示登录窗口");
+                                // 显示登录窗口
+                                Logger.Info("显示登录窗口");
+                                if (loginForm.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+                                {
+                                    Logger.Info("用户登录成功");
+                                    GlobalState.Instance.IsLoggedIn = true;
+                                }
+                                else
+                                {
+                                    Logger.Info("用户取消登录，退出程序");
+                                    Application.Exit();
+                                }
+                            }));
+                        }
+                        catch (Exception ex)
+                        {
+                            // 其他错误
+                            Logger.Error($"验证登录状态时出错: {ex.Message}");
+                            loginForm.Invoke((Action)(() => {
+                                // 停止程序检测
+                                GlobalState.Instance.IsLoggedIn = false;
+                                Logger.Info("程序检测机制已停止");
+                                // 重置登录状态
+                                GlobalState.Instance.Reset();
+                                GlobalState.Instance.ClearUserInfo();
+                                Logger.Info("登录状态已重置");
+                                loginForm.SetLoading(false);
+                                loginForm.UpdateUIState();
+                                Logger.Info("UI状态已更新，准备显示登录窗口");
+                                // 显示登录窗口
+                                Logger.Info("显示登录窗口");
+                                if (loginForm.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+                                {
+                                    Logger.Info("用户登录成功");
+                                    GlobalState.Instance.IsLoggedIn = true;
+                                }
+                                else
+                                {
+                                    Logger.Info("用户取消登录，退出程序");
+                                    Application.Exit();
+                                }
+                            }));
+                        }
+                    });
                 }
                 else
                 {
-                    string username = WpsPasswordManager.UI.LoginForm.GetUsername();
-                    Logger.Info($"用户 {username} 已登录");
+                    // 未登录状态，显示登录弹框
+                    Logger.Info("未登录状态，显示登录弹框");
+                    
+                    // 检查是否有token，如果有则尝试心跳检测
+                    if (!string.IsNullOrEmpty(GlobalState.Instance.Token))
+                    {
+                        // 显示加载状态
+                        loginForm.Show();
+                        loginForm.SetLoading(true);
+                        
+                        // 异步执行心跳检测，不阻塞UI线程
+                        Task.Run(async () => {
+                            try
+                            {
+                                // 检查服务器配置
+                                string serverAddress = GlobalState.Instance.GetServerAddress();
+                                
+                                // 尝试心跳检测
+                                bool result = await WpsPasswordManager.UI.LoginForm.Heartbeat();
+                                
+                                // 心跳完成，更新UI状态
+                                loginForm.Invoke((Action)(() => {
+                                    if (result)
+                                    {
+                                        Logger.Info("心跳检测成功，用户已登录");
+                                        loginForm.SetLoading(false);
+                                        loginForm.UpdateUIState();
+                                        GlobalState.Instance.IsLoggedIn = true;
+                                    }
+                                    else
+                                    {
+                                        Logger.Info("心跳检测失败，需要重新登录");
+                                        loginForm.SetLoading(false);
+                                        // 显示登录窗口
+                                        if (loginForm.ShowDialog() != System.Windows.Forms.DialogResult.OK)
+                                        {
+                                            Logger.Info("用户取消登录，退出程序");
+                                            Application.Exit();
+                                        }
+                                        GlobalState.Instance.IsLoggedIn = true;
+                                    }
+                                }));
+                            }
+                            catch (InvalidOperationException ex) when (ex.Message == "服务器IP和端口未设置")
+                            {
+                                // 服务器配置未设置，直接需要重新登录
+                                Logger.Info("服务器配置未设置，需要重新登录");
+                                loginForm.Invoke((Action)(() => {
+                                    // 重置登录状态
+                                    GlobalState.Instance.Reset();
+                                    GlobalState.Instance.ClearUserInfo();
+                                    loginForm.SetLoading(false);
+                                    // 显示登录窗口
+                                    if (loginForm.ShowDialog() != System.Windows.Forms.DialogResult.OK)
+                                    {
+                                        Logger.Info("用户取消登录，退出程序");
+                                        Application.Exit();
+                                    }
+                                    GlobalState.Instance.IsLoggedIn = true;
+                                }));
+                            }
+                            catch (Exception ex)
+                            {
+                                // 其他错误
+                                Logger.Error($"验证登录状态时出错: {ex.Message}");
+                                loginForm.Invoke((Action)(() => {
+                                    // 重置登录状态
+                                    GlobalState.Instance.Reset();
+                                    GlobalState.Instance.ClearUserInfo();
+                                    loginForm.SetLoading(false);
+                                    // 显示登录窗口
+                                    if (loginForm.ShowDialog() != System.Windows.Forms.DialogResult.OK)
+                                    {
+                                        Logger.Info("用户取消登录，退出程序");
+                                        Application.Exit();
+                                    }
+                                    GlobalState.Instance.IsLoggedIn = true;
+                                }));
+                            }
+                        });
+                    }
+                    else
+                    {
+                        // 没有token，直接显示登录窗口
+                        if (loginForm.ShowDialog() != System.Windows.Forms.DialogResult.OK)
+                        {
+                            Logger.Info("用户取消登录，退出程序");
+                            return;
+                        }
+                        
+                    }
+                }
+                
+                // 等待登录流程完成
+                while (!GlobalState.Instance.IsLoggedIn)
+                {
+                    Application.DoEvents();
+                    Thread.Sleep(100);
                 }
 
                 // 初始化各个模块
@@ -292,15 +515,28 @@ namespace WpsPasswordManager
                     {
                         try
                         {
+                            // 检查是否处于未登录状态
+                            if (!GlobalState.Instance.IsLoggedIn)
+                            {
+                                Logger.Info("程序检测机制处于未登录状态，每秒检查一次");
+                                Thread.Sleep(1000); // 暂停时每秒检查一次
+                                continue;
+                            }
+                            
+                            Logger.Info("程序检测机制开始执行监控逻辑");
+                            
                             long startTime = DateTime.Now.Ticks;
 
                             // 检查WPS是否运行
                             long checkWpsStart = DateTime.Now.Ticks;
-                            if (monitor.IsWpsRunning())
+                            bool wpsRunning = monitor.IsWpsRunning();
+                            long checkWpsEnd = DateTime.Now.Ticks;
+                            
+                            Logger.Info($"WPS运行状态检查结果: {wpsRunning}");
+                            
+                            if (wpsRunning)
                             {
-                                long checkWpsEnd = DateTime.Now.Ticks;
-
-                                Logger.Debug("WPS 正在运行");
+                                Logger.Info("WPS 正在运行");
                                 
                                 // 获取当前文档路径并设置文件监控
                                 try
@@ -992,6 +1228,34 @@ namespace WpsPasswordManager
                 documentCloseMonitorThread.IsBackground = true;
                 documentCloseMonitorThread.Start();
                 Logger.Info("文档关闭监控线程已启动");
+                
+                // 启动心跳检测线程
+                Thread heartbeatThread = new Thread(async () =>
+                {
+                    while (true)
+                    {
+                        try
+                        {
+                            // 只有在登录状态下才进行心跳检测
+                            if (GlobalState.Instance.IsLoggedIn)
+                            {
+                                // 调用心跳接口
+                                await WpsPasswordManager.UI.LoginForm.Heartbeat();
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Error($"心跳检测线程错误: {ex.Message}");
+                        }
+                        
+                        // 每30分钟进行一次心跳检测
+                        Thread.Sleep(1800000);
+                    }
+                });
+                
+                heartbeatThread.IsBackground = true;
+                heartbeatThread.Start();
+                Logger.Info("心跳检测线程已启动");
 
                 // 运行应用程序
                 Application.Run();
