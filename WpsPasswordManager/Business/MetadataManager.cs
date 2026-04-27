@@ -631,6 +631,24 @@ namespace WpsPasswordManager.Business
         }
 
         /// <summary>
+        /// 检测文件是否被锁定
+        /// </summary>
+        private bool IsFileLocked(string filePath)
+        {
+            try
+            {
+                using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.None))
+                {
+                    return false;
+                }
+            }
+            catch
+            {
+                return true;
+            }
+        }
+
+        /// <summary>
         /// 从ZIP文件尾部读取密码和UID
         /// </summary>
         private string ReadPasswordFromZipMetadata(string filePath)
@@ -645,7 +663,29 @@ namespace WpsPasswordManager.Business
                 }
 
                 // 从ZIP文件尾部读取数据
-                using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                FileStream fs = null;
+                try
+                {
+                    // 尝试以读写共享模式打开文件
+                    fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    Logger.Info("成功以读写共享模式打开文件");
+                }
+                catch (Exception ex1)
+                {
+                    try
+                    {
+                        // 如果失败，尝试以只读共享模式打开
+                        fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                        Logger.Info("成功以只读共享模式打开文件");
+                    }
+                    catch (Exception ex2)
+                    {
+                        Logger.Error($"无法打开文件: {ex2.Message}");
+                        return null;
+                    }
+                }
+
+                using (fs)
                 {
                     // 读取文件尾部的1KB数据，足够包含所有元数据
                     long fileLength = fs.Length;
@@ -808,7 +848,29 @@ namespace WpsPasswordManager.Business
                 }
 
                 // 从ZIP文件尾部读取数据
-                using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                FileStream fs = null;
+                try
+                {
+                    // 尝试以读写共享模式打开文件
+                    fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    Logger.Info("成功以读写共享模式打开文件");
+                }
+                catch (Exception ex1)
+                {
+                    try
+                    {
+                        // 如果失败，尝试以只读共享模式打开
+                        fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                        Logger.Info("成功以只读共享模式打开文件");
+                    }
+                    catch (Exception ex2)
+                    {
+                        Logger.Error($"无法打开文件: {ex2.Message}");
+                        return null;
+                    }
+                }
+
+                using (fs)
                 {
                     // 读取文件尾部的1KB数据，足够包含所有元数据
                     long fileLength = fs.Length;
