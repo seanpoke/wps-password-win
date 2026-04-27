@@ -521,6 +521,7 @@ namespace WpsPasswordManager
                             if (!GlobalState.Instance.IsLoggedIn)
                             {
                                 Logger.Info("程序检测机制处于未登录状态，每秒检查一次");
+                                GlobalState.Instance.ClearAllResources();
                                 Thread.Sleep(1000); // 暂停时每秒检查一次
                                 continue;
                             }
