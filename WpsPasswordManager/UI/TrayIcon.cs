@@ -7,6 +7,7 @@ namespace WpsPasswordManager.UI
     {
         private NotifyIcon _notifyIcon;
         private ContextMenuStrip _contextMenu;
+        private LoginForm _loginForm;
 
         public event EventHandler ExitClicked;
         public event EventHandler OpenFolderClicked;
@@ -25,12 +26,17 @@ namespace WpsPasswordManager.UI
             _contextMenu = new ContextMenuStrip();
             
             // 添加菜单项
+            ToolStripMenuItem homeItem = new ToolStripMenuItem("主页");
+            homeItem.Click += (sender, e) => ShowMainWindow();
+            
             ToolStripMenuItem openFolderItem = new ToolStripMenuItem("打开安装目录");
             openFolderItem.Click += (sender, e) => OpenFolderClicked?.Invoke(this, EventArgs.Empty);
             
             ToolStripMenuItem exitItem = new ToolStripMenuItem("退出");
             exitItem.Click += (sender, e) => ExitClicked?.Invoke(this, EventArgs.Empty);
 
+            _contextMenu.Items.Add(homeItem);
+            _contextMenu.Items.Add(new ToolStripSeparator());
             _contextMenu.Items.Add(openFolderItem);
             _contextMenu.Items.Add(new ToolStripSeparator());
             _contextMenu.Items.Add(exitItem);
@@ -40,8 +46,34 @@ namespace WpsPasswordManager.UI
             // 双击图标事件
             _notifyIcon.DoubleClick += (sender, e) =>
             {
-                // 可以添加双击操作，比如显示主窗口
+                ShowMainWindow();
             };
+        }
+        
+        private void ShowMainWindow()
+        {
+            // 检查登录窗口是否已经存在
+            if (_loginForm != null && !_loginForm.IsDisposed)
+            {
+                // 如果窗口存在且未被销毁，激活它
+                _loginForm.Activate();
+                if (_loginForm.WindowState == FormWindowState.Minimized)
+                {
+                    _loginForm.WindowState = FormWindowState.Normal;
+                }
+            }
+            else
+            {
+                // 创建并显示登录窗口
+                _loginForm = new LoginForm();
+                _loginForm.StartPosition = FormStartPosition.CenterScreen;
+                _loginForm.FormClosed += (sender, e) =>
+                {
+                    // 窗口关闭时重置引用
+                    _loginForm = null;
+                };
+                _loginForm.Show();
+            }
         }
 
         public void ShowBalloonTip(string title, string message, ToolTipIcon icon = ToolTipIcon.Info)
