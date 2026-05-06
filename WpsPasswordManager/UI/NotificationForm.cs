@@ -30,17 +30,25 @@ namespace WpsPasswordManager.UI
                 Font = new System.Drawing.Font("微软雅黑", 10F),
                 ForeColor = System.Drawing.Color.Black,
                 TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
-                Dock = DockStyle.Fill
+                Dock = DockStyle.Fill,
+                Enabled = false
             };
 
             this.Controls.Add(_messageLabel);
 
-            // 创建定时器，10秒后自动关闭
+            // 创建定时器，2.5秒后自动关闭
             _closeTimer = new System.Windows.Forms.Timer
             {
-                Interval = 10000
+                Interval = 2500
             };
             _closeTimer.Tick += (sender, e) =>
+            {
+                _closeTimer.Stop();
+                this.Close();
+            };
+
+            // 添加双击事件，双击时关闭弹框
+            this.DoubleClick += (sender, e) =>
             {
                 _closeTimer.Stop();
                 this.Close();
