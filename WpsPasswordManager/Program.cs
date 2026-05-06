@@ -11,6 +11,8 @@ using WpsPasswordManager.UI;
 using WpsPasswordManager.Utils;
 using WpsPasswordManager.Services.Request;
 using WpsPasswordManager.Services.Routing;
+using WpsPasswordManager.Filler;
+using WpsPasswordManager.Locator;
 
 #pragma warning disable CS8600, CS8601, CS8602, CS8603, CS8604, CS8605, CS8618, CS8625
 
@@ -21,6 +23,18 @@ namespace WpsPasswordManager
         // Win32 API 定义
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr GetFocus();
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr SetFocus(IntPtr hWnd);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr GetParent(IntPtr hWnd);
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool EnumChildWindows(IntPtr hWndParent, EnumChildWindowsProc lpEnumFunc, IntPtr lParam);
@@ -404,6 +418,7 @@ namespace WpsPasswordManager
                 PasswordGenerator passwordGenerator = new PasswordGenerator();
                 MetadataManager metadataManager = new MetadataManager();
                 InputSimulator simulator = new InputSimulator();
+                PasswordAutoFiller autoFiller = new PasswordAutoFiller();
                 TrayIcon trayIcon = new TrayIcon();
                 FloatingButton floatingButton = new FloatingButton(monitor);
                 NotificationForm notificationForm = new NotificationForm();
@@ -434,62 +449,44 @@ namespace WpsPasswordManager
                 {
                     Logger.Info("用户点击生成密码按钮");
 
-                    // 查找密码对话框
-                    IntPtr dialogHandle = monitor.FindPasswordDialog();
-                    Logger.Debug($"找到密码对话框: {dialogHandle}");
+                    string password = passwordGenerator.GeneratePassword();
+                    Logger.Debug($"生成密码: {password}");
 
-                    if (dialogHandle != IntPtr.Zero)
+                    bool success = autoFiller.FillEncryptPassword(password);
+                    if (success)
                     {
-                        // 生成密码
-                        string password = passwordGenerator.GeneratePassword();
-                        Logger.Debug($"生成密码: {password}");
-
-                        // 先将密码对话框设置为活动窗口
-                        SetForegroundWindow(dialogHandle);
-                        System.Threading.Thread.Sleep(100);
-
-                        // 尝试找到密码输入框
-                        IntPtr passwordEdit = monitor.FindPasswordEdit(dialogHandle);
-                        IntPtr confirmPasswordEdit = monitor.FindConfirmPasswordEdit(dialogHandle, passwordEdit);
-
-                        Logger.Debug($"密码输入框句柄: {passwordEdit}, 确认密码输入框句柄: {confirmPasswordEdit}");
-
-                        // 如果找到输入框，直接填充
-                        if (passwordEdit != IntPtr.Zero)
+                        Logger.Info("密码填充成功");
+                    }
+                    else
+                    {
+                        Logger.Warning("密码填充失败，回退到传统方式");
+                        
+                        IntPtr dialogHandle = monitor.FindPasswordDialog();
+                        if (dialogHandle != IntPtr.Zero)
                         {
-                            Logger.Debug($"找到密码输入框: {passwordEdit}");
-                            // 先清空输入框
-                            simulator.ClearInput(passwordEdit);
-                            Logger.Debug("已清空密码输入框");
-                            // 填充密码
-                            simulator.SimulatePasswordInput(passwordEdit, password);
-                            Logger.Info("密码已填充到「打开文件密码(O)」输入框");
+                            SetForegroundWindow(dialogHandle);
+                            System.Threading.Thread.Sleep(100);
 
-                            // 填充确认密码输入框
-                            if (confirmPasswordEdit != IntPtr.Zero)
+                            IntPtr passwordEdit = monitor.FindPasswordEdit(dialogHandle);
+                            IntPtr confirmPasswordEdit = monitor.FindConfirmPasswordEdit(dialogHandle, passwordEdit);
+
+                            if (passwordEdit != IntPtr.Zero)
                             {
-                                Logger.Debug($"找到确认密码输入框: {confirmPasswordEdit}");
-                                // 先清空输入框
-                                simulator.ClearInput(confirmPasswordEdit);
-                                Logger.Debug("已清空确认密码输入框");
-                                // 填充密码
-                                simulator.SimulatePasswordInput(confirmPasswordEdit, password);
-                                Logger.Info("密码已填充到「再次输入密码(P)」输入框");
+                                simulator.ClearInput(passwordEdit);
+                                simulator.SimulatePasswordInput(passwordEdit, password);
+
+                                if (confirmPasswordEdit != IntPtr.Zero)
+                                {
+                                    simulator.ClearInput(confirmPasswordEdit);
+                                    simulator.SimulatePasswordInput(confirmPasswordEdit, password);
+                                }
                             }
                             else
                             {
-                                Logger.Warning("未找到确认密码输入框");
+                                simulator.SimulatePasswordInputWithTab(dialogHandle, password);
                             }
                         }
-                        else
-                        {
-                            Logger.Warning("未找到密码输入框，尝试模拟点击和输入");
-                            // 如果未找到输入框，尝试模拟点击和输入
-                            simulator.SimulatePasswordInputWithTab(dialogHandle, password);
-                            Logger.Info("通过模拟操作填充密码");
-                        }
                     }
-
                 };
 
                 // 获取主线程的同步上下文
@@ -1057,69 +1054,75 @@ namespace WpsPasswordManager
                                 IntPtr decryptDialog = monitor.FindPasswordDialog();
                                 if (decryptDialog != IntPtr.Zero)
                                 {
-                                    // 获取对话框标题
                                     StringBuilder dialogTitle = new StringBuilder(256);
                                     GetWindowText(decryptDialog, dialogTitle, dialogTitle.Capacity);
                                     string title = dialogTitle.ToString();
 
-                                    // 只有在解密窗口中自动填充密码
                                     if (title == "文档已加密")
                                     {
                                         Logger.Info($"找到解密对话框: {decryptDialog}, 标题: {title}");
 
-                                        // 尝试获取文档路径
                                         string documentPath = monitor.GetDocumentPath(decryptDialog);
                                         if (!string.IsNullOrEmpty(documentPath))
                                         {
                                             Logger.Info($"获取到文档路径: {documentPath}");
 
-                                            // 获取文档的UID
-                                            string uid = metadataManager.GetDocumentUid(documentPath);
-                                            Logger.Info($"获取到文档UID: {uid}");
-
-
-
-                                            // 检查该文档是否已经尝试过自动填充密码
                                             if (!attemptedDocuments.Contains(documentPath))
                                             {
-                                                // 从文档元数据中读取密码
-                                                string password = metadataManager.ReadPasswordFromMetadata(documentPath);
-                                                if (!string.IsNullOrEmpty(password))
+                                                var fileMeta = FileMetaFactory.Instance.GetFileMeta(documentPath);
+                                                if (fileMeta != null && !string.IsNullOrEmpty(fileMeta.CurrentPassword))
                                                 {
-                                                    Logger.Info($"从文档元数据中读取到密码: {password}");
+                                                    string password = fileMeta.CurrentPassword;
+                                                    Logger.Info($"从FileMetaFactory中获取到密码");
 
-                                                    // 确保对话框在前台
-                                                    SetForegroundWindow(decryptDialog);
-                                                    Thread.Sleep(200);
-
-                                                    // 直接模拟键盘输入密码
-                                                    foreach (char c in password)
+                                                    bool success = autoFiller.FillDecryptPassword(password);
+                                                    if (success)
                                                     {
-                                                        keybd_event((byte)char.ToUpper(c), 0, 0, UIntPtr.Zero);
-                                                        keybd_event((byte)char.ToUpper(c), 0, 2, UIntPtr.Zero);
-                                                        Thread.Sleep(20);
+                                                        Logger.Info("解密密码自动填充成功");
+                                                        bool dialogClosed = WaitForDialogClose(decryptDialog, 2500);
+                                                        if (dialogClosed)
+                                                        {
+                                                            attemptedDocuments.Add(documentPath);
+                                                            Logger.Info($"已标记文档 {documentPath} 为已尝试自动填充密码");
+                                                        }
                                                     }
-                                                    Logger.Info("密码已填充到解密输入框");
+                                                    else
+                                                    {
+                                                        Logger.Warning("自动填充失败，回退到传统方式");
+                                                        
+                                                        SetForegroundWindow(decryptDialog);
+                                                        Thread.Sleep(200);
 
-                                                    // 等待一小段时间
-                                                    Thread.Sleep(200);
-
-                                                    // 模拟按 Enter 键确认
-                                                    keybd_event(0x0D, 0, 0, UIntPtr.Zero); // Enter键
-                                                    keybd_event(0x0D, 0, 2, UIntPtr.Zero);
-                                                    Logger.Info("已按下 Enter 键确认");
-
-                                                    // 等待对话框关闭
-                                                    Thread.Sleep(500);
+                                                        IntPtr passwordEdit = monitor.FindPasswordEdit(decryptDialog);
+                                                        if (passwordEdit != IntPtr.Zero)
+                                                        {
+                                                            simulator.ClearInput(passwordEdit);
+                                                            simulator.SimulatePasswordInput(passwordEdit, password);
+                                                            Thread.Sleep(100);
+                                                            simulator.SimulateEnterKey();
+                                                        }
+                                                        else
+                                                        {
+                                                            Logger.Info("未找到密码输入框，使用Tab键导航");
+                                                            keybd_event(0x09, 0, 0, UIntPtr.Zero);
+                                                            keybd_event(0x09, 0, 2, UIntPtr.Zero);
+                                                            Thread.Sleep(100);
+                                                            simulator.SimulateTextInput(password);
+                                                            Thread.Sleep(100);
+                                                            simulator.SimulateEnterKey();
+                                                        }
+                                                        
+                                                        bool dialogClosed = WaitForDialogClose(decryptDialog, 2500);
+                                                        if (dialogClosed)
+                                                        {
+                                                            attemptedDocuments.Add(documentPath);
+                                                        }
+                                                    }
                                                 }
                                                 else
                                                 {
-                                                    Logger.Info("从文档元数据中读取密码失败，跳过自动填充");
+                                                    Logger.Warning("未找到文件元数据或密码为空");
                                                 }
-
-                                                // 标记该文档已经尝试过自动填充密码
-                                                attemptedDocuments.Add(documentPath);
-                                                Logger.Info($"已标记文档 {documentPath} 为已尝试自动填充密码");
                                             }
                                             else
                                             {
@@ -1128,11 +1131,11 @@ namespace WpsPasswordManager
                                         }
                                         else
                                         {
-                                            Logger.Warning("无法获取文档路径，无法自动填充密码");
+                                            Logger.Warning("未能获取到文档路径");
                                         }
                                     }
-                                }
 
+                                }
                             }
                             else
                             {
@@ -1159,6 +1162,7 @@ namespace WpsPasswordManager
                 });
 
                 monitorThread.IsBackground = true;
+                monitorThread.SetApartmentState(ApartmentState.STA);
                 monitorThread.Start();
 
                 // 显示启动提示
@@ -3904,5 +3908,38 @@ namespace WpsPasswordManager
         // SendMessage重载，用于获取文本
         [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
         private static extern IntPtr SendMessageText(IntPtr hWnd, uint Msg, IntPtr wParam, StringBuilder lParam);
+
+        // 等待对话框关闭
+        private static bool WaitForDialogClose(IntPtr dialogHandle, int maxWaitMs)
+        {
+            int waitStep = 500;
+            int totalWaited = 0;
+
+            while (totalWaited < maxWaitMs)
+            {
+                Thread.Sleep(waitStep);
+                totalWaited += waitStep;
+
+                if (!IsWindow(dialogHandle))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // 检查是否为密码错误对话框
+        private static bool IsPasswordErrorDialog(IntPtr dialogHandle)
+        {
+            StringBuilder text = new StringBuilder(1024);
+            GetWindowText(dialogHandle, text, text.Capacity);
+
+            string dialogText = text.ToString();
+            return dialogText.Contains("密码错误") ||
+                   dialogText.Contains("错误") ||
+                   dialogText.Contains("不正确") ||
+                   dialogText.Contains("失败");
+        }
     }
 }
