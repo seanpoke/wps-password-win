@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using WpsPasswordManager.Utils;
 
 namespace WpsPasswordManager.Business
@@ -49,12 +50,44 @@ namespace WpsPasswordManager.Business
         {
             if (string.IsNullOrEmpty(filePath) || string.IsNullOrEmpty(password))
             {
+                Logger.Warning($"UpdatePendingPassword 参数无效: filePath={filePath}, password={password}");
                 return;
             }
 
             var fileMeta = GetFileMeta(filePath);
-            fileMeta.AddPendingPassword(password);
-            Logger.Info($"更新文件 {filePath} 的待定密码: {password}");
+            if (fileMeta == null)
+            {
+                Logger.Warning($"未找到文件 {filePath} 的元数据，无法更新待定密码");
+                return;
+            }
+
+            const int maxPasswordCount = 5;
+
+            lock (fileMeta)
+            {
+                bool added = fileMeta.PendingPasswordList.Add(password);
+                if (added)
+                {
+                    Logger.Info($"成功添加文件 {filePath} 的待定密码: {password}");
+
+                    // 如果超过最大数量，移除多余的元素（保留字典序最大的5个）
+                    while (fileMeta.PendingPasswordList.Count > maxPasswordCount)
+                    {
+                        // 获取字典序最小的元素并移除
+                        string removedPassword = fileMeta.PendingPasswordList.Min;
+                        fileMeta.PendingPasswordList.Remove(removedPassword);
+                        Logger.Info($"文件 {filePath} 的待定密码数量超过{maxPasswordCount}个，已移除: {removedPassword}");
+                    }
+                }
+                else
+                {
+                    Logger.Info($"文件 {filePath} 的待定密码已存在: {password}");
+                }
+
+                // 打印 fileMeta 的 JSON 内容
+                string fileMetaJson = JsonSerializer.Serialize(fileMeta, new JsonSerializerOptions { WriteIndented = true });
+                Logger.Info($"FileMeta 内容:\n{fileMetaJson}");
+            }
         }
 
         public string GetWritePassword(string filePath)
