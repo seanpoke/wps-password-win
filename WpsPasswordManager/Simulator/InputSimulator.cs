@@ -109,7 +109,7 @@ namespace WpsPasswordManager.Simulator
             SimulateTextInput(password);
         }
 
-        private void SelectAllAndDelete()
+        public void SelectAllAndDelete()
         {
             keybd_event(0x11, 0, 0, UIntPtr.Zero);
             keybd_event(0x41, 0, 0, UIntPtr.Zero);
@@ -264,6 +264,12 @@ namespace WpsPasswordManager.Simulator
         {
             keybd_event(0x09, 0, 0, UIntPtr.Zero);
             keybd_event(0x09, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+        }
+
+        public void SimulateHomeKey()
+        {
+            keybd_event(0x24, 0, 0, UIntPtr.Zero);
+            keybd_event(0x24, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
         }
 
         public void SimulateCtrlS()
