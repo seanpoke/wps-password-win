@@ -59,5 +59,10 @@ namespace WpsPasswordManager.Services.Routing
         /// 公钥加密接口
         /// </summary>
         public const string ConfigEncrypt = "/config/encrypt";
+        
+        /// <summary>
+        /// 获取最新密钥信息接口
+        /// </summary>
+        public const string ConfigLatestKey = "/config/latest-key";
     }
 }

@@ -16,6 +16,11 @@ namespace WpsPasswordManager.Utils
         private string _name;
         private string _token;
         private volatile bool _isLoggedIn;
+        private string _publicKey;
+        private string _keyVersion;
+
+        private const string DEFAULT_PUBLIC_KEY = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEuY2/Hz7c7gM0O8P/8VYjDasWhdW4jyS99+Xwyghe+CVFko7KPeamzaOsUffIHQz0VAA8RH9MV1BYyuZAJ7X05Q==";
+        private const string DEFAULT_KEY_VERSION = "default";
         
         // 私有构造函数
         private GlobalState() 
@@ -52,11 +57,28 @@ namespace WpsPasswordManager.Utils
                 {
                     _isLoggedIn = false;
                 }
+                
+                // 加载密钥信息
+                var (publicKey, keyVersion) = StorageManager.LoadKeyInfo();
+                if (!string.IsNullOrEmpty(publicKey) && !string.IsNullOrEmpty(keyVersion))
+                {
+                    _publicKey = publicKey;
+                    _keyVersion = keyVersion;
+                }
+                else
+                {
+                    // 使用默认值
+                    _publicKey = DEFAULT_PUBLIC_KEY;
+                    _keyVersion = DEFAULT_KEY_VERSION;
+                }
             }
             catch (Exception ex)
             {
                 Logger.Error($"从本地存储加载数据失败: {ex.Message}");
                 _isLoggedIn = false;
+                // 使用默认密钥信息
+                _publicKey = DEFAULT_PUBLIC_KEY;
+                _keyVersion = DEFAULT_KEY_VERSION;
             }
         }
         
@@ -214,6 +236,44 @@ namespace WpsPasswordManager.Utils
             }
         }
         
+        // PublicKey
+        public string PublicKey
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return _publicKey;
+                }
+            }
+            set
+            {
+                lock (_lock)
+                {
+                    _publicKey = value;
+                }
+            }
+        }
+        
+        // KeyVersion
+        public string KeyVersion
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return _keyVersion;
+                }
+            }
+            set
+            {
+                lock (_lock)
+                {
+                    _keyVersion = value;
+                }
+            }
+        }
+        
         // 构建服务器地址
         public string GetServerAddress()
         {
@@ -265,6 +325,20 @@ namespace WpsPasswordManager.Utils
                 if (!string.IsNullOrEmpty(_serverIp) && _serverPort > 0)
                 {
                     StorageManager.SaveConfig(_serverIp, _serverPort);
+                }
+            }
+        }
+        
+        /// <summary>
+        /// 保存密钥信息到本地存储
+        /// </summary>
+        public void SaveKeyInfo()
+        {
+            lock (_lock)
+            {
+                if (!string.IsNullOrEmpty(_publicKey) && !string.IsNullOrEmpty(_keyVersion))
+                {
+                    StorageManager.SaveKeyInfo(_publicKey, _keyVersion);
                 }
             }
         }
