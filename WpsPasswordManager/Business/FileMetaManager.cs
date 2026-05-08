@@ -256,7 +256,6 @@ namespace WpsPasswordManager.Business
         /// </summary>
         public bool WriteMetaDataToFile(string filePath)
         {
-            // 获取FileMeta实例
             var fileMeta = fileMetaFactory.GetFileMeta(filePath);
             if (fileMeta == null)
             {
@@ -264,18 +263,17 @@ namespace WpsPasswordManager.Business
                 return false;
             }
 
-            // 获取写入密码
+            fileMetaFactory.SetPluginOperation(true);
+
             string password = fileMetaFactory.GetWritePassword(filePath);
             if (!string.IsNullOrEmpty(password))
             {
-                // 写入密码
                 if (!WritePasswordToFile(filePath, password))
                 {
                     return false;
                 }
             }
 
-            // 写入UID
             if (!string.IsNullOrEmpty(fileMeta.Uid))
             {
                 if (!WriteUidToFile(filePath, fileMeta.Uid))
@@ -285,7 +283,6 @@ namespace WpsPasswordManager.Business
             }
             else
             {
-                // 生成并写入新的UID
                 string newUid = GenerateUid();
                 if (!WriteUidToFile(filePath, newUid))
                 {

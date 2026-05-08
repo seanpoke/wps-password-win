@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Text;
 using System.Diagnostics;
@@ -519,7 +520,7 @@ namespace WpsPasswordManager
                                 continue;
                             }
                             
-                            Logger.Info("程序检测机制开始执行监控逻辑");
+                            // Logger.Info("程序检测机制开始执行监控逻辑");
                             
                             long startTime = DateTime.Now.Ticks;
 
@@ -528,11 +529,11 @@ namespace WpsPasswordManager
                             bool wpsRunning = monitor.IsWpsRunning();
                             long checkWpsEnd = DateTime.Now.Ticks;
                             
-                            Logger.Info($"WPS运行状态检查结果: {wpsRunning}");
+                            // Logger.Info($"WPS运行状态检查结果: {wpsRunning}");
                             
                             if (wpsRunning)
                             {
-                                Logger.Info("WPS 正在运行");
+                                // Logger.Info("WPS 正在运行");
                                 
                                 // 获取当前文档路径并设置文件监控
                                 try
@@ -541,7 +542,7 @@ namespace WpsPasswordManager
                                     string documentPath = monitor.GetDocumentPath(IntPtr.Zero);
                                     if (!string.IsNullOrEmpty(documentPath))
                                     {
-                                        Logger.Info($"获取到文档路径: {documentPath}");
+                                        // Logger.Info($"获取到文档路径: {documentPath}");
                                         
                                         // 检查文件元数据是否已存在
                                         if (!FileMetaFactory.Instance.HasFileMeta(documentPath))
@@ -634,10 +635,6 @@ namespace WpsPasswordManager
                                             {
                                                 Logger.Error($"文件元数据初始化失败: {ex.Message}");
                                             }
-                                        }
-                                        else
-                                        {
-                                            Logger.Info($"文件元数据已存在，跳过初始化: {documentPath}");
                                         }
                                         
                                         // 启动文件监控
@@ -838,7 +835,7 @@ namespace WpsPasswordManager
                                         string documentPath = monitor.GetDocumentPath(decryptDialog);
                                         if (!string.IsNullOrEmpty(documentPath))
                                         {
-                                            Logger.Info($"获取到文档路径: {documentPath}");
+                                            // Logger.Info($"获取到文档路径: {documentPath}");
 
                                             if (!attemptedDocuments.Contains(documentPath))
                                             {
@@ -923,7 +920,7 @@ namespace WpsPasswordManager
                             }
 
                             long endTime = DateTime.Now.Ticks;
-                            Logger.Debug($"循环结束，总耗时: {(endTime - startTime) / 10000}ms");
+                            // Logger.Debug($"循环结束，总耗时: {(endTime - startTime) / 10000}ms");
                         }
                         catch (Exception ex)
                         {
@@ -1037,9 +1034,59 @@ namespace WpsPasswordManager
                                     // 检查文档是否仍然打开
                                     if (!IsDocumentOpen(documentPath))
                                     {
-                                        // 文档已关闭，从尝试记录中移除
-                                        attemptedDocsToRemove.Add(documentPath);
-                                        Logger.Info($"文档已关闭，从尝试记录中移除: {documentPath}");
+                                        // 获取文件元数据
+                                        FileMeta fileMeta = FileMetaFactory.Instance.GetFileMeta(documentPath);
+                                        
+                                        if (fileMeta != null && fileMeta.IsModify)
+                                            {
+                                                // 元数据已被修改，启动异步任务执行元数据写入
+                                                Logger.Info($"文档 {documentPath} 的元数据已修改，启动异步写入任务");
+                                                string pathCopy = documentPath; // 捕获变量
+                                                Task.Run(async () =>
+                                                {
+                                                    try
+                                                    {
+                                                        // 延迟1秒，确保文件已完全关闭
+                                                        Logger.Info($"等待1秒，确保文件 {pathCopy} 已完全关闭...");
+                                                        await Task.Delay(1000);
+                                                        
+                                                        FileMetaManager fileMetaManager = new FileMetaManager();
+                                                        bool success = fileMetaManager.WriteMetaDataToFile(pathCopy);
+                                                        if (success)
+                                                        {
+                                                            Logger.Info($"文档 {pathCopy} 的元数据写入成功");
+                                                        }
+                                                        else
+                                                        {
+                                                            Logger.Error($"文档 {pathCopy} 的元数据写入失败");
+                                                        }
+                                                    }
+                                                    catch (Exception ex)
+                                                    {
+                                                        Logger.Error($"异步写入文档 {pathCopy} 元数据时发生异常: {ex.Message}");
+                                                    }
+                                                    finally
+                                                    {
+                                                        // 停止文件监听
+                                                        FileMonitor.StopWatchingFile(pathCopy);
+                                                        // 写入完成后，从FileMetaFactory中删除对应的FileMeta实例
+                                                        FileMetaFactory.Instance.CleanupFileMeta(pathCopy);
+                                                        Logger.Info($"已从FileMetaFactory中移除文档: {pathCopy}");
+                                                    }
+                                                });
+                                            }
+                                            else
+                                            {
+                                                // 停止文件监听
+                                                FileMonitor.StopWatchingFile(documentPath);
+                                                // 元数据未被修改，直接从FileMetaFactory中删除对应的FileMeta实例
+                                                FileMetaFactory.Instance.CleanupFileMeta(documentPath);
+                                                Logger.Info($"文档 {documentPath} 的元数据未修改，直接从FileMetaFactory中移除");
+                                            }
+                                            
+                                            // 从尝试记录中移除
+                                            attemptedDocsToRemove.Add(documentPath);
+                                            Logger.Info($"文档已关闭，从尝试记录中移除: {documentPath}");
                                     }
                                 }
 
@@ -1058,7 +1105,7 @@ namespace WpsPasswordManager
                             Logger.Error($"文档关闭监控线程错误: {ex.Message}");
                         }
 
-                        Thread.Sleep(1000); // 1秒检查一次
+                        Thread.Sleep(500); // 500ms检查一次
                     }
                 });
 

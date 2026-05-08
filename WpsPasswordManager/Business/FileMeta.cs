@@ -12,6 +12,7 @@ namespace WpsPasswordManager.Business
         public string OwnerName { get; set; }          // 文档所属名称
         public bool ReadAuth { get; set; }             // 读权限
         public bool WriteAuth { get; set; }            // 写权限
+        public bool IsModify { get; set; }            // 元数据是否已被修改
 
         public FileMeta(string filePath)
         {
