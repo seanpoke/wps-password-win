@@ -13,16 +13,18 @@ namespace WpsPasswordManager.Business
         public bool ReadAuth { get; set; }             // 读权限
         public bool WriteAuth { get; set; }            // 写权限
         public bool IsModify { get; set; }            // 元数据是否已被修改
+        public string CurrentKeyVersion { get; set; }  // 当前密钥版本，默认值为"default"
 
         public FileMeta(string filePath)
         {
             FilePath = filePath;
             PendingPasswordList = new SortedSet<string>();
+            CurrentKeyVersion = "default";
         }
 
         public FileMeta(string filePath, string uid, string currentPassword, 
                        SortedSet<string> pendingPasswordList, string ownerAccount, 
-                       string ownerName, bool readAuth, bool writeAuth)
+                       string ownerName, bool readAuth, bool writeAuth, string currentKeyVersion = null)
         {
             FilePath = filePath;
             Uid = uid;
@@ -32,6 +34,7 @@ namespace WpsPasswordManager.Business
             OwnerName = ownerName;
             ReadAuth = readAuth;
             WriteAuth = writeAuth;
+            CurrentKeyVersion = currentKeyVersion ?? "default";
         }
 
         public void AddPendingPassword(string password)

@@ -11,6 +11,7 @@ namespace WpsPasswordManager.Utils
         private static readonly string _appDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WpsPasswordManager");
         private static readonly string _configFile = Path.Combine(_appDataPath, "config.json");
         private static readonly string _userFile = Path.Combine(_appDataPath, "user.json");
+        private static readonly string _keyFile = Path.Combine(_appDataPath, "keyinfo.json");
         private static readonly string _encryptionKey = "WpsPasswordManager_EncryptionKey";
 
         static StorageManager()
@@ -142,6 +143,77 @@ namespace WpsPasswordManager.Utils
             catch (Exception ex)
             {
                 Logger.Error($"清除用户信息失败: {ex.Message}");
+            }
+        }
+
+        #endregion
+
+        #region 密钥信息存储
+
+        /// <summary>
+        /// 保存密钥信息到本地存储
+        /// </summary>
+        public static void SaveKeyInfo(string publicKey, string keyVersion)
+        {
+            try
+            {
+                var keyData = new
+                {
+                    publicKey = publicKey,
+                    keyVersion = keyVersion,
+                    lastUpdateTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+                };
+
+                string jsonContent = JsonSerializer.Serialize(keyData);
+                File.WriteAllText(_keyFile, jsonContent, Encoding.UTF8);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"保存密钥信息失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 从本地存储读取密钥信息
+        /// </summary>
+        public static (string publicKey, string keyVersion) LoadKeyInfo()
+        {
+            try
+            {
+                if (File.Exists(_keyFile))
+                {
+                    string jsonContent = File.ReadAllText(_keyFile, Encoding.UTF8);
+                    var keyData = JsonSerializer.Deserialize<JsonElement>(jsonContent);
+
+                    string publicKey = keyData.GetProperty("publicKey").GetString();
+                    string keyVersion = keyData.GetProperty("keyVersion").GetString();
+
+                    return (publicKey, keyVersion);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"读取密钥信息失败: {ex.Message}");
+            }
+
+            return (null, null);
+        }
+
+        /// <summary>
+        /// 清除本地存储中的密钥信息
+        /// </summary>
+        public static void ClearKeyInfo()
+        {
+            try
+            {
+                if (File.Exists(_keyFile))
+                {
+                    File.Delete(_keyFile);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"清除密钥信息失败: {ex.Message}");
             }
         }
 

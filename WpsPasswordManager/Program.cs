@@ -413,6 +413,33 @@ namespace WpsPasswordManager
                     Thread.Sleep(100);
                 }
 
+                // 调用 /config/latest-key 接口获取公钥和keyVersion
+                Logger.Info("调用 /config/latest-key 接口获取公钥和keyVersion");
+                Task.Run(async () =>
+                {
+                    try
+                    {
+                        var httpRequestService = RequestFactory.GetHttpRequestService();
+                        var response = await httpRequestService.GetAsync<LatestKeyInfo>(ApiRoutes.ConfigLatestKey);
+                        
+                        if (response != null && response.data != null)
+                        {
+                            GlobalState.Instance.PublicKey = response.data.publicKey;
+                            GlobalState.Instance.KeyVersion = response.data.keyVersion;
+                            GlobalState.Instance.SaveKeyInfo();
+                            Logger.Info($"获取公钥和keyVersion成功: keyVersion={response.data.keyVersion}");
+                        }
+                        else
+                        {
+                            Logger.Warning("获取公钥和keyVersion失败，使用默认值");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"调用 /config/latest-key 接口失败: {ex.Message}，使用默认值");
+                    }
+                });
+
                 // 初始化各个模块
                 Logger.Info("初始化各个模块");
                 WpsMonitor monitor = new WpsMonitor();
@@ -592,6 +619,13 @@ namespace WpsPasswordManager
                                                 // 读取文件尾部的密码信息
                                                 string password = fileMetaManager.ReadPasswordFromFile(documentPath);
                                                 
+                                                // 读取文件尾部的keyVersion信息
+                                                string keyVersion = fileMetaManager.ReadKeyVersionFromFile(documentPath);
+                                                if (string.IsNullOrEmpty(keyVersion))
+                                                {
+                                                    keyVersion = "default";
+                                                }
+                                                
                                                 // 如果有读权限且密码不为空，调用 /doc/password 接口获取解密后的密码
                                                 if ((readAuth || writeAuth) && !string.IsNullOrEmpty(password))
                                                 {
@@ -600,7 +634,7 @@ namespace WpsPasswordManager
                                                         if (GlobalState.Instance.IsLoggedIn && !string.IsNullOrEmpty(GlobalState.Instance.Token))
                                                         {
                                                             var httpRequestService = RequestFactory.GetHttpRequestService();
-                                                            var requestData = new { docId = uid, encryPassword = password };
+                                                            var requestData = new { docId = uid, encryPassword = password, keyVersion = keyVersion };
                                                             var response = httpRequestService.PostAsync<DocPasswordInfo>(ApiRoutes.DocPassword, requestData, GlobalState.Instance.Token).GetAwaiter().GetResult();
                                                             
                                                             if (response != null && response.data != null && !string.IsNullOrEmpty(response.data.password))
@@ -624,7 +658,8 @@ namespace WpsPasswordManager
                                                     OwnerAccount = ownerAccount,
                                                     OwnerName = ownerName,
                                                     ReadAuth = readAuth,
-                                                    WriteAuth = writeAuth
+                                                    WriteAuth = writeAuth,
+                                                    CurrentKeyVersion = keyVersion
                                                 };
                                                 
                                                 // 添加到FileMetaFactory

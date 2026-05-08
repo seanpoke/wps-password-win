@@ -120,4 +120,20 @@ namespace WpsPasswordManager.Services.Routing
         /// </summary>
         public string encrypted { get; set; }
     }
+    
+    /// <summary>
+    /// 最新密钥信息
+    /// </summary>
+    public class LatestKeyInfo
+    {
+        /// <summary>
+        /// 当前优先级最高的密钥版本
+        /// </summary>
+        public string keyVersion { get; set; }
+        
+        /// <summary>
+        /// ECC公钥（Base64编码）
+        /// </summary>
+        public string publicKey { get; set; }
+    }
 }

@@ -69,6 +69,122 @@ namespace WpsPasswordManager.Business
         }
 
         /// <summary>
+        /// 从文件中读取keyVersion
+        /// </summary>
+        public string ReadKeyVersionFromFile(string filePath)
+        {
+            // 检查文件是否存在
+            if (!File.Exists(filePath))
+            {
+                Logger.Error($"文件不存在: {filePath}");
+                return null;
+            }
+
+            // 检查文件扩展名
+            string extension = Path.GetExtension(filePath).ToLower();
+            if (!IsSupportedFormat(extension))
+            {
+                Logger.Warning($"不支持的文件格式: {extension}");
+                return null;
+            }
+
+            int retryCount = 3;
+            int delayMs = 500;
+
+            while (retryCount > 0)
+            {
+                try
+                {
+                    if (zipExtraFieldManager.ReadMetadataFromFileEnd(filePath, 3, out byte type, out string content))
+                    {
+                        if (type == 3) // Type 3 = KeyVersion
+                        {
+                            Logger.Info($"从 {filePath} 的ZIP尾部读取到keyVersion: {content}");
+                            return content;
+                        }
+                    }
+                    return null;
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"读取keyVersion失败: {ex.Message}");
+                    retryCount--;
+                    if (retryCount > 0)
+                    {
+                        System.Threading.Thread.Sleep(delayMs);
+                    }
+                }
+            }
+
+            Logger.Error($"多次尝试后仍无法读取 {filePath} 的keyVersion");
+            return null;
+        }
+
+        /// <summary>
+        /// 写入keyVersion到文件
+        /// </summary>
+        public bool WriteKeyVersionToFile(string filePath, string keyVersion)
+        {
+            // 检查文件是否存在
+            if (!File.Exists(filePath))
+            {
+                Logger.Error($"文件不存在: {filePath}");
+                return false;
+            }
+
+            // 检查文件扩展名
+            string extension = Path.GetExtension(filePath).ToLower();
+            if (!IsSupportedFormat(extension))
+            {
+                Logger.Warning($"不支持的文件格式: {extension}");
+                return false;
+            }
+
+            Logger.Info($"准备写入keyVersion到 {filePath}，keyVersion: {keyVersion}");
+
+            int retryCount = 3;
+            int delayMs = 500;
+
+            while (retryCount > 0)
+            {
+                try
+                {
+                    // 构建keyVersion元数据块
+                    byte[] metadataBlock = zipExtraFieldManager.BuildMetadataBlock(3, keyVersion); // Type 3 = KeyVersion
+                    
+                    // 写入到ZIP文件尾部
+                    if (zipExtraFieldManager.AppendMetadataToFileEnd(filePath, metadataBlock))
+                    {
+                        // 更新FileMeta中的keyVersion
+                        var fileMeta = fileMetaFactory.GetFileMeta(filePath);
+                        if (fileMeta != null)
+                        {
+                            fileMeta.CurrentKeyVersion = keyVersion;
+                        }
+                        return true;
+                    }
+                    else
+                    {
+                        throw new Exception("无法写入ZIP keyVersion元数据");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"写入keyVersion失败: {ex.Message}");
+                    retryCount--;
+                    if (retryCount > 0)
+                    {
+                        Logger.Debug($"重试写入keyVersion，剩余次数: {retryCount}");
+                        System.Threading.Thread.Sleep(delayMs);
+                    }
+                }
+            }
+
+            Logger.Error($"多次尝试后仍无法写入keyVersion到 {filePath}");
+            return false;
+        }
+
+        /// <summary>
         /// 从文件中读取UID
         /// </summary>
         public string ReadUidFromFile(string filePath)
@@ -285,6 +401,15 @@ namespace WpsPasswordManager.Business
             {
                 string newUid = GenerateUid();
                 if (!WriteUidToFile(filePath, newUid))
+                {
+                    return false;
+                }
+            }
+
+            string keyVersion = GlobalState.Instance.KeyVersion;
+            if (!string.IsNullOrEmpty(keyVersion))
+            {
+                if (!WriteKeyVersionToFile(filePath, keyVersion))
                 {
                     return false;
                 }
