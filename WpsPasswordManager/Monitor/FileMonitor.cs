@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using WpsPasswordManager.Utils;
+using WpsPasswordManager.Business;
 
 namespace WpsPasswordManager.Monitor
 {
@@ -63,13 +65,11 @@ namespace WpsPasswordManager.Monitor
                 if (_fileWatchers.ContainsKey(filePath))
                 {
                     if (logEnabled)
-                        Logger.Info($"文件已经处于监听状态: {filePath}");
-                    return;
+                        return;
                 }
                 
                 try
                 {
-                    // 创建文件系统监听器
                     string directoryPath = Path.GetDirectoryName(filePath);
                     string fileName = Path.GetFileName(filePath);
                     
@@ -167,45 +167,94 @@ namespace WpsPasswordManager.Monitor
             }
         }
         
-        // 文件修改事件处理
+        // 文件修改事件处理 - 仅设置IsModify标志，不执行写入操作
         private static void OnFileChanged(object sender, FileSystemEventArgs e)
         {
             string filePath = e.FullPath;
-            string changeType = "修改";
-            DateTime changeTime = DateTime.Now;
             
             try
             {
-                Logger.Info($"文件{changeType}事件: {filePath}");
-                Logger.Info($"修改时间: {changeTime.ToString("yyyy-MM-dd HH:mm:ss")}");
-                Logger.Info($"修改类型: {changeType}");
-                Logger.Info($"文件路径: {filePath}");
-                Logger.Info("----------------------------------------");
+                Logger.Info($"文件修改事件: {filePath}");
+
+                if (FileMetaFactory.Instance.IsPluginOperation())
+                {
+                    Logger.Info($"跳过由插件引起的文件修改事件: {filePath}");
+                    return;
+                }
+
+                // 获取文件元数据并设置IsModify标志
+                FileMeta fileMeta = FileMetaFactory.Instance.GetFileMeta(filePath);
+                if (fileMeta != null)
+                {
+                    fileMeta.IsModify = true;
+                    Logger.Info($"已标记文件 {filePath} 的元数据为已修改");
+                }
+                else
+                {
+                    Logger.Warning($"未找到文件 {filePath} 的元数据");
+                }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"文件修改事件处理失败: {ex.Message}");
+                Logger.Error($"文件修改事件处理失败: {ex.Message}");
             }
+        }
+        
+        /// <summary>
+        /// 判断文件是否被锁定（正在被其他进程写入）
+        /// </summary>
+        /// <param name="file">文件信息</param>
+        /// <returns>true表示文件被锁定，false表示文件可访问</returns>
+        public static bool IsFileLocked(FileInfo file)
+        {
+            const int maxRetries = 3;
+            const int retryDelayMs = 100;
+
+            for (int retry = 0; retry < maxRetries; retry++)
+            {
+                try
+                {
+                    using (FileStream stream = file.Open(FileMode.Open, FileAccess.Read, FileShare.Read))
+                    {
+                        return false;
+                    }
+                }
+                catch (IOException ex)
+                {
+                    if (retry < maxRetries - 1)
+                    {
+                        System.Threading.Thread.Sleep(retryDelayMs);
+                    }
+                    else
+                    {
+                        Logger.Debug($"文件 {file.FullName} 被锁定，尝试了 {maxRetries} 次，最后异常: {ex.Message}");
+                        return true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"检测文件锁定状态时发生未知异常: {ex.Message}");
+                    return true;
+                }
+            }
+
+            return true;
         }
         
         // 文件创建事件处理
         private static void OnFileCreated(object sender, FileSystemEventArgs e)
         {
             string filePath = e.FullPath;
-            string changeType = "创建";
             DateTime changeTime = DateTime.Now;
             
             try
             {
-                Logger.Info($"文件{changeType}事件: {filePath}");
+                Logger.Info($"文件创建事件: {filePath}");
                 Logger.Info($"修改时间: {changeTime.ToString("yyyy-MM-dd HH:mm:ss")}");
-                Logger.Info($"修改类型: {changeType}");
-                Logger.Info($"文件路径: {filePath}");
-                Logger.Info("----------------------------------------");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"文件创建事件处理失败: {ex.Message}");
+                Logger.Error($"文件创建事件处理失败: {ex.Message}");
             }
         }
         
@@ -213,23 +262,22 @@ namespace WpsPasswordManager.Monitor
         private static void OnFileDeleted(object sender, FileSystemEventArgs e)
         {
             string filePath = e.FullPath;
-            string changeType = "删除";
             DateTime changeTime = DateTime.Now;
             
             try
             {
-                Logger.Info($"文件{changeType}事件: {filePath}");
+                Logger.Info($"文件删除事件: {filePath}");
                 Logger.Info($"修改时间: {changeTime.ToString("yyyy-MM-dd HH:mm:ss")}");
-                Logger.Info($"修改类型: {changeType}");
-                Logger.Info($"文件路径: {filePath}");
                 
                 // 从监控列表中移除
                 StopWatchingFile(filePath);
-                Logger.Info("----------------------------------------");
+                
+                // 清理文件元数据缓存
+                FileMetaFactory.Instance.CleanupFileMeta(filePath);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"文件删除事件处理失败: {ex.Message}");
+                Logger.Error($"文件删除事件处理失败: {ex.Message}");
             }
         }
         
@@ -238,25 +286,22 @@ namespace WpsPasswordManager.Monitor
         {
             string oldFilePath = e.OldFullPath;
             string newFilePath = e.FullPath;
-            string changeType = "重命名";
             DateTime changeTime = DateTime.Now;
             
             try
             {
-                Logger.Info($"文件{changeType}事件");
+                Logger.Info($"文件重命名事件");
                 Logger.Info($"修改时间: {changeTime.ToString("yyyy-MM-dd HH:mm:ss")}");
-                Logger.Info($"修改类型: {changeType}");
                 Logger.Info($"旧文件路径: {oldFilePath}");
                 Logger.Info($"新文件路径: {newFilePath}");
                 
                 // 停止监听旧文件，开始监听新文件
                 StopWatchingFile(oldFilePath);
                 StartWatchingFile(newFilePath);
-                Logger.Info("----------------------------------------");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"文件重命名事件处理失败: {ex.Message}");
+                Logger.Error($"文件重命名事件处理失败: {ex.Message}");
             }
         }
     }

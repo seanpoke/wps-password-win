@@ -1255,7 +1255,7 @@ namespace WpsPasswordManager.Monitor
                     StringBuilder windowTitle = new StringBuilder(256);
                     GetWindowText(activeWindow, windowTitle, windowTitle.Capacity);
                     string title = windowTitle.ToString();
-                    Logger.Debug($"当前活动窗口: {activeWindow}, 标题: {title}");
+                    // Logger.Debug($"当前活动窗口: {activeWindow}, 标题: {title}");
 
                     // 检查是否是加密对话框
                     bool isEncryptDialog = title.Contains("文档已加密") || title.Contains("密码");
@@ -1292,7 +1292,7 @@ namespace WpsPasswordManager.Monitor
                 // 如果活动窗口未找到文档名，尝试枚举所有WPS窗口
                 if (string.IsNullOrEmpty(docName))
                 {
-                    Logger.Debug("从活动窗口未找到文档名，尝试枚举所有WPS窗口");
+                    // Logger.Debug("从活动窗口未找到文档名，尝试枚举所有WPS窗口");
                     
                     // 存储找到的WPS窗口标题
                     List<string> wpsWindowTitles = new List<string>();
@@ -1309,7 +1309,7 @@ namespace WpsPasswordManager.Monitor
                         if (!string.IsNullOrEmpty(title) && title.Contains(" - WPS Office"))
                         {
                             wpsWindowTitles.Add(title);
-                            Logger.Debug($"找到WPS窗口: {hWnd}, 标题: {title}");
+                            // Logger.Debug($"找到WPS窗口: {hWnd}, 标题: {title}");
                         }
                         
                         return true; // 继续枚举
@@ -1329,7 +1329,7 @@ namespace WpsPasswordManager.Monitor
                 {
                     // 尝试查找最近打开的WPS文档
                     string recentDocsPath = Environment.GetFolderPath(Environment.SpecialFolder.Recent);
-                    Logger.Debug($"最近文档路径: {recentDocsPath}");
+                    // Logger.Debug($"最近文档路径: {recentDocsPath}");
 
                     // 查找最近的WPS文档
                     string[] recentFiles = Directory.GetFiles(recentDocsPath, "*.lnk");
@@ -1355,7 +1355,7 @@ namespace WpsPasswordManager.Monitor
                                 string fileName = Path.GetFileName(targetPath);
                                 if (fileName.Equals(docName, StringComparison.OrdinalIgnoreCase))
                                 {
-                                    Logger.Debug($"从最近文档中匹配到与窗口标题相同的文档: {targetPath}");
+                                    // Logger.Debug($"从最近文档中匹配到与窗口标题相同的文档: {targetPath}");
                                     return targetPath;
                                 }
                             }
