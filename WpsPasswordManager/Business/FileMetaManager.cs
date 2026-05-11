@@ -294,29 +294,43 @@ namespace WpsPasswordManager.Business
                 byte[] publicKeyBytes = Convert.FromBase64String(publicKeyBase64);
                 byte[] passwordBytes = System.Text.Encoding.UTF8.GetBytes(password);
 
-                using (var ecdh = new System.Security.Cryptography.ECDiffieHellmanCng())
+                using (var ecdh = System.Security.Cryptography.ECDiffieHellman.Create())
                 {
                     ecdh.GenerateKey(System.Security.Cryptography.ECCurve.NamedCurves.nistP256);
 
-                    using (var otherEcdh = new System.Security.Cryptography.ECDiffieHellmanCng())
+                    using (var otherEcdh = System.Security.Cryptography.ECDiffieHellman.Create())
                     {
                         otherEcdh.ImportSubjectPublicKeyInfo(publicKeyBytes, out _);
-                        byte[] derivedKey = ecdh.DeriveKeyMaterial(otherEcdh.PublicKey);
+                        
+                        byte[] aesKeyBytes = ecdh.DeriveKeyFromHash(otherEcdh.PublicKey, 
+                            System.Security.Cryptography.HashAlgorithmName.SHA256, null, null);
 
                         using (var aes = System.Security.Cryptography.Aes.Create())
                         {
-                            byte[] key = new byte[32];
-                            Array.Copy(derivedKey, key, Math.Min(derivedKey.Length, 32));
-                            aes.Key = key;
+                            aes.Key = aesKeyBytes;
                             aes.GenerateIV();
+                            aes.Mode = System.Security.Cryptography.CipherMode.CBC;
+                            aes.Padding = System.Security.Cryptography.PaddingMode.PKCS7;
 
                             using (var encryptor = aes.CreateEncryptor())
                             {
                                 byte[] encryptedPassword = encryptor.TransformFinalBlock(passwordBytes, 0, passwordBytes.Length);
 
-                                byte[] result = new byte[16 + encryptedPassword.Length];
-                                Buffer.BlockCopy(aes.IV, 0, result, 0, 16);
-                                Buffer.BlockCopy(encryptedPassword, 0, result, 16, encryptedPassword.Length);
+                                byte[] tempPublicKeyBytes = ecdh.ExportSubjectPublicKeyInfo();
+                                
+                                int resultLength = 4 + tempPublicKeyBytes.Length + 16 + encryptedPassword.Length;
+                                byte[] result = new byte[resultLength];
+
+                                result[0] = (byte)((tempPublicKeyBytes.Length >> 24) & 0xFF);
+                                result[1] = (byte)((tempPublicKeyBytes.Length >> 16) & 0xFF);
+                                result[2] = (byte)((tempPublicKeyBytes.Length >> 8) & 0xFF);
+                                result[3] = (byte)(tempPublicKeyBytes.Length & 0xFF);
+
+                                Buffer.BlockCopy(tempPublicKeyBytes, 0, result, 4, tempPublicKeyBytes.Length);
+
+                                Buffer.BlockCopy(aes.IV, 0, result, 4 + tempPublicKeyBytes.Length, 16);
+
+                                Buffer.BlockCopy(encryptedPassword, 0, result, 4 + tempPublicKeyBytes.Length + 16, encryptedPassword.Length);
 
                                 Logger.Info($"密码使用本地公钥加密成功");
                                 return Convert.ToBase64String(result);
