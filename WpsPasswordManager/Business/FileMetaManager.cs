@@ -15,19 +15,14 @@ namespace WpsPasswordManager.Business
             fileMetaFactory = FileMetaFactory.Instance;
         }
 
-        /// <summary>
-        /// 从文件中读取密码
-        /// </summary>
         public string ReadPasswordFromFile(string filePath)
         {
-            // 检查文件是否存在
             if (!File.Exists(filePath))
             {
                 Logger.Error($"文件不存在: {filePath}");
                 return null;
             }
 
-            // 检查文件扩展名
             string extension = Path.GetExtension(filePath).ToLower();
             if (!IsSupportedFormat(extension))
             {
@@ -44,10 +39,9 @@ namespace WpsPasswordManager.Business
                 {
                     if (zipExtraFieldManager.ReadMetadataFromFileEnd(filePath, 1, out byte type, out string content))
                     {
-                        if (type == 1) // Type 1 = Password
+                        if (type == 1)
                         {
                             Logger.Info($"从 {filePath} 的ZIP尾部读取到密码: {content}");
-
                             return content;
                         }
                     }
@@ -68,19 +62,14 @@ namespace WpsPasswordManager.Business
             return null;
         }
 
-        /// <summary>
-        /// 从文件中读取keyVersion
-        /// </summary>
         public string ReadKeyVersionFromFile(string filePath)
         {
-            // 检查文件是否存在
             if (!File.Exists(filePath))
             {
                 Logger.Error($"文件不存在: {filePath}");
                 return null;
             }
 
-            // 检查文件扩展名
             string extension = Path.GetExtension(filePath).ToLower();
             if (!IsSupportedFormat(extension))
             {
@@ -97,7 +86,7 @@ namespace WpsPasswordManager.Business
                 {
                     if (zipExtraFieldManager.ReadMetadataFromFileEnd(filePath, 3, out byte type, out string content))
                     {
-                        if (type == 3) // Type 3 = KeyVersion
+                        if (type == 3)
                         {
                             Logger.Info($"从 {filePath} 的ZIP尾部读取到keyVersion: {content}");
                             return content;
@@ -120,19 +109,14 @@ namespace WpsPasswordManager.Business
             return null;
         }
 
-        /// <summary>
-        /// 写入keyVersion到文件
-        /// </summary>
         public bool WriteKeyVersionToFile(string filePath, string keyVersion)
         {
-            // 检查文件是否存在
             if (!File.Exists(filePath))
             {
                 Logger.Error($"文件不存在: {filePath}");
                 return false;
             }
 
-            // 检查文件扩展名
             string extension = Path.GetExtension(filePath).ToLower();
             if (!IsSupportedFormat(extension))
             {
@@ -149,13 +133,10 @@ namespace WpsPasswordManager.Business
             {
                 try
                 {
-                    // 构建keyVersion元数据块
-                    byte[] metadataBlock = zipExtraFieldManager.BuildMetadataBlock(3, keyVersion); // Type 3 = KeyVersion
+                    byte[] metadataBlock = zipExtraFieldManager.BuildMetadataBlock(3, keyVersion);
                     
-                    // 写入到ZIP文件尾部
                     if (zipExtraFieldManager.AppendMetadataToFileEnd(filePath, metadataBlock))
                     {
-                        // 更新FileMeta中的keyVersion
                         var fileMeta = fileMetaFactory.GetFileMeta(filePath);
                         if (fileMeta != null)
                         {
@@ -184,19 +165,14 @@ namespace WpsPasswordManager.Business
             return false;
         }
 
-        /// <summary>
-        /// 从文件中读取UID
-        /// </summary>
         public string ReadUidFromFile(string filePath)
         {
-            // 检查文件是否存在
             if (!File.Exists(filePath))
             {
                 Logger.Error($"文件不存在: {filePath}");
                 return null;
             }
 
-            // 检查文件扩展名
             string extension = Path.GetExtension(filePath).ToLower();
             if (!IsSupportedFormat(extension))
             {
@@ -213,10 +189,9 @@ namespace WpsPasswordManager.Business
                 {
                     if (zipExtraFieldManager.ReadMetadataFromFileEnd(filePath, 2, out byte type, out string content))
                     {
-                        if (type == 2) // Type 2 = UID
+                        if (type == 2)
                         {
                             Logger.Info($"从 {filePath} 的ZIP尾部读取到UID: {content}");
-                            // 更新FileMeta中的UID
                             var fileMeta = fileMetaFactory.GetFileMeta(filePath);
                             if (fileMeta != null)
                             {
@@ -242,19 +217,14 @@ namespace WpsPasswordManager.Business
             return null;
         }
 
-        /// <summary>
-        /// 写入密码到文件
-        /// </summary>
         public bool WritePasswordToFile(string filePath, string password)
         {
-            // 检查文件是否存在
             if (!File.Exists(filePath))
             {
                 Logger.Error($"文件不存在: {filePath}");
                 return false;
             }
 
-            // 检查文件扩展名
             string extension = Path.GetExtension(filePath).ToLower();
             if (!IsSupportedFormat(extension))
             {
@@ -262,8 +232,16 @@ namespace WpsPasswordManager.Business
                 return false;
             }
 
-            // 打印密码值
             Logger.Info($"准备写入密码到 {filePath}，密码: {password}");
+
+            string encryptedPassword = EncryptPasswordByPublicKey(password);
+            if (string.IsNullOrEmpty(encryptedPassword))
+            {
+                Logger.Error($"密码加密失败，无法写入文件");
+                return false;
+            }
+
+            Logger.Info($"密码加密成功，加密后的密码: {encryptedPassword}");
 
             int retryCount = 3;
             int delayMs = 500;
@@ -272,13 +250,10 @@ namespace WpsPasswordManager.Business
             {
                 try
                 {
-                    // 构建密码元数据块
-                    byte[] metadataBlock = zipExtraFieldManager.BuildMetadataBlock(1, password); // Type 1 = Password
+                    byte[] metadataBlock = zipExtraFieldManager.BuildMetadataBlock(1, encryptedPassword);
                     
-                    // 写入到ZIP文件尾部
                     if (zipExtraFieldManager.AppendMetadataToFileEnd(filePath, metadataBlock))
                     {
-                        // 更新FileMeta中的当前密码
                         var fileMeta = fileMetaFactory.GetFileMeta(filePath);
                         fileMeta.CurrentPassword = password;
                         fileMeta.ClearPendingPasswords();
@@ -305,19 +280,66 @@ namespace WpsPasswordManager.Business
             return false;
         }
 
-        /// <summary>
-        /// 写入UID到文件
-        /// </summary>
+        private string EncryptPasswordByPublicKey(string password)
+        {
+            try
+            {
+                string publicKeyBase64 = GlobalState.Instance.PublicKey;
+                if (string.IsNullOrEmpty(publicKeyBase64))
+                {
+                    Logger.Error($"公钥为空，无法加密密码");
+                    return null;
+                }
+
+                byte[] publicKeyBytes = Convert.FromBase64String(publicKeyBase64);
+                byte[] passwordBytes = System.Text.Encoding.UTF8.GetBytes(password);
+
+                using (var ecdh = new System.Security.Cryptography.ECDiffieHellmanCng())
+                {
+                    ecdh.GenerateKey(System.Security.Cryptography.ECCurve.NamedCurves.nistP256);
+
+                    using (var otherEcdh = new System.Security.Cryptography.ECDiffieHellmanCng())
+                    {
+                        otherEcdh.ImportSubjectPublicKeyInfo(publicKeyBytes, out _);
+                        byte[] derivedKey = ecdh.DeriveKeyMaterial(otherEcdh.PublicKey);
+
+                        using (var aes = System.Security.Cryptography.Aes.Create())
+                        {
+                            byte[] key = new byte[32];
+                            Array.Copy(derivedKey, key, Math.Min(derivedKey.Length, 32));
+                            aes.Key = key;
+                            aes.GenerateIV();
+
+                            using (var encryptor = aes.CreateEncryptor())
+                            {
+                                byte[] encryptedPassword = encryptor.TransformFinalBlock(passwordBytes, 0, passwordBytes.Length);
+
+                                byte[] result = new byte[16 + encryptedPassword.Length];
+                                Buffer.BlockCopy(aes.IV, 0, result, 0, 16);
+                                Buffer.BlockCopy(encryptedPassword, 0, result, 16, encryptedPassword.Length);
+
+                                Logger.Info($"密码使用本地公钥加密成功");
+                                return Convert.ToBase64String(result);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"密码加密失败: {ex.Message}");
+                return null;
+            }
+        }
+
         public bool WriteUidToFile(string filePath, string uid)
         {
-            // 检查文件是否存在
             if (!File.Exists(filePath))
             {
                 Logger.Error($"文件不存在: {filePath}");
                 return false;
             }
 
-            // 检查文件扩展名
             string extension = Path.GetExtension(filePath).ToLower();
             if (!IsSupportedFormat(extension))
             {
@@ -325,7 +347,6 @@ namespace WpsPasswordManager.Business
                 return false;
             }
 
-            // 打印UID值
             Logger.Info($"准备写入UID到 {filePath}，UID: {uid}");
 
             int retryCount = 3;
@@ -335,13 +356,10 @@ namespace WpsPasswordManager.Business
             {
                 try
                 {
-                    // 构建UID元数据块
-                    byte[] metadataBlock = zipExtraFieldManager.BuildMetadataBlock(2, uid); // Type 2 = UID
+                    byte[] metadataBlock = zipExtraFieldManager.BuildMetadataBlock(2, uid);
                     
-                    // 写入到ZIP文件尾部
                     if (zipExtraFieldManager.AppendMetadataToFileEnd(filePath, metadataBlock))
                     {
-                        // 更新FileMeta中的UID
                         var fileMeta = fileMetaFactory.GetFileMeta(filePath);
                         fileMeta.Uid = uid;
                         return true;
@@ -367,9 +385,6 @@ namespace WpsPasswordManager.Business
             return false;
         }
 
-        /// <summary>
-        /// 写入元数据到文件
-        /// </summary>
         public bool WriteMetaDataToFile(string filePath)
         {
             var fileMeta = fileMetaFactory.GetFileMeta(filePath);
@@ -418,17 +433,11 @@ namespace WpsPasswordManager.Business
             return true;
         }
 
-        /// <summary>
-        /// 检查文件是否有密码元数据
-        /// </summary>
         public bool HasPasswordMetadata(string filePath)
         {
             return !string.IsNullOrEmpty(ReadPasswordFromFile(filePath));
         }
 
-        /// <summary>
-        /// 检查是否支持的文件格式
-        /// </summary>
         private bool IsSupportedFormat(string extension)
         {
             string[] supportedFormats = { ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt" };
@@ -442,9 +451,6 @@ namespace WpsPasswordManager.Business
             return false;
         }
 
-        /// <summary>
-        /// 生成UID
-        /// </summary>
         private string GenerateUid()
         {
             long timestamp = DateTimeOffset.Now.ToUnixTimeMilliseconds();
@@ -452,13 +458,9 @@ namespace WpsPasswordManager.Business
             return $"{timestamp}_{uuid}";
         }
 
-        /// <summary>
-        /// 获取文档的UID
-        /// </summary>
         public string GetDocumentUid(string filePath)
         {
             Logger.Info($"开始获取文档UID: {filePath}");
-            // 首先尝试从元数据中读取UID
             string uid = ReadUidFromFile(filePath);
             if (!string.IsNullOrEmpty(uid))
             {
@@ -466,22 +468,16 @@ namespace WpsPasswordManager.Business
                 return uid;
             }
 
-            // 如果元数据中没有UID，生成新的UID
             string newUid = GenerateUid();
             Logger.Info($"生成新的UID: {newUid}");
             return newUid;
         }
 
-        /// <summary>
-        /// 保存文档的UID到元数据
-        /// </summary>
         public bool SaveDocumentUid(string filePath)
         {
-            // 获取文档的UID
             string uid = GetDocumentUid(filePath);
             if (!string.IsNullOrEmpty(uid))
             {
-                // 写入到元数据
                 bool success = WriteUidToFile(filePath, uid);
                 if (success)
                 {
