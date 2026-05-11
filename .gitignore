@@ -31,3 +31,7 @@ Thumbs.db
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
+WpsPasswordManager/build_output.txt
+WpsPasswordManager/build_errors.txt
+WpsPasswordManager/build_log.txt
+WpsPasswordManager/build_errors.txt
