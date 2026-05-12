@@ -411,7 +411,9 @@ namespace WpsPasswordManager.Business
             fileMetaFactory.SetPluginOperation(true);
 
             string password = fileMetaFactory.GetWritePassword(filePath);
-            if (!string.IsNullOrEmpty(password))
+            bool hasPassword = !string.IsNullOrEmpty(password);
+            
+            if (hasPassword)
             {
                 if (!WritePasswordToFile(filePath, password))
                 {
@@ -435,12 +437,16 @@ namespace WpsPasswordManager.Business
                 }
             }
 
-            string keyVersion = GlobalState.Instance.KeyVersion;
-            if (!string.IsNullOrEmpty(keyVersion))
+            // 只有在有密码的情况下才写入keyVersion
+            if (hasPassword)
             {
-                if (!WriteKeyVersionToFile(filePath, keyVersion))
+                string keyVersion = GlobalState.Instance.KeyVersion;
+                if (!string.IsNullOrEmpty(keyVersion))
                 {
-                    return false;
+                    if (!WriteKeyVersionToFile(filePath, keyVersion))
+                    {
+                        return false;
+                    }
                 }
             }
 
