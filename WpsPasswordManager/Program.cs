@@ -12,6 +12,7 @@ using WpsPasswordManager.UI;
 using WpsPasswordManager.Utils;
 using WpsPasswordManager.Services.Request;
 using WpsPasswordManager.Services.Routing;
+using WpsPasswordManager.Services.Report;
 using WpsPasswordManager.Filler;
 using WpsPasswordManager.Locator;
 
@@ -1077,6 +1078,15 @@ namespace WpsPasswordManager
                                                 // 元数据已被修改，启动异步任务执行元数据写入
                                                 Logger.Info($"文档 {documentPath} 的元数据已修改，启动异步写入任务");
                                                 string pathCopy = documentPath; // 捕获变量
+                                                
+                                                // 在写入之前捕获密码信息（因为WriteMetaDataToFile会修改FileMeta状态）
+                                                string beforePassword = fileMeta.CurrentPassword;
+                                                List<string> pendingPasswords = fileMeta.PendingPasswordList != null ? new List<string>(fileMeta.PendingPasswordList) : null;
+                                                string fileUid = fileMeta.Uid;
+                                                string keyVersion = fileMeta.CurrentKeyVersion ?? GlobalState.Instance.KeyVersion;
+                                                
+                                                Logger.Info($"捕获密码信息用于上报: beforePassword={(string.IsNullOrEmpty(beforePassword) ? "空" : "有值")}, pendingPasswords数量={(pendingPasswords?.Count ?? 0)}, fileUid={fileUid}");
+                                                
                                                 Task.Run(async () =>
                                                 {
                                                     try
@@ -1090,6 +1100,21 @@ namespace WpsPasswordManager
                                                         if (success)
                                                         {
                                                             Logger.Info($"文档 {pathCopy} 的元数据写入成功");
+                                                            
+                                                            // 上报密码保存记录（使用捕获的密码信息）
+                                                            var reportService = PasswordReportService.Instance;
+                                                            string afterPassword = pendingPasswords != null && pendingPasswords.Count > 0 ? pendingPasswords[0] : null;
+                                                            bool reportSuccess = await reportService.ReportSaveLogWithPasswords(
+                                                                pathCopy, fileUid, beforePassword, afterPassword, pendingPasswords, keyVersion);
+                                                            
+                                                            if (reportSuccess)
+                                                            {
+                                                                Logger.Info($"文档 {pathCopy} 的密码保存记录上报成功");
+                                                            }
+                                                            else
+                                                            {
+                                                                Logger.Warning($"文档 {pathCopy} 的密码保存记录上报失败");
+                                                            }
                                                         }
                                                         else
                                                         {
