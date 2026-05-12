@@ -14,6 +14,7 @@ namespace WpsPasswordManager.Business
         public bool WriteAuth { get; set; }            // 写权限
         public bool IsModify { get; set; }            // 元数据是否已被修改
         public string CurrentKeyVersion { get; set; }  // 当前密钥版本，默认值为"default"
+        public bool IsWriting { get; set; }           // 是否正在写入元数据，用于防止重复写入
 
         public FileMeta(string filePath)
         {

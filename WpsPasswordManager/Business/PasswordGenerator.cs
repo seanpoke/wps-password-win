@@ -10,7 +10,7 @@ namespace WpsPasswordManager.Business
         private const string LowercaseLetters = "abcdefghijklmnopqrstuvwxyz";
         private const string Numbers = "0123456789";
         private const string SpecialCharacters = "!@#$%^&*";
-        private const int PasswordLength = 16;
+        private const int PasswordLength = 10;
         private const int MinCharsPerCategory = 2;
 
         private readonly Random _random;

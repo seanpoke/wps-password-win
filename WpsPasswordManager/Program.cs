@@ -570,111 +570,126 @@ namespace WpsPasswordManager
                                     string documentPath = monitor.GetDocumentPath(IntPtr.Zero);
                                     if (!string.IsNullOrEmpty(documentPath))
                                     {
-                                        // Logger.Info($"获取到文档路径: {documentPath}");
-                                        
-                                        // 检查文件元数据是否已存在
-                                        if (!FileMetaFactory.Instance.HasFileMeta(documentPath))
+                                        // 检查文档是否真的被打开，避免重复监控已关闭的文档
+                                        if (!IsDocumentOpen(documentPath))
                                         {
-                                            try
+                                            Logger.Debug($"文档 {documentPath} 未被打开，跳过监控");
+                                        }
+                                        else
+                                        {
+                                            // Logger.Info($"获取到文档路径: {documentPath}");
+                                            
+                                            // 检查文件元数据是否已存在
+                                            if (!FileMetaFactory.Instance.HasFileMeta(documentPath))
                                             {
-                                                // 初始化文件元数据
-                                                FileMetaManager fileMetaManager = new FileMetaManager();
-                                                
-                                                // 读取文件尾部的uid信息
-                                                string uid = fileMetaManager.ReadUidFromFile(documentPath);
-                                                // 如果uid不存在，创建新的uid
-                                                if (string.IsNullOrEmpty(uid))
-                                                {
-                                                    uid = FileMetaFactory.Instance.CreateUid();
-                                                }
-                                                
-                                                // 调用 /doc/owner 接口获取文档信息
-                                                string ownerAccount = null;
-                                                string ownerName = null;
-                                                bool readAuth = false;
-                                                bool writeAuth = false;
-                                                
                                                 try
                                                 {
-                                                    if (GlobalState.Instance.IsLoggedIn && !string.IsNullOrEmpty(GlobalState.Instance.Token))
+                                                    // 初始化文件元数据
+                                                    FileMetaManager fileMetaManager = new FileMetaManager();
+                                                    
+                                                    // 读取文件尾部的uid信息
+                                                    string uid = fileMetaManager.ReadUidFromFile(documentPath);
+                                                    // 如果uid不存在，创建新的uid
+                                                    if (string.IsNullOrEmpty(uid))
                                                     {
-                                                        var httpRequestService = RequestFactory.GetHttpRequestService();
-                                                        var queryParams = new { docId = uid };
-                                                        var response = httpRequestService.GetAsync<DocOwnerInfo>(ApiRoutes.DocOwner, GlobalState.Instance.Token, queryParams).GetAwaiter().GetResult();
-                                                        
-                                                        if (response != null && response.data != null)
-                                                        {
-                                                            ownerAccount = response.data.ownerAccount;
-                                                            ownerName = response.data.ownerName;
-                                                            readAuth = response.data.readAuth;
-                                                            writeAuth = response.data.writeAuth;
-                                                            Logger.Info($"获取文档信息成功: 所有者={ownerName}({ownerAccount}), 读权限={readAuth}, 写权限={writeAuth}");
-                                                        }
+                                                        uid = FileMetaFactory.Instance.CreateUid();
                                                     }
-                                                }
-                                                catch (Exception ex)
-                                                {
-                                                    Logger.Error($"获取文档信息失败: {ex.Message}");
-                                                }
-                                                
-                                                // 读取文件尾部的密码信息
-                                                string password = fileMetaManager.ReadPasswordFromFile(documentPath);
-                                                
-                                                // 读取文件尾部的keyVersion信息
-                                                string keyVersion = fileMetaManager.ReadKeyVersionFromFile(documentPath);
-                                                if (string.IsNullOrEmpty(keyVersion))
-                                                {
-                                                    keyVersion = "default";
-                                                }
-                                                
-                                                // 如果有读权限且密码不为空，调用 /doc/password 接口获取解密后的密码
-                                                if ((readAuth || writeAuth) && !string.IsNullOrEmpty(password))
-                                                {
+                                                    
+                                                    // 调用 /doc/owner 接口获取文档信息
+                                                    string ownerAccount = null;
+                                                    string ownerName = null;
+                                                    bool readAuth = false;
+                                                    bool writeAuth = false;
+                                                    
                                                     try
                                                     {
                                                         if (GlobalState.Instance.IsLoggedIn && !string.IsNullOrEmpty(GlobalState.Instance.Token))
                                                         {
                                                             var httpRequestService = RequestFactory.GetHttpRequestService();
-                                                            var requestData = new { docId = uid, encryPassword = password, keyVersion = keyVersion };
-                                                            var response = httpRequestService.PostAsync<DocPasswordInfo>(ApiRoutes.DocPassword, requestData, GlobalState.Instance.Token).GetAwaiter().GetResult();
+                                                            var queryParams = new { docId = uid };
+                                                            var response = httpRequestService.GetAsync<DocOwnerInfo>(ApiRoutes.DocOwner, GlobalState.Instance.Token, queryParams).GetAwaiter().GetResult();
                                                             
-                                                            if (response != null && response.data != null && !string.IsNullOrEmpty(response.data.password))
+                                                            if (response != null && response.data != null)
                                                             {
-                                                                password = response.data.password;
-                                                                Logger.Info($"获取解密后的密码成功");
+                                                                ownerAccount = response.data.ownerAccount;
+                                                                ownerName = response.data.ownerName;
+                                                                readAuth = response.data.readAuth;
+                                                                writeAuth = response.data.writeAuth;
+                                                                Logger.Info($"获取文档信息成功: 所有者={ownerName}({ownerAccount}), 读权限={readAuth}, 写权限={writeAuth}");
                                                             }
                                                         }
                                                     }
                                                     catch (Exception ex)
                                                     {
-                                                        Logger.Error($"获取解密后的密码失败: {ex.Message}");
+                                                        Logger.Error($"获取文档信息失败: {ex.Message}");
                                                     }
-                                                }
+                                                    
+                                                    // 读取文件尾部的密码信息
+                                                    string password = fileMetaManager.ReadPasswordFromFile(documentPath);
+                                                    
+                                                    // 读取文件尾部的keyVersion信息
+                                                    string keyVersion = fileMetaManager.ReadKeyVersionFromFile(documentPath);
+                                                    if (string.IsNullOrEmpty(keyVersion))
+                                                    {
+                                                        keyVersion = "default";
+                                                    }
+                                                    
+                                                    // 如果有读权限且密码不为空，调用 /doc/password 接口获取解密后的密码
+                                                    if ((readAuth || writeAuth) && !string.IsNullOrEmpty(password))
+                                                    {
+                                                        try
+                                                        {
+                                                            if (GlobalState.Instance.IsLoggedIn && !string.IsNullOrEmpty(GlobalState.Instance.Token))
+                                                            {
+                                                                var httpRequestService = RequestFactory.GetHttpRequestService();
+                                                                var requestData = new { docId = uid, encryPassword = password, keyVersion = keyVersion };
+                                                                var response = httpRequestService.PostAsync<DocPasswordInfo>(ApiRoutes.DocPassword, requestData, GlobalState.Instance.Token).GetAwaiter().GetResult();
+                                                                
+                                                                if (response != null && response.data != null && !string.IsNullOrEmpty(response.data.password))
+                                                                {
+                                                                    password = response.data.password;
+                                                                    Logger.Info($"获取解密后的密码成功");
+                                                                }
+                                                            }
+                                                        }
+                                                        catch (Exception ex)
+                                                        {
+                                                            Logger.Error($"获取解密后的密码失败: {ex.Message}");
+                                                        }
+                                                    }
 
-                                                // 创建并初始化FileMeta对象
-                                                FileMeta fileMeta = new FileMeta(documentPath)
+                                                    // 创建并初始化FileMeta对象
+                                                    FileMeta fileMeta = new FileMeta(documentPath)
+                                                    {
+                                                        Uid = uid,
+                                                        CurrentPassword = password,
+                                                        OwnerAccount = ownerAccount,
+                                                        OwnerName = ownerName,
+                                                        ReadAuth = readAuth,
+                                                        WriteAuth = writeAuth,
+                                                        CurrentKeyVersion = keyVersion
+                                                    };
+                                                    
+                                                    // 添加到FileMetaFactory
+                                                    FileMetaFactory.Instance.AddFileMeta(fileMeta);
+                                                    Logger.Info($"文件元数据初始化完成: {documentPath}");
+                                                }
+                                                catch (Exception ex)
                                                 {
-                                                    Uid = uid,
-                                                    CurrentPassword = password,
-                                                    OwnerAccount = ownerAccount,
-                                                    OwnerName = ownerName,
-                                                    ReadAuth = readAuth,
-                                                    WriteAuth = writeAuth,
-                                                    CurrentKeyVersion = keyVersion
-                                                };
-                                                
-                                                // 添加到FileMetaFactory
-                                                FileMetaFactory.Instance.AddFileMeta(fileMeta);
-                                                Logger.Info($"文件元数据初始化完成: {documentPath}");
+                                                    Logger.Error($"文件元数据初始化失败: {ex.Message}");
+                                                }
                                             }
-                                            catch (Exception ex)
+                                            
+                                            // 将文档加入尝试记录，以便检测关闭事件
+                                            if (!attemptedDocuments.Contains(documentPath))
                                             {
-                                                Logger.Error($"文件元数据初始化失败: {ex.Message}");
+                                                attemptedDocuments.Add(documentPath);
+                                                Logger.Info($"文档已加入监控: {documentPath}");
                                             }
+                                            
+                                            // 启动文件监控
+                                            FileMonitor.StartWatchingFile(documentPath);
                                         }
-                                        
-                                        // 启动文件监控
-                                        FileMonitor.StartWatchingFile(documentPath);
                                     }
                                     else
                                     {
@@ -1075,65 +1090,96 @@ namespace WpsPasswordManager
                                         
                                         if (fileMeta != null && fileMeta.IsModify)
                                             {
-                                                // 元数据已被修改，启动异步任务执行元数据写入
-                                                Logger.Info($"文档 {documentPath} 的元数据已修改，启动异步写入任务");
-                                                string pathCopy = documentPath; // 捕获变量
-                                                
-                                                // 在写入之前捕获密码信息（因为WriteMetaDataToFile会修改FileMeta状态）
-                                                string beforePassword = fileMeta.CurrentPassword;
-                                                List<string> pendingPasswords = fileMeta.PendingPasswordList != null ? new List<string>(fileMeta.PendingPasswordList) : null;
-                                                string fileUid = fileMeta.Uid;
-                                                string keyVersion = fileMeta.CurrentKeyVersion ?? GlobalState.Instance.KeyVersion;
-                                                
-                                                Logger.Info($"捕获密码信息用于上报: beforePassword={(string.IsNullOrEmpty(beforePassword) ? "空" : "有值")}, pendingPasswords数量={(pendingPasswords?.Count ?? 0)}, fileUid={fileUid}");
-                                                
-                                                Task.Run(async () =>
+                                                // 检查是否正在写入，防止重复启动写入任务
+                                                if (fileMeta.IsWriting)
                                                 {
-                                                    try
+                                                    Logger.Info($"文档 {documentPath} 正在写入中，跳过本次写入任务");
+                                                }
+                                                else
+                                                {
+                                                    // 设置写入标志，防止重复写入
+                                                    fileMeta.IsWriting = true;
+                                                    
+                                                    // 元数据已被修改，启动异步任务执行元数据写入
+                                                    Logger.Info($"文档 {documentPath} 的元数据已修改，启动异步写入任务");
+                                                    string pathCopy = documentPath; // 捕获变量
+                                                    
+                                                    // 在写入之前捕获密码信息（因为WriteMetaDataToFile会修改FileMeta状态）
+                                                    string beforePassword = fileMeta.CurrentPassword;
+                                                    List<string> pendingPasswords = fileMeta.PendingPasswordList != null ? new List<string>(fileMeta.PendingPasswordList) : null;
+                                                    string fileUid = fileMeta.Uid;
+                                                    string keyVersion = fileMeta.CurrentKeyVersion ?? GlobalState.Instance.KeyVersion;
+                                                    
+                                                    Logger.Info($"捕获密码信息用于上报: beforePassword={(string.IsNullOrEmpty(beforePassword) ? "空" : "有值")}, pendingPasswords数量={(pendingPasswords?.Count ?? 0)}, fileUid={fileUid}");
+                                                    
+                                                    Task.Run(async () =>
                                                     {
-                                                        // 延迟1秒，确保文件已完全关闭
-                                                        Logger.Info($"等待1秒，确保文件 {pathCopy} 已完全关闭...");
-                                                        await Task.Delay(1000);
-                                                        
-                                                        FileMetaManager fileMetaManager = new FileMetaManager();
-                                                        bool success = fileMetaManager.WriteMetaDataToFile(pathCopy);
-                                                        if (success)
+                                                        try
                                                         {
-                                                            Logger.Info($"文档 {pathCopy} 的元数据写入成功");
+                                                            // 延迟1秒，确保文件已完全关闭
+                                                            Logger.Info($"等待1秒，确保文件 {pathCopy} 已完全关闭...");
+                                                            await Task.Delay(1000);
                                                             
-                                                            // 上报密码保存记录（使用捕获的密码信息）
-                                                            var reportService = PasswordReportService.Instance;
-                                                            string afterPassword = pendingPasswords != null && pendingPasswords.Count > 0 ? pendingPasswords[0] : null;
-                                                            bool reportSuccess = await reportService.ReportSaveLogWithPasswords(
-                                                                pathCopy, fileUid, beforePassword, afterPassword, pendingPasswords, keyVersion);
-                                                            
-                                                            if (reportSuccess)
+                                                            FileMetaManager fileMetaManager = new FileMetaManager();
+                                                            bool success = fileMetaManager.WriteMetaDataToFile(pathCopy);
+                                                            if (success)
                                                             {
-                                                                Logger.Info($"文档 {pathCopy} 的密码保存记录上报成功");
+                                                                Logger.Info($"文档 {pathCopy} 的元数据写入成功");
+                                                                
+                                                                // 上报密码保存记录（使用捕获的密码信息）
+                                                                var reportService = PasswordReportService.Instance;
+                                                                string afterPassword = pendingPasswords != null && pendingPasswords.Count > 0 ? pendingPasswords[0] : null;
+                                                                
+                                                                // 如果 beforePassword、afterPassword、pendingPasswords 都是空的，不需要发送保存记录请求
+                                                                bool hasPasswordInfo = !string.IsNullOrEmpty(beforePassword) || 
+                                                                                       !string.IsNullOrEmpty(afterPassword) || 
+                                                                                       (pendingPasswords != null && pendingPasswords.Count > 0);
+                                                                
+                                                                if (hasPasswordInfo)
+                                                                {
+                                                                    bool reportSuccess = await reportService.ReportSaveLogWithPasswords(
+                                                                        pathCopy, fileUid, beforePassword, afterPassword, pendingPasswords, keyVersion);
+                                                                    
+                                                                    if (reportSuccess)
+                                                                    {
+                                                                        Logger.Info($"文档 {pathCopy} 的密码保存记录上报成功");
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        Logger.Warning($"文档 {pathCopy} 的密码保存记录上报失败");
+                                                                    }
+                                                                }
+                                                                else
+                                                                {
+                                                                    Logger.Info($"文档 {pathCopy} 无密码信息，跳过保存记录上报");
+                                                                }
                                                             }
                                                             else
                                                             {
-                                                                Logger.Warning($"文档 {pathCopy} 的密码保存记录上报失败");
+                                                                Logger.Error($"文档 {pathCopy} 的元数据写入失败");
                                                             }
                                                         }
-                                                        else
+                                                        catch (Exception ex)
                                                         {
-                                                            Logger.Error($"文档 {pathCopy} 的元数据写入失败");
+                                                            Logger.Error($"异步写入文档 {pathCopy} 元数据时发生异常: {ex.Message}");
                                                         }
-                                                    }
-                                                    catch (Exception ex)
-                                                    {
-                                                        Logger.Error($"异步写入文档 {pathCopy} 元数据时发生异常: {ex.Message}");
-                                                    }
-                                                    finally
-                                                    {
-                                                        // 停止文件监听
-                                                        FileMonitor.StopWatchingFile(pathCopy);
-                                                        // 写入完成后，从FileMetaFactory中删除对应的FileMeta实例
-                                                        FileMetaFactory.Instance.CleanupFileMeta(pathCopy);
-                                                        Logger.Info($"已从FileMetaFactory中移除文档: {pathCopy}");
-                                                    }
-                                                });
+                                                        finally
+                                                        {
+                                                            // 重置写入标志
+                                                            FileMeta currentFileMeta = FileMetaFactory.Instance.GetFileMeta(pathCopy);
+                                                            if (currentFileMeta != null)
+                                                            {
+                                                                currentFileMeta.IsWriting = false;
+                                                            }
+                                                            
+                                                            // 停止文件监听
+                                                            FileMonitor.StopWatchingFile(pathCopy);
+                                                            // 写入完成后，从FileMetaFactory中删除对应的FileMeta实例
+                                                            FileMetaFactory.Instance.CleanupFileMeta(pathCopy);
+                                                            Logger.Info($"已从FileMetaFactory中移除文档: {pathCopy}");
+                                                        }
+                                                    });
+                                                }
                                             }
                                             else
                                             {
