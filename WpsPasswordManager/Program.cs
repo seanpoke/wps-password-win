@@ -596,8 +596,9 @@ namespace WpsPasswordManager
                                                         if (GlobalState.Instance.IsLoggedIn && !string.IsNullOrEmpty(GlobalState.Instance.Token))
                                                         {
                                                             var httpRequestService = RequestFactory.GetHttpRequestService();
-                                                            var queryParams = new { docId = uid };
-                                                            var response = httpRequestService.GetAsync<DocOwnerInfo>(ApiRoutes.DocOwner, GlobalState.Instance.Token, queryParams).GetAwaiter().GetResult();
+                                                            string fileName = System.IO.Path.GetFileName(documentPath);
+                                                            var requestData = new { docId = uid, fileName = fileName };
+                                                            var response = httpRequestService.PostAsync<DocOwnerInfo>(ApiRoutes.DocOwner, requestData, GlobalState.Instance.Token).GetAwaiter().GetResult();
                                                             
                                                             if (response != null && response.data != null)
                                                             {
