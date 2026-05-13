@@ -207,6 +207,24 @@ namespace WpsPasswordManager.Services.Report
                     Logger.Info("旧密码 (beforePassword) 为空，跳过");
                 }
 
+                if (!string.IsNullOrEmpty(fileMeta.AfterPassword))
+                {
+                    Logger.Info($"准备加密新密码 (afterPassword)，密码长度: {fileMeta.AfterPassword.Length}");
+                    encryptedAfterPassword = CryptoUtils.EncryptPasswordByPublicKey(fileMeta.AfterPassword, publicKey);
+                    if (encryptedAfterPassword == null)
+                    {
+                        Logger.Warning("新密码加密失败");
+                    }
+                    else
+                    {
+                        Logger.Info($"新密码加密成功，加密后长度: {encryptedAfterPassword.Length}");
+                    }
+                }
+                else
+                {
+                    Logger.Info("新密码 (afterPassword) 为空，跳过");
+                }
+
                 if (fileMeta.PendingPasswordList != null && fileMeta.PendingPasswordList.Count > 0)
                 {
                     Logger.Info($"准备加密待定密码 (pendingPasswords)，数量: {fileMeta.PendingPasswordList.Count}");
@@ -229,12 +247,7 @@ namespace WpsPasswordManager.Services.Report
                         }
                         index++;
                     }
-
-                    if (encryptedPossiblePasswords.Count > 0)
-                    {
-                        encryptedAfterPassword = encryptedPossiblePasswords[0];
-                        Logger.Info($"待定密码集合加密完成，有效密码数量: {encryptedPossiblePasswords.Count}");
-                    }
+                    Logger.Info($"待定密码集合加密完成，有效密码数量: {encryptedPossiblePasswords.Count}");
                 }
                 else
                 {
