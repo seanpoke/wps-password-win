@@ -137,11 +137,6 @@ namespace WpsPasswordManager.Business
                     
                     if (zipExtraFieldManager.AppendMetadataToFileEnd(filePath, metadataBlock))
                     {
-                        var fileMeta = fileMetaFactory.GetFileMeta(filePath);
-                        if (fileMeta != null)
-                        {
-                            fileMeta.CurrentKeyVersion = keyVersion;
-                        }
                         return true;
                     }
                     else
@@ -254,9 +249,6 @@ namespace WpsPasswordManager.Business
                     
                     if (zipExtraFieldManager.AppendMetadataToFileEnd(filePath, metadataBlock))
                     {
-                        var fileMeta = fileMetaFactory.GetFileMeta(filePath);
-                        fileMeta.CurrentPassword = password;
-                        fileMeta.ClearPendingPasswords();
                         return true;
                     }
                     else
@@ -374,8 +366,6 @@ namespace WpsPasswordManager.Business
                     
                     if (zipExtraFieldManager.AppendMetadataToFileEnd(filePath, metadataBlock))
                     {
-                        var fileMeta = fileMetaFactory.GetFileMeta(filePath);
-                        fileMeta.Uid = uid;
                         return true;
                     }
                     else
@@ -399,31 +389,35 @@ namespace WpsPasswordManager.Business
             return false;
         }
 
-        public bool WriteMetaDataToFile(string filePath)
+        public bool WriteMetaDataToFile(FileMeta reportFileMeta)
         {
-            var fileMeta = fileMetaFactory.GetFileMeta(filePath);
-            if (fileMeta == null)
+            if (reportFileMeta == null)
             {
-                Logger.Error($"未找到文件 {filePath} 的元数据");
+                Logger.Error("reportFileMeta 不能为空");
                 return false;
             }
 
-            fileMetaFactory.SetPluginOperation(true);
+            string filePath = reportFileMeta.FilePath;
+            if (string.IsNullOrEmpty(filePath))
+            {
+                Logger.Error("filePath 不能为空");
+                return false;
+            }
 
-            string password = fileMetaFactory.GetWritePassword(filePath);
-            bool hasPassword = !string.IsNullOrEmpty(password);
+            string afterPassword = reportFileMeta.AfterPassword;
+            bool hasPassword = !string.IsNullOrEmpty(afterPassword);
             
             if (hasPassword)
             {
-                if (!WritePasswordToFile(filePath, password))
+                if (!WritePasswordToFile(filePath, afterPassword))
                 {
                     return false;
                 }
             }
 
-            if (!string.IsNullOrEmpty(fileMeta.Uid))
+            if (!string.IsNullOrEmpty(reportFileMeta.Uid))
             {
-                if (!WriteUidToFile(filePath, fileMeta.Uid))
+                if (!WriteUidToFile(filePath, reportFileMeta.Uid))
                 {
                     return false;
                 }
@@ -437,16 +431,11 @@ namespace WpsPasswordManager.Business
                 }
             }
 
-            // 只有在有密码的情况下才写入keyVersion
-            if (hasPassword)
+            if (hasPassword && !string.IsNullOrEmpty(reportFileMeta.CurrentKeyVersion))
             {
-                string keyVersion = GlobalState.Instance.KeyVersion;
-                if (!string.IsNullOrEmpty(keyVersion))
+                if (!WriteKeyVersionToFile(filePath, reportFileMeta.CurrentKeyVersion))
                 {
-                    if (!WriteKeyVersionToFile(filePath, keyVersion))
-                    {
-                        return false;
-                    }
+                    return false;
                 }
             }
 

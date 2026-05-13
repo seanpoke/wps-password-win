@@ -106,8 +106,7 @@ namespace WpsPasswordManager
         private static HookProc _mouseHookProc;
         private static IntPtr _mouseHook;
 
-        // 记录已经尝试过自动填充密码的文档路径，确保每个文档只尝试一次
-        private static HashSet<string> attemptedDocuments = new HashSet<string>();
+
 
         // 常量定义
         private const int WH_MOUSE_LL = 14;
@@ -142,11 +141,6 @@ namespace WpsPasswordManager
             public int Right;
             public int Bottom;
         }
-
-        // 本地缓存，用于存储文档路径和对应的密码
-        private static System.Collections.Generic.Dictionary<string, string> passwordCache = new System.Collections.Generic.Dictionary<string, string>();
-
-
 
         // 监控文档关闭事件的线程
         private static Thread documentCloseMonitorThread;
@@ -571,13 +565,9 @@ namespace WpsPasswordManager
                                     if (!string.IsNullOrEmpty(documentPath))
                                     {
                                         // 检查文档是否真的被打开，避免重复监控已关闭的文档
-                                        if (!IsDocumentOpen(documentPath))
+                                        if (IsDocumentOpen(documentPath))
                                         {
-                                            Logger.Debug($"文档 {documentPath} 未被打开，跳过监控");
-                                        }
-                                        else
-                                        {
-                                            // Logger.Info($"获取到文档路径: {documentPath}");
+                                            Logger.Info($"获取到文档路径: {documentPath}");
                                             
                                             // 检查文件元数据是否已存在
                                             if (!FileMetaFactory.Instance.HasFileMeta(documentPath))
@@ -678,13 +668,6 @@ namespace WpsPasswordManager
                                                 {
                                                     Logger.Error($"文件元数据初始化失败: {ex.Message}");
                                                 }
-                                            }
-                                            
-                                            // 将文档加入尝试记录，以便检测关闭事件
-                                            if (!attemptedDocuments.Contains(documentPath))
-                                            {
-                                                attemptedDocuments.Add(documentPath);
-                                                Logger.Info($"文档已加入监控: {documentPath}");
                                             }
                                             
                                             // 启动文件监控
@@ -888,13 +871,15 @@ namespace WpsPasswordManager
                                         {
                                             // Logger.Info($"获取到文档路径: {documentPath}");
 
-                                            if (!attemptedDocuments.Contains(documentPath))
+                                            if (!AutoFillAttemptManager.Instance.HasAttempted(documentPath))
                                             {
+                                                AutoFillAttemptManager.Instance.AddAttempt(documentPath);
+                                                
                                                 var fileMeta = FileMetaFactory.Instance.GetFileMeta(documentPath);
                                                 if (fileMeta != null && !string.IsNullOrEmpty(fileMeta.CurrentPassword))
                                                 {
                                                     string password = fileMeta.CurrentPassword;
-                                                    Logger.Info($"从FileMetaFactory中获取到密码");
+                                                    Logger.Info($"从FileMetaFactory中获取到密码,password={password}");
 
                                                     bool success = autoFiller.FillDecryptPassword(password);
                                                     if (success)
@@ -903,7 +888,7 @@ namespace WpsPasswordManager
                                                         bool dialogClosed = WaitForDialogClose(decryptDialog, 2500);
                                                         if (dialogClosed)
                                                         {
-                                                            attemptedDocuments.Add(documentPath);
+                                                            AutoFillAttemptManager.Instance.MarkSuccess(documentPath);
                                                             Logger.Info($"已标记文档 {documentPath} 为已尝试自动填充密码");
                                                         }
                                                     }
@@ -936,13 +921,14 @@ namespace WpsPasswordManager
                                                         bool dialogClosed = WaitForDialogClose(decryptDialog, 2500);
                                                         if (dialogClosed)
                                                         {
-                                                            attemptedDocuments.Add(documentPath);
+                                                            AutoFillAttemptManager.Instance.MarkSuccess(documentPath);
                                                         }
                                                     }
                                                 }
                                                 else
                                                 {
                                                     Logger.Warning("未找到文件元数据或密码为空");
+                                                    AutoFillAttemptManager.Instance.RemoveRecord(documentPath);
                                                 }
                                             }
                                             else
@@ -993,214 +979,126 @@ namespace WpsPasswordManager
                 // 启动文档关闭监控线程
                 documentCloseMonitorThread = new Thread(() =>
                 {
-                    MetadataManager metadataManager = new MetadataManager();
-
-                    // 记录每个文档的尝试次数
-                    Dictionary<string, int> retryCounts = new Dictionary<string, int>();
-                    const int maxRetries = 3;
-
                     while (true)
                     {
                         try
                         {
-                            // 检查缓存中是否有密码
-                            if (passwordCache.Count > 0)
+                            List<string> watchedFiles = FileMonitor.GetWatchedFiles();
+                            
+                            if (watchedFiles.Count > 0)
                             {
-                                // 遍历缓存中的文档路径
-                                List<string> documentsToRemove = new List<string>();
+                                List<string> docsToStopWatching = new List<string>();
 
-                                foreach (var entry in passwordCache)
+                                foreach (string documentPath in watchedFiles)
                                 {
-                                    string documentPath = entry.Key;
-                                    string password = entry.Value;
-
-                                    // 检查文档是否仍然打开
+                                    // 1. 判断文件是否已关闭
                                     if (!IsDocumentOpen(documentPath))
                                     {
-                                        // 文档已关闭，将密码写入元数据
-                                        Logger.Info($"文档已关闭，将密码写入元数据: {documentPath}");
+                                        // 2. 已关闭则清理AutoFillAttemptManager中的记录
+                                        AutoFillAttemptManager.Instance.RemoveRecord(documentPath);
+                                        Logger.Info($"文档已关闭，清理自动填充尝试记录: {documentPath}");
 
-                                        // 检查尝试次数
-                                        if (!retryCounts.ContainsKey(documentPath))
-                                        {
-                                            retryCounts[documentPath] = 0;
-                                        }
-
-                                        if (retryCounts[documentPath] < maxRetries)
-                                        {
-                                            retryCounts[documentPath]++;
-                                            bool writeSuccess = metadataManager.WritePasswordToMetadata(documentPath, password);
-                                            // 保存UID到元数据
-                                            bool uidWriteSuccess = metadataManager.SaveDocumentUid(documentPath);
-                                            if (writeSuccess && uidWriteSuccess)
-                                            {
-                                                Logger.Info($"密码和UID已成功写入文档元数据: {documentPath}");
-                                                documentsToRemove.Add(documentPath);
-                                                retryCounts.Remove(documentPath);
-                                            }
-                                            else
-                                            {
-                                                if (!writeSuccess)
-                                                {
-                                                    Logger.Error($"无法将密码写入文档元数据 (尝试 {retryCounts[documentPath]}/{maxRetries}): {documentPath}");
-                                                }
-                                                if (!uidWriteSuccess)
-                                                {
-                                                    Logger.Error($"无法将UID写入文档元数据 (尝试 {retryCounts[documentPath]}/{maxRetries}): {documentPath}");
-                                                }
-                                            }
-                                        }
-                                        else
-                                        {
-                                            // 达到最大尝试次数，从缓存中移除
-                                            Logger.Error($"达到最大尝试次数，无法将密码和UID写入文档元数据: {documentPath}");
-                                            documentsToRemove.Add(documentPath);
-                                            retryCounts.Remove(documentPath);
-                                        }
-                                    }
-                                }
-
-                                // 从缓存中移除已处理的文档
-                                foreach (string documentPath in documentsToRemove)
-                                {
-                                    passwordCache.Remove(documentPath);
-                                    Logger.Info($"从缓存中移除文档: {documentPath}");
-
-                                    // 同时从尝试记录中移除，以便下次打开时重新尝试
-                                    if (attemptedDocuments.Contains(documentPath))
-                                    {
-                                        attemptedDocuments.Remove(documentPath);
-                                        Logger.Info($"从尝试记录中移除文档: {documentPath}");
-                                    }
-                                }
-                            }
-
-                            // 检查尝试记录中的文档是否已关闭
-                            if (attemptedDocuments.Count > 0)
-                            {
-                                List<string> attemptedDocsToRemove = new List<string>();
-
-                                foreach (string documentPath in attemptedDocuments)
-                                {
-                                    // 检查文档是否仍然打开
-                                    if (!IsDocumentOpen(documentPath))
-                                    {
-                                        // 获取文件元数据
+                                        // 3. 从FileMetaFactory获取元数据
                                         FileMeta fileMeta = FileMetaFactory.Instance.GetFileMeta(documentPath);
-                                        
-                                        if (fileMeta != null && fileMeta.IsModify)
+
+                                        if (fileMeta != null)
+                                        {
+                                            // 4. 判断元数据是否已修改
+                                            if (fileMeta.IsModify)
                                             {
-                                                // 检查是否正在写入，防止重复启动写入任务
+                                                // 5. 判断元数据是否正在执行写操作
                                                 if (fileMeta.IsWriting)
                                                 {
                                                     Logger.Info($"文档 {documentPath} 正在写入中，跳过本次写入任务");
+                                                    continue;
                                                 }
-                                                else
+
+                                                // 6. 更新元数据的写变量（volatile保证可见性）
+                                                fileMeta.IsWriting = true;
+
+                                                Logger.Info($"文档 {documentPath} 的元数据已修改，启动异步写入任务");
+                                                string pathCopy = documentPath;
+
+                                                string beforePassword = fileMeta.CurrentPassword;
+                                                string writePassword = FileMetaFactory.Instance.GetWritePassword(pathCopy);
+                                                SortedSet<string> pendingPasswords = fileMeta.PendingPasswordList != null ? new SortedSet<string>(fileMeta.PendingPasswordList) : null;
+                                                string fileUid = fileMeta.Uid;
+                                                string keyVersion = GlobalState.Instance.KeyVersion;
+
+                                                FileMeta asyncFileMeta = new FileMeta(pathCopy)
                                                 {
-                                                    // 设置写入标志，防止重复写入
-                                                    fileMeta.IsWriting = true;
-                                                    
-                                                    // 元数据已被修改，启动异步任务执行元数据写入
-                                                    Logger.Info($"文档 {documentPath} 的元数据已修改，启动异步写入任务");
-                                                    string pathCopy = documentPath; // 捕获变量
-                                                    
-                                                    // 在写入之前捕获密码信息（因为WriteMetaDataToFile会修改FileMeta状态）
-                                                    string beforePassword = fileMeta.CurrentPassword;
-                                                    List<string> pendingPasswords = fileMeta.PendingPasswordList != null ? new List<string>(fileMeta.PendingPasswordList) : null;
-                                                    string fileUid = fileMeta.Uid;
-                                                    string keyVersion = fileMeta.CurrentKeyVersion ?? GlobalState.Instance.KeyVersion;
-                                                    
-                                                    Logger.Info($"捕获密码信息用于上报: beforePassword={(string.IsNullOrEmpty(beforePassword) ? "空" : "有值")}, pendingPasswords数量={(pendingPasswords?.Count ?? 0)}, fileUid={fileUid}");
-                                                    
-                                                    Task.Run(async () =>
+                                                    CurrentPassword = beforePassword,
+                                                    AfterPassword = writePassword,
+                                                    Uid = fileUid,
+                                                    CurrentKeyVersion = keyVersion,
+                                                    PendingPasswordList = pendingPasswords,
+                                                };
+
+                                                Logger.Info($"捕获密码信息用于上报: beforePassword={(string.IsNullOrEmpty(asyncFileMeta.CurrentPassword) ? "空" : "有值")}, pendingPasswords数量={(asyncFileMeta.PendingPasswordList?.Count ?? 0)}, fileUid={asyncFileMeta.Uid}");
+
+                                                // 7. 执行写密码和上报记录的异步操作
+                                                Task.Run(async () =>
+                                                {
+                                                    try
                                                     {
-                                                        try
+                                                        Logger.Info($"等待1秒，确保文件 {pathCopy} 已完全关闭...");
+                                                        await Task.Delay(1000);
+
+                                                        FileMetaManager fileMetaManager = new FileMetaManager();
+                                                        bool success = fileMetaManager.WriteMetaDataToFile(asyncFileMeta);
+                                                        if (success)
                                                         {
-                                                            // 延迟1秒，确保文件已完全关闭
-                                                            Logger.Info($"等待1秒，确保文件 {pathCopy} 已完全关闭...");
-                                                            await Task.Delay(1000);
-                                                            
-                                                            FileMetaManager fileMetaManager = new FileMetaManager();
-                                                            bool success = fileMetaManager.WriteMetaDataToFile(pathCopy);
-                                                            if (success)
+                                                            Logger.Info($"文档 {pathCopy} 的元数据写入成功");
+                                                        }
+                                                        else
+                                                        {
+                                                            Logger.Error($"文档 {pathCopy} 的元数据写入失败");
+                                                        }
+                                                   
+                                                        var reportService = PasswordReportService.Instance;
+
+                                                        bool hasPasswordInfo = !string.IsNullOrEmpty(asyncFileMeta.CurrentPassword) ||
+                                                                                !string.IsNullOrEmpty(asyncFileMeta.AfterPassword) ||
+                                                                                (asyncFileMeta.PendingPasswordList != null && asyncFileMeta.PendingPasswordList.Count > 0);
+
+                                                        if (hasPasswordInfo)
+                                                        {
+                                                            bool reportSuccess = await reportService.ReportSaveLogWithPasswords(asyncFileMeta);
+
+                                                            if (reportSuccess)
                                                             {
-                                                                Logger.Info($"文档 {pathCopy} 的元数据写入成功");
-                                                                
-                                                                // 上报密码保存记录（使用捕获的密码信息）
-                                                                var reportService = PasswordReportService.Instance;
-                                                                string afterPassword = pendingPasswords != null && pendingPasswords.Count > 0 ? pendingPasswords[0] : null;
-                                                                
-                                                                // 如果 beforePassword、afterPassword、pendingPasswords 都是空的，不需要发送保存记录请求
-                                                                bool hasPasswordInfo = !string.IsNullOrEmpty(beforePassword) || 
-                                                                                       !string.IsNullOrEmpty(afterPassword) || 
-                                                                                       (pendingPasswords != null && pendingPasswords.Count > 0);
-                                                                
-                                                                if (hasPasswordInfo)
-                                                                {
-                                                                    bool reportSuccess = await reportService.ReportSaveLogWithPasswords(
-                                                                        pathCopy, fileUid, beforePassword, afterPassword, pendingPasswords, keyVersion);
-                                                                    
-                                                                    if (reportSuccess)
-                                                                    {
-                                                                        Logger.Info($"文档 {pathCopy} 的密码保存记录上报成功");
-                                                                    }
-                                                                    else
-                                                                    {
-                                                                        Logger.Warning($"文档 {pathCopy} 的密码保存记录上报失败");
-                                                                    }
-                                                                }
-                                                                else
-                                                                {
-                                                                    Logger.Info($"文档 {pathCopy} 无密码信息，跳过保存记录上报");
-                                                                }
+                                                                Logger.Info($"文档 {pathCopy} 的密码保存记录上报成功");
                                                             }
                                                             else
                                                             {
-                                                                Logger.Error($"文档 {pathCopy} 的元数据写入失败");
+                                                                Logger.Warning($"文档 {pathCopy} 的密码保存记录上报失败");
                                                             }
                                                         }
-                                                        catch (Exception ex)
+                                                        else
                                                         {
-                                                            Logger.Error($"异步写入文档 {pathCopy} 元数据时发生异常: {ex.Message}");
+                                                            Logger.Info($"文档 {pathCopy} 无密码信息，跳过保存记录上报");
                                                         }
-                                                        finally
-                                                        {
-                                                            // 重置写入标志
-                                                            FileMeta currentFileMeta = FileMetaFactory.Instance.GetFileMeta(pathCopy);
-                                                            if (currentFileMeta != null)
-                                                            {
-                                                                currentFileMeta.IsWriting = false;
-                                                            }
-                                                            
-                                                            // 停止文件监听
-                                                            FileMonitor.StopWatchingFile(pathCopy);
-                                                            // 写入完成后，从FileMetaFactory中删除对应的FileMeta实例
-                                                            FileMetaFactory.Instance.CleanupFileMeta(pathCopy);
-                                                            Logger.Info($"已从FileMetaFactory中移除文档: {pathCopy}");
-                                                        }
-                                                    });
-                                                }
+                                                      
+                                                    }
+                                                    catch (Exception ex)
+                                                    {
+                                                        Logger.Error($"异步写入文档 {pathCopy} 元数据时发生异常: {ex.Message}");
+                                                    }
+                                                });
                                             }
-                                            else
-                                            {
-                                                // 停止文件监听
-                                                FileMonitor.StopWatchingFile(documentPath);
-                                                // 元数据未被修改，直接从FileMetaFactory中删除对应的FileMeta实例
-                                                FileMetaFactory.Instance.CleanupFileMeta(documentPath);
-                                                Logger.Info($"文档 {documentPath} 的元数据未修改，直接从FileMetaFactory中移除");
-                                            }
-                                            
-                                            // 从尝试记录中移除
-                                            attemptedDocsToRemove.Add(documentPath);
-                                            Logger.Info($"文档已关闭，从尝试记录中移除: {documentPath}");
+                                        }
+                                        // 清理元数据
+                                        FileMetaFactory.Instance.CleanupFileMeta(documentPath);
+                                        Logger.Info($"已从FileMetaFactory中移除文档: {documentPath}");
+                                        // 标记需要停止监听
+                                        docsToStopWatching.Add(documentPath);
                                     }
                                 }
 
-                                // 从尝试记录中移除已关闭的文档
-                                foreach (string documentPath in attemptedDocsToRemove)
+                                // 停止监听已关闭的文件
+                                foreach (string documentPath in docsToStopWatching)
                                 {
-                                    attemptedDocuments.Remove(documentPath);
-                                    Logger.Info($"已从尝试记录中移除文档: {documentPath}");
+                                    FileMonitor.StopWatchingFile(documentPath);
                                 }
                             }
 

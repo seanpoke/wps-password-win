@@ -2,7 +2,6 @@ using System;
 using System.Threading;
 using WpsPasswordManager.Locator;
 using WpsPasswordManager.Monitor;
-using WpsPasswordManager.Simulator;
 using WpsPasswordManager.Utils;
 
 namespace WpsPasswordManager.Filler
@@ -11,7 +10,6 @@ namespace WpsPasswordManager.Filler
     {
         private readonly QtWindowLocator _windowLocator;
         private readonly WpsMonitor _monitor;
-        private readonly InputSimulator _inputSimulator;
 
         private const int MaxRetries = 3;
         private const int RetryDelayMs = 200;
@@ -20,7 +18,6 @@ namespace WpsPasswordManager.Filler
         {
             _windowLocator = new QtWindowLocator();
             _monitor = new WpsMonitor();
-            _inputSimulator = new InputSimulator();
         }
 
         public bool FillDecryptPassword(string password)
@@ -29,7 +26,7 @@ namespace WpsPasswordManager.Filler
 
             for (int retry = 0; retry < MaxRetries; retry++)
             {
-                IntPtr dialogHandle = _windowLocator.FindPasswordDialog();
+                IntPtr dialogHandle = _monitor.FindPasswordDialog();
                 if (dialogHandle == IntPtr.Zero)
                 {
                     Logger.Warning($"第 {retry + 1}/{MaxRetries} 次尝试未找到密码对话框");
@@ -44,7 +41,7 @@ namespace WpsPasswordManager.Filler
                     continue;
                 }
 
-                if (TryFillPasswordByKeyboard(dialogHandle, password, false))
+                if (TryFillPasswordByUIAutomation(dialogHandle, password, false))
                 {
                     Logger.Info("解密密码填充成功");
                     return true;
@@ -63,7 +60,7 @@ namespace WpsPasswordManager.Filler
 
             for (int retry = 0; retry < MaxRetries; retry++)
             {
-                IntPtr dialogHandle = _windowLocator.FindPasswordDialog();
+                IntPtr dialogHandle = _monitor.FindPasswordDialog();
                 if (dialogHandle == IntPtr.Zero)
                 {
                     Logger.Warning($"第 {retry + 1}/{MaxRetries} 次尝试未找到密码对话框");
@@ -78,7 +75,7 @@ namespace WpsPasswordManager.Filler
                     continue;
                 }
 
-                if (TryFillPasswordByKeyboard(dialogHandle, password, true))
+                if (TryFillPasswordByUIAutomation(dialogHandle, password, true))
                 {
                     Logger.Info("加密密码填充成功");
                     return true;
@@ -91,45 +88,28 @@ namespace WpsPasswordManager.Filler
             return false;
         }
 
-        private bool TryFillPasswordByKeyboard(IntPtr dialogHandle, string password, bool isEncrypt)
+        private bool TryFillPasswordByUIAutomation(IntPtr dialogHandle, string password, bool isEncrypt)
         {
             try
             {
-                Logger.Debug("尝试通过键盘导航方式填充密码");
-
-                InputSimulator.SetForegroundWindow(dialogHandle);
-                Thread.Sleep(300);
+                Logger.Debug("尝试通过UI Automation填充密码");
 
                 if (isEncrypt)
                 {
-                    return TryFillEncryptPasswordByControl(dialogHandle, password);
+                    return FillPasswordByUIAutomation(dialogHandle, password, "打开文件密码", "再次输入密码");
                 }
                 else
                 {
-                    return TryFillDecryptPasswordByControl(dialogHandle, password);
+                    return FillPasswordByUIAutomation(dialogHandle, password, "请输入密码", "");
                 }
             }
             catch (Exception ex)
             {
-                Logger.Error($"键盘导航填充失败: {ex.Message}");
+                Logger.Error($"UI Automation填充密码失败: {ex.Message}");
                 return false;
             }
         }
 
-        private bool TryFillEncryptPasswordByControl(IntPtr dialogHandle, string password)
-        {
-            try
-            {
-                Logger.Debug("处理密码加密窗口填充 - 使用UI Automation");
-                return FillPasswordByUIAutomation(dialogHandle, password, "打开文件密码", "再次输入密码");
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"加密密码填充失败: {ex.Message}");
-                return false;
-            }
-        }
-        
         private bool FillPasswordByUIAutomation(IntPtr dialogHandle, string password, string firstFieldName, string secondFieldName)
         {
             try
@@ -285,12 +265,18 @@ namespace WpsPasswordManager.Filler
                 
                 object firstField = null;
                 object secondField = null;
+                object firstEditControl = null;
                 
                 for (int i = 0; i < count; i++)
                 {
                     object editElement = getItemMethod.Invoke(editElements, new object[] { i });
                     if (editElement == null)
                         continue;
+                    
+                    if (firstEditControl == null)
+                    {
+                        firstEditControl = editElement;
+                    }
                     
                     System.Reflection.PropertyInfo currentProperty = automationElementType.GetProperty("Current");
                     if (currentProperty != null)
@@ -311,10 +297,15 @@ namespace WpsPasswordManager.Filler
                                         firstField = editElement;
                                         Logger.Info($"UI Automation找到第一个目标输入框: {name}");
                                     }
-                                    else if (name.Contains(secondFieldName) && secondField == null)
+                                    else if ((!string.IsNullOrEmpty(secondFieldName) && name.Contains(secondFieldName)) && secondField == null)
                                     {
                                         secondField = editElement;
                                         Logger.Info($"UI Automation找到第二个目标输入框: {name}");
+                                    }
+                                    else if (name.Contains("Password") && firstField == null)
+                                    {
+                                        firstField = editElement;
+                                        Logger.Info($"UI Automation通过Password关键词找到输入框: {name}");
                                     }
                                 }
                             }
@@ -324,8 +315,16 @@ namespace WpsPasswordManager.Filler
                 
                 if (firstField == null)
                 {
-                    Logger.Warning($"UI Automation未找到 '{firstFieldName}' 输入框");
-                    return false;
+                    if (firstEditControl != null)
+                    {
+                        firstField = firstEditControl;
+                        Logger.Info($"UI Automation未找到匹配名称的输入框，使用第一个编辑控件");
+                    }
+                    else
+                    {
+                        Logger.Warning($"UI Automation未找到 '{firstFieldName}' 输入框");
+                        return false;
+                    }
                 }
                 
                 Type valuePatternType = uiaClient.GetType("System.Windows.Automation.ValuePattern");
@@ -437,6 +436,9 @@ namespace WpsPasswordManager.Filler
                 }
                 
                 Logger.Info("UI Automation密码填充成功");
+                
+                TryClickOkButtonByUIAutomation(dialogHandle);
+                
                 return true;
             }
             catch (Exception ex)
@@ -446,98 +448,203 @@ namespace WpsPasswordManager.Filler
             }
         }
 
-        private bool TryFillDecryptPasswordByControl(IntPtr dialogHandle, string password)
+        private void TryClickOkButtonByUIAutomation(IntPtr dialogHandle)
         {
             try
             {
-                Logger.Debug("处理解密窗口填充 - 使用控件定位");
-
-                IntPtr passwordEdit = _monitor.FindPasswordEdit(dialogHandle);
-                if (passwordEdit != IntPtr.Zero)
+                Logger.Debug("尝试通过UI Automation点击确定按钮");
+                
+                System.Reflection.Assembly uiaClient = null;
+                System.Reflection.Assembly uiaTypes = null;
+                
+                try
                 {
-                    Logger.Info($"找到密码输入框: {passwordEdit}");
-
-                    _inputSimulator.SimulateMouseClick(passwordEdit);
-                    Thread.Sleep(100);
-
-                    _inputSimulator.ClearInput(passwordEdit);
-                    Thread.Sleep(50);
-
-                    _inputSimulator.SimulatePasswordInput(passwordEdit, password);
-                    Thread.Sleep(150);
-
-                    _inputSimulator.SimulateEnterKey();
-                    Thread.Sleep(200);
-
-                    Logger.Info("解密密码填充成功（使用控件定位）");
-                    return true;
+                    uiaClient = System.Reflection.Assembly.Load("UIAutomationClient, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35");
+                }
+                catch
+                {
+                    uiaClient = System.Reflection.Assembly.Load("UIAutomationClient");
+                }
+                
+                try
+                {
+                    uiaTypes = System.Reflection.Assembly.Load("UIAutomationTypes, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35");
+                }
+                catch
+                {
+                    uiaTypes = System.Reflection.Assembly.Load("UIAutomationTypes");
+                }
+                
+                Type automationElementType = uiaClient.GetType("System.Windows.Automation.AutomationElement");
+                if (automationElementType == null)
+                    return;
+                
+                object dialogElement = automationElementType.GetMethod("FromHandle").Invoke(null, new object[] { dialogHandle });
+                if (dialogElement == null)
+                    return;
+                
+                Type treeScopeType = uiaTypes.GetType("System.Windows.Automation.TreeScope");
+                if (treeScopeType == null)
+                    return;
+                object treeScopeDescendants = System.Enum.Parse(treeScopeType, "Descendants");
+                
+                Type controlTypeType = uiaTypes.GetType("System.Windows.Automation.ControlType");
+                if (controlTypeType == null)
+                    return;
+                
+                System.Reflection.FieldInfo buttonField = controlTypeType.GetField("Button");
+                if (buttonField == null)
+                    return;
+                object buttonControlType = buttonField.GetValue(null);
+                
+                Type propertyConditionType = uiaClient.GetType("System.Windows.Automation.PropertyCondition");
+                if (propertyConditionType == null)
+                    propertyConditionType = uiaTypes.GetType("System.Windows.Automation.PropertyCondition");
+                if (propertyConditionType == null)
+                    return;
+                
+                object controlTypeProperty = null;
+                System.Reflection.PropertyInfo controlTypePropertyInfo = automationElementType.GetProperty("ControlTypeProperty");
+                if (controlTypePropertyInfo != null)
+                {
+                    controlTypeProperty = controlTypePropertyInfo.GetValue(null);
                 }
                 else
                 {
-                    Logger.Warning("未找到密码输入框，回退到Tab键导航");
-                    return TryFillDecryptPasswordByTab(dialogHandle, password);
+                    System.Reflection.FieldInfo controlTypePropertyField = automationElementType.GetField("ControlTypeProperty", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                    if (controlTypePropertyField != null)
+                        controlTypeProperty = controlTypePropertyField.GetValue(null);
                 }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"控件定位填充失败，回退到Tab键导航: {ex.Message}");
-                return TryFillDecryptPasswordByTab(dialogHandle, password);
-            }
-        }
-
-        private bool TryFillDecryptPasswordByTab(IntPtr dialogHandle, string password)
-        {
-            try
-            {
-                Logger.Debug("处理解密窗口填充 - 使用Tab键导航");
-
-                _inputSimulator.SimulateMouseClick(dialogHandle);
-                Thread.Sleep(200);
-
-                for (int i = 0; i < 3; i++)
+                
+                if (controlTypeProperty == null)
+                    return;
+                
+                object buttonCondition = Activator.CreateInstance(propertyConditionType, new object[] { controlTypeProperty, buttonControlType });
+                if (buttonCondition == null)
+                    return;
+                
+                System.Reflection.MethodInfo findAllMethod = automationElementType.GetMethod("FindAll");
+                if (findAllMethod == null)
+                    return;
+                
+                object buttons = findAllMethod.Invoke(dialogElement, new object[] { treeScopeDescendants, buttonCondition });
+                if (buttons == null)
+                    return;
+                
+                System.Reflection.PropertyInfo countProperty = buttons.GetType().GetProperty("Count");
+                if (countProperty == null)
+                    return;
+                
+                int count = (int)countProperty.GetValue(buttons);
+                Logger.Debug($"UI Automation找到 {count} 个按钮控件");
+                
+                System.Reflection.MethodInfo getItemMethod = buttons.GetType().GetMethod("get_Item");
+                if (getItemMethod == null)
+                    return;
+                
+                string[] okButtonTexts = { "确定", "OK", "打开" };
+                
+                for (int i = 0; i < count; i++)
                 {
-                    _inputSimulator.SimulateTabKey();
-                    Thread.Sleep(100);
+                    object buttonElement = getItemMethod.Invoke(buttons, new object[] { i });
+                    if (buttonElement == null)
+                        continue;
+                    
+                    System.Reflection.PropertyInfo currentProperty = automationElementType.GetProperty("Current");
+                    if (currentProperty != null)
+                    {
+                        object current = currentProperty.GetValue(buttonElement);
+                        if (current != null)
+                        {
+                            System.Reflection.PropertyInfo nameProperty = current.GetType().GetProperty("Name");
+                            if (nameProperty != null)
+                            {
+                                string name = (string)nameProperty.GetValue(current);
+                                Logger.Debug($"UI Automation按钮 #{i} 名称: {name}");
+                                
+                                foreach (string okText in okButtonTexts)
+                                {
+                                    if (name != null && name.IndexOf(okText, StringComparison.OrdinalIgnoreCase) >= 0)
+                                    {
+                                        Logger.Debug($"按钮 '{name}' 匹配成功! 准备点击...");
+                                        
+                                        Type invokePatternType = uiaClient.GetType("System.Windows.Automation.InvokePattern");
+                                        
+                                        if (invokePatternType != null)
+                                        {
+                                            object invokePatternProperty = invokePatternType.GetProperty("Pattern")?.GetValue(null);
+                                            if (invokePatternProperty == null)
+                                            {
+                                                invokePatternProperty = invokePatternType.GetField("Pattern")?.GetValue(null);
+                                            }
+                                            
+                                            if (invokePatternProperty != null)
+                                            {
+                                                System.Reflection.MethodInfo tryGetCurrentPatternMethod = automationElementType.GetMethod("TryGetCurrentPattern");
+                                                
+                                                if (tryGetCurrentPatternMethod != null)
+                                                {
+                                                    object[] patternParams = new object[2];
+                                                    patternParams[0] = invokePatternProperty;
+                                                    patternParams[1] = default(object);
+                                                    
+                                                    bool gotPattern = (bool)tryGetCurrentPatternMethod.Invoke(buttonElement, patternParams);
+                                                    
+                                                    if (gotPattern)
+                                                    {
+                                                        object invokePattern = patternParams[1];
+                                                        
+                                                        if (invokePattern != null)
+                                                        {
+                                                            System.Reflection.MethodInfo invokeMethod = invokePattern.GetType().GetMethod("Invoke");
+                                                            
+                                                            if (invokeMethod != null)
+                                                            {
+                                                                invokeMethod.Invoke(invokePattern, null);
+                                                                Thread.Sleep(200);
+                                                                Logger.Info($"UI Automation点击了 '{name}' 按钮");
+                                                                return;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
-
-                Thread.Sleep(100);
-
-                _inputSimulator.SimulateTextInput(password);
-                Thread.Sleep(200);
-
-                _inputSimulator.SimulateEnterKey();
-                Thread.Sleep(300);
-
-                Logger.Info("解密密码填充成功（使用Tab键导航）");
-                return true;
+                
+                Logger.Warning("UI Automation未找到可点击的确定按钮");
             }
             catch (Exception ex)
             {
-                Logger.Error($"Tab键导航填充失败: {ex.Message}");
-                return false;
+                Logger.Error($"UI Automation点击按钮失败: {ex.Message}");
             }
         }
 
         public bool IsPasswordDialogPresent()
         {
-            return _windowLocator.FindPasswordDialog() != IntPtr.Zero;
+            return _monitor.FindPasswordDialog() != IntPtr.Zero;
         }
 
         public bool IsDecryptDialogPresent()
         {
-            IntPtr dialog = _windowLocator.FindPasswordDialog();
+            IntPtr dialog = _monitor.FindPasswordDialog();
             return dialog != IntPtr.Zero && _windowLocator.IsDecryptDialog(dialog);
         }
 
         public bool IsEncryptDialogPresent()
         {
-            IntPtr dialog = _windowLocator.FindPasswordDialog();
+            IntPtr dialog = _monitor.FindPasswordDialog();
             return dialog != IntPtr.Zero && _windowLocator.IsEncryptDialog(dialog);
         }
 
         public void LogDialogInfo()
         {
-            IntPtr dialog = _windowLocator.FindPasswordDialog();
+            IntPtr dialog = _monitor.FindPasswordDialog();
             if (dialog != IntPtr.Zero)
             {
                 Logger.Debug($"找到对话框: {dialog}, 标题: {_windowLocator.GetWindowTitle(dialog)}");
