@@ -115,19 +115,19 @@ namespace WpsPasswordManager.Services.Report
                     return false;
                 }
 
-                Logger.Info($"构造上报请求数据: docId={fileMeta.Uid}, path={fileMeta.FilePath}, keyVersion={keyVersion}");
+                Logger.Info($"构造上报请求数据: docId={fileMeta.Uid}, path={fileMeta.FilePath}, keyVersion={fileMeta.CurrentKeyVersion}");
                 Logger.Info($"  - beforePassword: {(encryptedBeforePassword != null ? "已加密" : "空")}");
                 Logger.Info($"  - afterPassword: {(encryptedAfterPassword != null ? "已加密" : "空")}");
-                Logger.Info($"  - possiblePassword: {(encryptedPossiblePasswords.Count > 0 ? encryptedPossiblePasswords.Count + "个已加密" : "空")}");
+                Logger.Info($"  - pendingPassword: {(encryptedPossiblePasswords.Count > 0 ? encryptedPossiblePasswords.Count + "个已加密" : "空")}");
 
                 var requestData = new
                 {
                     docId = fileMeta.Uid,
                     path = fileMeta.FilePath,
-                    keyVersion = keyVersion,
+                    keyVersion = fileMeta.CurrentKeyVersion,
                     beforePassword = encryptedBeforePassword,
                     afterPassword = encryptedAfterPassword,
-                    possiblePassword = encryptedPossiblePasswords.Count > 0 ? encryptedPossiblePasswords.ToArray() : null,
+                    pendingPassword = encryptedPossiblePasswords.Count > 0 ? encryptedPossiblePasswords.ToArray() : null,
                     platform = "win"
                 };
 
@@ -165,11 +165,11 @@ namespace WpsPasswordManager.Services.Report
             return await ReportSaveLog(fileMeta);
         }
 
-        public async Task<bool> ReportSaveLogWithPasswords(string filePath, string fileUid, string beforePassword, string afterPassword, List<string> possiblePasswords, string keyVersion)
+        public async Task<bool> ReportSaveLogWithPasswords(FileMeta fileMeta)
         {
-            if (string.IsNullOrEmpty(filePath) || string.IsNullOrEmpty(fileUid))
+            if (string.IsNullOrEmpty(fileMeta.Uid))
             {
-                Logger.Error("文件路径或UID为空，无法上报");
+                Logger.Error("文档UID为空，无法上报");
                 return false;
             }
 
@@ -181,7 +181,7 @@ namespace WpsPasswordManager.Services.Report
 
             try
             {
-                Logger.Info($"开始上报文档密码保存记录: {filePath}");
+                Logger.Info($"开始上报文档密码保存记录: {fileMeta.FilePath}");
 
                 string publicKey = GlobalState.Instance.PublicKey;
 
@@ -189,10 +189,10 @@ namespace WpsPasswordManager.Services.Report
                 string encryptedAfterPassword = null;
                 List<string> encryptedPossiblePasswords = new List<string>();
 
-                if (!string.IsNullOrEmpty(beforePassword))
+                if (!string.IsNullOrEmpty(fileMeta.CurrentPassword))
                 {
-                    Logger.Info($"准备加密旧密码 (beforePassword)，密码长度: {beforePassword.Length}");
-                    encryptedBeforePassword = CryptoUtils.EncryptPasswordByPublicKey(beforePassword, publicKey);
+                    Logger.Info($"准备加密旧密码 (beforePassword)，密码长度: {fileMeta.CurrentPassword.Length}");
+                    encryptedBeforePassword = CryptoUtils.EncryptPasswordByPublicKey(fileMeta.CurrentPassword, publicKey);
                     if (encryptedBeforePassword == null)
                     {
                         Logger.Warning("旧密码加密失败，继续处理其他密码");
@@ -207,11 +207,11 @@ namespace WpsPasswordManager.Services.Report
                     Logger.Info("旧密码 (beforePassword) 为空，跳过");
                 }
 
-                if (possiblePasswords != null && possiblePasswords.Count > 0)
+                if (fileMeta.PendingPasswordList != null && fileMeta.PendingPasswordList.Count > 0)
                 {
-                    Logger.Info($"准备加密待定密码 (possiblePasswords)，数量: {possiblePasswords.Count}");
+                    Logger.Info($"准备加密待定密码 (pendingPasswords)，数量: {fileMeta.PendingPasswordList.Count}");
                     int index = 0;
-                    foreach (string password in possiblePasswords)
+                    foreach (string password in fileMeta.PendingPasswordList)
                     {
                         Logger.Info($"加密待定密码 [{index}]，密码长度: {password?.Length ?? 0}");
                         if (!string.IsNullOrEmpty(password))
@@ -238,19 +238,18 @@ namespace WpsPasswordManager.Services.Report
                 }
                 else
                 {
-                    Logger.Info("待定密码 (possiblePasswords) 为空，跳过");
+                    Logger.Info($"待定密码 (pendingPasswords) 为空，跳过");
                 }
-
-                Logger.Info($"构造上报请求数据: docId={fileUid}, path={filePath}, keyVersion={keyVersion}");
+                Logger.Info($"构造上报请求数据: docId={fileMeta.Uid}, path={fileMeta.FilePath}, keyVersion={fileMeta.CurrentKeyVersion}"); 
                 Logger.Info($"  - beforePassword: {(encryptedBeforePassword != null ? "已加密" : "空")}");
                 Logger.Info($"  - afterPassword: {(encryptedAfterPassword != null ? "已加密" : "空")}");
-                Logger.Info($"  - possiblePassword: {(encryptedPossiblePasswords.Count > 0 ? encryptedPossiblePasswords.Count + "个已加密" : "空")}");
+                Logger.Info($"  - pendingPassword: {(encryptedPossiblePasswords.Count > 0 ? encryptedPossiblePasswords.Count + "个已加密" : "空")}");
 
                 var requestData = new
                 {
-                    docId = fileUid,
-                    path = filePath,
-                    keyVersion = keyVersion,
+                    docId = fileMeta.Uid,
+                    path = fileMeta.FilePath,
+                    keyVersion = fileMeta.CurrentKeyVersion,
                     beforePassword = encryptedBeforePassword,
                     afterPassword = encryptedAfterPassword,
                     possiblePassword = encryptedPossiblePasswords.Count > 0 ? encryptedPossiblePasswords.ToArray() : null,
