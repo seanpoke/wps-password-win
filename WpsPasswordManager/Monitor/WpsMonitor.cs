@@ -177,7 +177,6 @@ namespace WpsPasswordManager.Monitor
                 RECT rect = new RECT();
                 bool rectResult = GetWindowRect(hWnd, ref rect);
 
-                Logger.Debug($"{message}: 句柄={hWnd}, 类名={classNameStr} (获取结果: {classNameResult}), 标题={windowTitleStr} (获取结果: {windowTitleResult}), 位置=({rect.Left}, {rect.Top}, {rect.Right}, {rect.Bottom}) (获取结果: {rectResult})");
             }
             catch (Exception ex)
             {
@@ -382,8 +381,6 @@ namespace WpsPasswordManager.Monitor
         {
             try
             {
-                Logger.Debug($"开始查找Qt编辑控件，父窗口句柄: {parentHandle}");
-
                 // 枚举所有子窗口
                 IntPtr foundHandle = IntPtr.Zero;
                 EnumChildWindows(parentHandle, (hwnd, lParam) =>
@@ -604,7 +601,6 @@ namespace WpsPasswordManager.Monitor
             System.Collections.Generic.List<IntPtr> editControls = new System.Collections.Generic.List<IntPtr>();
             CollectAllEditControls(dialogHandle, editControls);
 
-            Logger.Debug($"找到 {editControls.Count} 个编辑控件");
 
             int firstEditIndex = editControls.IndexOf(firstEditHandle);
             if (firstEditIndex >= 0 && firstEditIndex + 1 < editControls.Count)
@@ -1285,7 +1281,6 @@ namespace WpsPasswordManager.Monitor
                     {
                         // 从活动窗口标题中提取文档名
                         docName = title.Replace(" - WPS Office", "");
-                        Logger.Debug($"从活动窗口标题中提取的文档名: {docName}");
                     }
                 }
                 
@@ -1320,7 +1315,6 @@ namespace WpsPasswordManager.Monitor
                     {
                         string firstWpsWindowTitle = wpsWindowTitles[0];
                         docName = firstWpsWindowTitle.Replace(" - WPS Office", "");
-                        Logger.Debug($"从枚举的WPS窗口中提取的文档名: {docName}");
                     }
                 }
                 

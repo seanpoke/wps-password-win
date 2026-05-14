@@ -136,4 +136,45 @@ namespace WpsPasswordManager.Services.Routing
         /// </summary>
         public string publicKey { get; set; }
     }
+    
+    /// <summary>
+    /// LDAP节点数据结构
+    /// </summary>
+    public class LdapNodeDTO
+    {
+        /// <summary>
+        /// 节点类型 0 部门 1员工
+        /// </summary>
+        public int type { get; set; }
+        
+        /// <summary>
+        /// 节点名称，部门为部门名称，员工为员工姓名
+        /// </summary>
+        public string name { get; set; }
+        
+        /// <summary>
+        /// LDAP完整路径
+        /// </summary>
+        public string dn { get; set; }
+        
+        /// <summary>
+        /// 账号名（用户专属）
+        /// </summary>
+        public string account { get; set; }
+        
+        /// <summary>
+        /// 是否有权限
+        /// </summary>
+        public bool hasAuth { get; set; }
+        
+        /// <summary>
+        /// 子部门列表
+        /// </summary>
+        public LdapNodeDTO[] deptList { get; set; }
+        
+        /// <summary>
+        /// 子员工列表
+        /// </summary>
+        public LdapNodeDTO[] employList { get; set; }
+    }
 }

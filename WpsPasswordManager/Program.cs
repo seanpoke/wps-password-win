@@ -689,7 +689,16 @@ namespace WpsPasswordManager
                                 long findDialogStart = DateTime.Now.Ticks;
                                 IntPtr encryptDialog = monitor.FindPasswordDialog();
                                 long findDialogEnd = DateTime.Now.Ticks;
-                                if (encryptDialog != IntPtr.Zero)
+                                
+                                // 如果文档权限窗口打开，隐藏悬浮按钮并跳过对话框处理
+                                if (AuthTreeForm.IsOpen)
+                                {
+                                    mainThreadSyncContext?.Post((state) =>
+                                    {
+                                        floatingButton.HideButton();
+                                    }, null);
+                                }
+                                else if (encryptDialog != IntPtr.Zero)
                                 {
                                     // 获取对话框标题
                                     StringBuilder dialogTitle = new StringBuilder(256);
@@ -702,12 +711,23 @@ namespace WpsPasswordManager
                                     if (title == "文档加密" || title == "密码加密")
                                     {
                                         Logger.Debug($"找到加密对话框: {encryptDialog}, 标题: {title}");
+                                        
+                                        string btnDocumentPath = monitor.GetDocumentPath(IntPtr.Zero);
+                                        FileMeta currentFileMeta = null;
+                                        if (!string.IsNullOrEmpty(btnDocumentPath))
+                                        {
+                                            currentFileMeta = FileMetaFactory.Instance.GetFileMeta(btnDocumentPath);
+                                            Logger.Info($"获取到文件元数据: Uid={currentFileMeta?.Uid}, WriteAuth={currentFileMeta?.WriteAuth}");
+                                        }
+                                        
                                         // 每次循环都更新按钮位置，确保按钮能随着窗口拖动而移动
                                         // 使用同步上下文在主线程中执行UI操作
+                                        var fileMeta = currentFileMeta;
                                         mainThreadSyncContext?.Post((state) =>
-                                    {
-                                        floatingButton.ShowAtDialog(encryptDialog);
-                                    }, null);
+                                        {
+                                            floatingButton.CurrentFileMeta = fileMeta;
+                                            floatingButton.ShowAtDialog(encryptDialog);
+                                        }, null);
 
                                         // 如果是密码加密窗口，记录密码
                                         if (title == "密码加密")
@@ -759,7 +779,6 @@ namespace WpsPasswordManager
                                                 if (!string.IsNullOrEmpty(password))
                                                 {
                                                     lastPassword = password;
-                                                    Logger.Info($"记录密码: {password}");
                                                     Logger.Info($"获取到【打开文件密码(O)】输入框内容: {password}");
                                                 }
                                                 else
@@ -1185,7 +1204,6 @@ namespace WpsPasswordManager
         {
             try
             {
-                Logger.Debug("尝试从密码对话框获取密码提示");
 
                 // 尝试使用UI Automation获取密码提示
                 string passwordHint = GetPasswordHintUsingUIAutomation(dialogHandle);
@@ -1210,14 +1228,12 @@ namespace WpsPasswordManager
         {
             try
             {
-                Logger.Debug("开始使用UI Automation获取密码提示");
 
                 // 尝试加载UIAutomationClient程序集
                 System.Reflection.Assembly uiaClient = null;
                 try
                 {
                     uiaClient = System.Reflection.Assembly.Load("UIAutomationClient, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35");
-                    Logger.Debug("成功加载UIAutomationClient程序集");
                 }
                 catch (Exception ex)
                 {
@@ -1247,7 +1263,6 @@ namespace WpsPasswordManager
                 try
                 {
                     uiaTypes = System.Reflection.Assembly.Load("UIAutomationTypes, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35");
-                    Logger.Debug("成功加载UIAutomationTypes程序集");
                 }
                 catch (Exception ex)
                 {
@@ -1277,11 +1292,7 @@ namespace WpsPasswordManager
                 try
                 {
                     automationElementType = uiaClient.GetType("System.Windows.Automation.AutomationElement");
-                    if (automationElementType != null)
-                    {
-                        Logger.Debug("成功获取AutomationElement类型");
-                    }
-                    else
+                    if (automationElementType == null)
                     {
                         Logger.Warning("无法获取AutomationElement类型");
 
@@ -1449,7 +1460,6 @@ namespace WpsPasswordManager
                                                     if (elementName.Contains("密码提示"))
                                                     {
                                                         hintElement = element;
-                                                        Logger.Debug("找到密码提示输入框");
                                                         break;
                                                     }
                                                 }
@@ -1476,10 +1486,6 @@ namespace WpsPasswordManager
                             if (findFirstMethod != null)
                             {
                                 hintElement = findFirstMethod.Invoke(dialogElement, new object[] { treeScopeDescendants, classCondition });
-                                if (hintElement != null)
-                                {
-                                    Logger.Debug("通过类名找到密码提示输入框");
-                                }
                             }
                         }
                     }
@@ -1487,8 +1493,6 @@ namespace WpsPasswordManager
 
                 if (hintElement != null)
                 {
-                    Logger.Debug("找到密码提示输入框");
-
                     // 尝试使用ValuePattern获取内容
                     string hint = TryGetValuePattern(hintElement, uiaClient, 0);
                     if (!string.IsNullOrEmpty(hint))
@@ -1509,16 +1513,12 @@ namespace WpsPasswordManager
                         System.Reflection.PropertyInfo currentProperty = hintElement.GetType().GetProperty("Current");
                         if (currentProperty != null)
                         {
-                            Logger.Debug("找到Current属性");
                             object current = currentProperty.GetValue(hintElement);
                             if (current != null)
                             {
-                                Logger.Debug("获取到Current对象");
-
                                 System.Reflection.PropertyInfo valueProperty = current.GetType().GetProperty("Value");
                                 if (valueProperty != null)
                                 {
-                                    Logger.Debug("找到Value属性");
                                     string directValue = (string)valueProperty.GetValue(current);
                                     if (!string.IsNullOrEmpty(directValue))
                                     {
@@ -1540,20 +1540,12 @@ namespace WpsPasswordManager
                                 Logger.Debug("Current对象为空");
                             }
                         }
-                        else
-                        {
-                            Logger.Debug("未找到Current属性");
-                        }
                     }
                     catch (Exception ex)
                     {
                         Logger.Error($"尝试直接获取Current.Value时出错: {ex.Message}");
                         Logger.Error($"异常堆栈: {ex.StackTrace}");
                     }
-                }
-                else
-                {
-                    Logger.Warning("未找到密码提示输入框");
                 }
 
                 // 尝试通过类名查找
@@ -1737,7 +1729,6 @@ namespace WpsPasswordManager
                 }
 
                 // 尝试使用UI Automation获取密码
-                Logger.Debug("[GetPasswordFromDialog] 尝试使用UI Automation获取密码");
                 string password = GetPasswordUsingUIAutomation(dialogHandle);
                 if (!string.IsNullOrEmpty(password))
                 {
@@ -1826,7 +1817,6 @@ namespace WpsPasswordManager
                 try
                 {
                     uiaTypes = System.Reflection.Assembly.Load("UIAutomationTypes, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35");
-                    Logger.Debug("成功加载UIAutomationTypes程序集");
                 }
                 catch (Exception ex)
                 {
@@ -2276,10 +2266,6 @@ namespace WpsPasswordManager
                                                             Logger.Debug("Current对象为空");
                                                         }
                                                     }
-                                                    else
-                                                    {
-                                                        Logger.Debug("未找到Current属性");
-                                                    }
                                                 }
                                                 catch (Exception ex)
                                                 {
@@ -2508,10 +2494,6 @@ namespace WpsPasswordManager
                                                     Logger.Debug("Current对象为空");
                                                 }
                                             }
-                                            else
-                                            {
-                                                Logger.Debug("未找到Current属性");
-                                            }
                                         }
                                         catch (Exception ex)
                                         {
@@ -2633,11 +2615,9 @@ namespace WpsPasswordManager
                     if (valuePatternField != null)
                     {
                         valuePatternProperty = valuePatternField.GetValue(null);
-                        Logger.Debug("成功获取ValuePattern.Pattern字段");
                     }
                     else
                     {
-                        Logger.Warning("无法获取ValuePattern.Pattern");
                         return string.Empty;
                     }
                 }
@@ -2687,10 +2667,6 @@ namespace WpsPasswordManager
                         Logger.Info($"从输入框 #{index} 使用ValuePattern获取到密码: {password}");
                         return password;
                     }
-                    else
-                    {
-                        Logger.Debug($"输入框 #{index} 为空");
-                    }
                 }
                 else
                 {
@@ -2732,11 +2708,9 @@ namespace WpsPasswordManager
                     if (textPatternField != null)
                     {
                         textPatternProperty = textPatternField.GetValue(null);
-                        Logger.Debug("成功获取TextPattern.Pattern字段");
                     }
                     else
                     {
-                        Logger.Warning("无法获取TextPattern.Pattern");
                         return string.Empty;
                     }
                 }
@@ -2768,7 +2742,6 @@ namespace WpsPasswordManager
                     System.Reflection.MethodInfo documentRangeMethod = textPatternType.GetMethod("DocumentRange");
                     if (documentRangeMethod == null)
                     {
-                        Logger.Warning("无法获取DocumentRange方法");
                         return string.Empty;
                     }
                     object documentRange = documentRangeMethod.Invoke(textPattern, null);
@@ -2845,11 +2818,9 @@ namespace WpsPasswordManager
 
                 foreach (string label in passwordLabels)
                 {
-                    Logger.Debug($"尝试通过标签查找: {label}");
                     object passwordCondition = Activator.CreateInstance(propertyConditionType, new object[] { nameProperty, label });
                     if (passwordCondition == null)
                     {
-                        Logger.Debug($"无法创建标签条件: {label}");
                         continue;
                     }
 
@@ -2863,8 +2834,6 @@ namespace WpsPasswordManager
 
                     if (passwordElement != null)
                     {
-                        Logger.Debug($"找到标签元素: {label}");
-
                         // 查找密码输入框（通常是标签旁边的编辑控件）
                         System.Reflection.PropertyInfo nextProperty = automationElementType.GetProperty("Next");
                         if (nextProperty != null)
