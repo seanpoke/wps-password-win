@@ -1,0 +1,1044 @@
+using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.Windows.Forms;
+using System.Threading.Tasks;
+using System.Linq;
+using WpsPasswordManager.Services.Request;
+using WpsPasswordManager.Services.Routing;
+using WpsPasswordManager.Utils;
+
+namespace WpsPasswordManager.UI
+{
+    public class AuthTreeForm : Form
+    {
+        public static bool IsOpen { get; private set; } = false;
+
+        private Panel _topPanel;
+        private TextBox _searchTextBox;
+        private Button _searchButton;
+        private Button _closeButton;
+        private TreeView _authTreeView;
+        private Panel _loadingPanel;
+        private Label _loadingLabel;
+        private Label _errorLabel;
+        private HttpRequestService _httpRequestService;
+        private string _docId;
+
+        private Panel _leftPanel;
+        private Panel _rightPanel;
+        private Label _leftTitleLabel;
+
+        private Label _deptTitleLabel;
+        private Label _empTitleLabel;
+        private ListBox _selectedDeptListBox;
+        private ListBox _selectedEmpListBox;
+        private Label _deptCountLabel;
+        private Label _empCountLabel;
+
+        private Button _confirmButton;
+        private Button _cancelButton;
+        private Button _saveButton;
+        private Button _resetButton;
+
+        private List<LdapNodeDTO> _selectedDepts = new List<LdapNodeDTO>();
+        private List<LdapNodeDTO> _selectedEmps = new List<LdapNodeDTO>();
+        private HashSet<string> _autoCheckedEmpDns = new HashSet<string>();
+        private HashSet<string> _autoCheckedDeptDns = new HashSet<string>();
+        private bool _isUpdatingCheckState = false;
+
+        public AuthTreeForm(string docId)
+        {
+            _docId = docId;
+            _httpRequestService = new HttpRequestService();
+            InitializeComponent();
+            IsOpen = true;
+            LoadAuthTreeAsync();
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            base.OnClosed(e);
+            IsOpen = false;
+        }
+
+        private void InitializeComponent()
+        {
+            this.Text = "文档权限";
+            this.FormBorderStyle = FormBorderStyle.FixedSingle;
+            this.Size = new Size(700, 550);
+            this.StartPosition = FormStartPosition.CenterScreen;
+            this.BackColor = Color.White;
+            this.MaximizeBox = false;
+            this.MinimizeBox = false;
+            this.ShowIcon = false;
+
+            _closeButton = new Button
+            {
+                Text = "×",
+                Font = new Font("微软雅黑", 14F, FontStyle.Bold),
+                ForeColor = Color.Gray,
+                BackColor = Color.White,
+                Size = new Size(30, 30),
+                Location = new Point(670, 5),
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand,
+                TabStop = false
+            };
+            _closeButton.FlatAppearance.BorderSize = 0;
+            _closeButton.Click += (sender, e) => this.Close();
+            _closeButton.MouseEnter += (sender, e) => _closeButton.ForeColor = Color.Black;
+            _closeButton.MouseLeave += (sender, e) => _closeButton.ForeColor = Color.Gray;
+
+            _topPanel = new Panel
+            {
+                Size = new Size(700, 40),
+                Location = new Point(0, 0),
+                BackColor = Color.FromArgb(245, 245, 245),
+                BorderStyle = BorderStyle.FixedSingle
+            };
+
+            _searchTextBox = new TextBox
+            {
+                Size = new Size(200, 28),
+                Location = new Point(10, 6),
+                Font = new Font("微软雅黑", 9F),
+                PlaceholderText = "搜索部门或人员..."
+            };
+            _searchTextBox.KeyDown += SearchTextBox_KeyDown;
+
+            _searchButton = new Button
+            {
+                Text = "搜索",
+                Font = new Font("微软雅黑", 9F, FontStyle.Bold),
+                ForeColor = Color.White,
+                BackColor = Color.FromArgb(0, 120, 212),
+                Size = new Size(60, 28),
+                Location = new Point(215, 6),
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand,
+                TabStop = false
+            };
+            _searchButton.FlatAppearance.BorderSize = 0;
+            _searchButton.Click += SearchButton_Click;
+            _searchButton.MouseEnter += (sender, e) => _searchButton.BackColor = Color.FromArgb(0, 100, 180);
+            _searchButton.MouseLeave += (sender, e) => _searchButton.BackColor = Color.FromArgb(0, 120, 212);
+
+            _saveButton = new Button
+            {
+                Text = "保存",
+                Font = new Font("微软雅黑", 10F, FontStyle.Bold),
+                ForeColor = Color.White,
+                BackColor = Color.FromArgb(156, 39, 176),
+                Size = new Size(65, 28),
+                Location = new Point(625, 6),
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand,
+                TabStop = false
+            };
+            _saveButton.FlatAppearance.BorderSize = 0;
+            _saveButton.Click += SaveButton_Click;
+            _saveButton.MouseEnter += (sender, e) => _saveButton.BackColor = Color.FromArgb(136, 39, 156);
+            _saveButton.MouseLeave += (sender, e) => _saveButton.BackColor = Color.FromArgb(156, 39, 176);
+
+            _resetButton = new Button
+            {
+                Text = "重置",
+                Font = new Font("微软雅黑", 10F, FontStyle.Bold),
+                ForeColor = Color.White,
+                BackColor = Color.FromArgb(156, 39, 176),
+                Size = new Size(65, 28),
+                Location = new Point(555, 6),
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand,
+                TabStop = false
+            };
+            _resetButton.FlatAppearance.BorderSize = 0;
+            _resetButton.Click += ResetButton_Click;
+            _resetButton.MouseEnter += (sender, e) => _resetButton.BackColor = Color.FromArgb(136, 39, 156);
+            _resetButton.MouseLeave += (sender, e) => _resetButton.BackColor = Color.FromArgb(156, 39, 176);
+
+            _topPanel.Controls.Add(_searchTextBox);
+            _topPanel.Controls.Add(_searchButton);
+            _topPanel.Controls.Add(_resetButton);
+            _topPanel.Controls.Add(_saveButton);
+            _topPanel.Controls.Add(_closeButton);
+
+            _leftPanel = new Panel
+            {
+                Size = new Size(340, 460),
+                Location = new Point(10, 45),
+                BorderStyle = BorderStyle.FixedSingle
+            };
+
+            _leftTitleLabel = new Label
+            {
+                Text = "选择部门或人员",
+                Font = new Font("微软雅黑", 9F, FontStyle.Bold),
+                ForeColor = Color.Black,
+                Size = new Size(340, 25),
+                Location = new Point(0, 0),
+                TextAlign = ContentAlignment.MiddleLeft,
+                Padding = new Padding(5, 0, 0, 0)
+            };
+            _leftPanel.Controls.Add(_leftTitleLabel);
+
+            _authTreeView = new TreeView
+            {
+                Size = new Size(340, 435),
+                Location = new Point(0, 25),
+                ShowLines = true,
+                ShowPlusMinus = true,
+                ShowRootLines = true,
+                Font = new Font("微软雅黑", 9F),
+                LineColor = Color.LightGray,
+                CheckBoxes = true
+            };
+            _authTreeView.AfterCheck += AuthTreeView_AfterCheck;
+            _authTreeView.BeforeCheck += AuthTreeView_BeforeCheck;
+            _leftPanel.Controls.Add(_authTreeView);
+
+            _rightPanel = new Panel
+            {
+                Size = new Size(320, 460),
+                Location = new Point(355, 45),
+                BorderStyle = BorderStyle.FixedSingle
+            };
+
+            _deptTitleLabel = new Label
+            {
+                Text = "已选择的部门",
+                Font = new Font("微软雅黑", 9F, FontStyle.Bold),
+                ForeColor = Color.Black,
+                Size = new Size(280, 25),
+                Location = new Point(0, 0),
+                TextAlign = ContentAlignment.MiddleLeft,
+                Padding = new Padding(5, 0, 0, 0)
+            };
+
+            _deptCountLabel = new Label
+            {
+                Text = "",
+                Font = new Font("微软雅黑", 9F),
+                ForeColor = Color.Gray,
+                Size = new Size(40, 25),
+                Location = new Point(280, 0),
+                TextAlign = ContentAlignment.MiddleRight,
+                Padding = new Padding(0, 0, 5, 0)
+            };
+
+            _selectedDeptListBox = new ListBox
+            {
+                Size = new Size(320, 210),
+                Location = new Point(0, 25),
+                Font = new Font("微软雅黑", 9F),
+                BorderStyle = BorderStyle.None,
+                DrawMode = DrawMode.OwnerDrawFixed,
+                ItemHeight = 24
+            };
+            _selectedDeptListBox.DrawItem += SelectedDeptListBox_DrawItem;
+            _selectedDeptListBox.MouseClick += SelectedListBox_MouseClick;
+
+            _empTitleLabel = new Label
+            {
+                Text = "已选择的员工",
+                Font = new Font("微软雅黑", 9F, FontStyle.Bold),
+                ForeColor = Color.Black,
+                Size = new Size(280, 25),
+                Location = new Point(0, 240),
+                TextAlign = ContentAlignment.MiddleLeft,
+                Padding = new Padding(5, 0, 0, 0)
+            };
+
+            _empCountLabel = new Label
+            {
+                Text = "",
+                Font = new Font("微软雅黑", 9F),
+                ForeColor = Color.Gray,
+                Size = new Size(40, 25),
+                Location = new Point(280, 240),
+                TextAlign = ContentAlignment.MiddleRight,
+                Padding = new Padding(0, 0, 5, 0)
+            };
+
+            _selectedEmpListBox = new ListBox
+            {
+                Size = new Size(320, 195),
+                Location = new Point(0, 265),
+                Font = new Font("微软雅黑", 9F),
+                BorderStyle = BorderStyle.None,
+                DrawMode = DrawMode.OwnerDrawFixed,
+                ItemHeight = 24
+            };
+            _selectedEmpListBox.DrawItem += SelectedEmpListBox_DrawItem;
+            _selectedEmpListBox.MouseClick += SelectedListBox_MouseClick;
+
+            _rightPanel.Controls.Add(_deptTitleLabel);
+            _rightPanel.Controls.Add(_deptCountLabel);
+            _rightPanel.Controls.Add(_selectedDeptListBox);
+            _rightPanel.Controls.Add(_empTitleLabel);
+            _rightPanel.Controls.Add(_empCountLabel);
+            _rightPanel.Controls.Add(_selectedEmpListBox);
+
+            _confirmButton = new Button
+            {
+                Text = "确定",
+                Font = new Font("微软雅黑", 9F, FontStyle.Bold),
+                ForeColor = Color.White,
+                BackColor = Color.FromArgb(0, 120, 212),
+                Size = new Size(100, 32),
+                Location = new Point(470, 515),
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand
+            };
+            _confirmButton.FlatAppearance.BorderSize = 0;
+            _confirmButton.Click += ConfirmButton_Click;
+
+            _cancelButton = new Button
+            {
+                Text = "取消",
+                Font = new Font("微软雅黑", 9F, FontStyle.Bold),
+                ForeColor = Color.Black,
+                BackColor = Color.FromArgb(238, 238, 238),
+                Size = new Size(100, 32),
+                Location = new Point(585, 515),
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand
+            };
+            _cancelButton.FlatAppearance.BorderSize = 0;
+            _cancelButton.Click += (sender, e) => this.Close();
+
+            _loadingPanel = new Panel
+            {
+                Size = new Size(700, 510),
+                Location = new Point(0, 40),
+                BackColor = Color.White
+            };
+
+            _loadingLabel = new Label
+            {
+                Text = "正在加载权限树...",
+                Font = new Font("微软雅黑", 10F),
+                ForeColor = Color.Gray,
+                Size = new Size(700, 20),
+                Location = new Point(0, 245),
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+            _loadingPanel.Controls.Add(_loadingLabel);
+
+            _errorLabel = new Label
+            {
+                Text = "",
+                Font = new Font("微软雅黑", 10F),
+                ForeColor = Color.Red,
+                Size = new Size(700, 40),
+                Location = new Point(0, 235),
+                TextAlign = ContentAlignment.MiddleCenter,
+                Visible = false
+            };
+            _loadingPanel.Controls.Add(_errorLabel);
+
+            this.Controls.Add(_topPanel);
+            this.Controls.Add(_loadingPanel);
+
+            this.Controls.Add(_leftPanel);
+            this.Controls.Add(_rightPanel);
+            this.Controls.Add(_confirmButton);
+            this.Controls.Add(_cancelButton);
+
+            _leftPanel.Visible = false;
+            _rightPanel.Visible = false;
+            _confirmButton.Visible = false;
+            _cancelButton.Visible = false;
+            _saveButton.Visible = false;
+            _resetButton.Visible = false;
+        }
+
+        private void AuthTreeView_BeforeCheck(object sender, TreeViewCancelEventArgs e)
+        {
+            var nodeDto = e.Node.Tag as LdapNodeDTO;
+            if (nodeDto != null)
+            {
+                if (e.Node.Checked && nodeDto.type == 1 && _autoCheckedEmpDns.Contains(nodeDto.dn))
+                {
+                    e.Cancel = true;
+                }
+                else if (e.Node.Checked && nodeDto.type == 0 && _autoCheckedDeptDns.Contains(nodeDto.dn))
+                {
+                    e.Cancel = true;
+                }
+            }
+        }
+
+        private void AuthTreeView_AfterCheck(object sender, TreeViewEventArgs e)
+        {
+            if (_isUpdatingCheckState) return;
+
+            var node = e.Node.Tag as LdapNodeDTO;
+            if (node == null) return;
+
+            if (node.type == 0)
+            {
+                HandleDeptNodeCheck(e.Node, e.Node.Checked);
+            }
+            else
+            {
+                HandleEmpNodeCheck(e.Node, e.Node.Checked);
+            }
+            UpdateSelectedCount();
+        }
+
+        private void HandleDeptNodeCheck(TreeNode deptNode, bool isChecked)
+        {
+            var deptDto = deptNode.Tag as LdapNodeDTO;
+            if (deptDto == null) return;
+
+            _isUpdatingCheckState = true;
+            try
+            {
+                if (isChecked)
+                {
+                    deptNode.Checked = true;
+                    
+                    string deptDn = deptDto.dn;
+                    
+                    _selectedEmps.RemoveAll(emp => emp.dn.StartsWith(deptDn));
+                    _selectedDepts.RemoveAll(d => d.dn.StartsWith(deptDn) && d.dn != deptDn);
+                    
+                    AutoCheckChildEmps(deptNode, true);
+                    
+                    if (!_selectedDepts.Exists(n => n.dn == deptDto.dn))
+                    {
+                        _selectedDepts.Add(deptDto);
+                    }
+                }
+                else
+                {
+                    deptNode.Checked = false;
+                    AutoUncheckChildEmps(deptNode);
+                    _selectedDepts.RemoveAll(n => n.dn == deptDto.dn);
+                }
+            }
+            finally
+            {
+                _isUpdatingCheckState = false;
+            }
+            UpdateSelectedListBoxes();
+        }
+
+        private void HandleEmpNodeCheck(TreeNode empNode, bool isChecked)
+        {
+            var empDto = empNode.Tag as LdapNodeDTO;
+            if (empDto == null) return;
+
+            if (_autoCheckedEmpDns.Contains(empDto.dn))
+            {
+                if (!isChecked)
+                {
+                    _autoCheckedEmpDns.Remove(empDto.dn);
+                    empNode.ForeColor = Color.Black;
+                }
+                else
+                {
+                    return;
+                }
+            }
+
+            if (isChecked)
+            {
+                if (!_selectedEmps.Exists(n => n.dn == empDto.dn))
+                {
+                    _selectedEmps.Add(empDto);
+                }
+            }
+            else
+            {
+                _selectedEmps.RemoveAll(n => n.dn == empDto.dn);
+            }
+            UpdateSelectedListBoxes();
+        }
+
+        private void AutoCheckChildEmps(TreeNode parentNode, bool check)
+        {
+            foreach (TreeNode childNode in parentNode.Nodes)
+            {
+                var childDto = childNode.Tag as LdapNodeDTO;
+                if (childDto != null)
+                {
+                    if (childDto.type == 1)
+                    {
+                        if (check)
+                        {
+                            childNode.Checked = true;
+                            
+                            if (!_autoCheckedEmpDns.Contains(childDto.dn))
+                            {
+                                _autoCheckedEmpDns.Add(childDto.dn);
+                            }
+                            childNode.ForeColor = Color.Gray;
+                            
+                            _selectedEmps.RemoveAll(n => n.dn == childDto.dn);
+                        }
+                    }
+                    else
+                    {
+                        if (check)
+                        {
+                            childNode.Checked = true;
+                            
+                            if (!_autoCheckedDeptDns.Contains(childDto.dn))
+                            {
+                                _autoCheckedDeptDns.Add(childDto.dn);
+                            }
+                            childNode.ForeColor = Color.Gray;
+                            
+                            _selectedDepts.RemoveAll(n => n.dn == childDto.dn);
+                            _selectedEmps.RemoveAll(emp => emp.dn.StartsWith(childDto.dn));
+                        }
+                    }
+                }
+                AutoCheckChildEmps(childNode, check);
+            }
+        }
+
+        private void AutoUncheckChildEmps(TreeNode parentNode)
+        {
+            foreach (TreeNode childNode in parentNode.Nodes)
+            {
+                var childDto = childNode.Tag as LdapNodeDTO;
+                if (childDto != null)
+                {
+                    if (childDto.type == 1)
+                    {
+                        if (_autoCheckedEmpDns.Contains(childDto.dn))
+                        {
+                            _autoCheckedEmpDns.Remove(childDto.dn);
+                            childNode.ForeColor = Color.Black;
+                            
+                            bool isManuallyChecked = _selectedEmps.Exists(n => n.dn == childDto.dn);
+                            
+                            if (!IsParentDeptChecked(childNode.Parent) && !isManuallyChecked)
+                            {
+                                childNode.Checked = false;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        if (_autoCheckedDeptDns.Contains(childDto.dn))
+                        {
+                            _autoCheckedDeptDns.Remove(childDto.dn);
+                            childNode.ForeColor = Color.Black;
+                            
+                            bool isManuallyChecked = _selectedDepts.Exists(n => n.dn == childDto.dn);
+                            
+                            if (!IsParentDeptChecked(childNode.Parent) && !isManuallyChecked)
+                            {
+                                childNode.Checked = false;
+                            }
+                        }
+                    }
+                }
+                AutoUncheckChildEmps(childNode);
+            }
+        }
+
+        private bool IsParentDeptChecked(TreeNode node)
+        {
+            if (node == null) return false;
+            
+            var nodeDto = node.Tag as LdapNodeDTO;
+            if (nodeDto != null && nodeDto.type == 0 && node.Checked)
+            {
+                if (_autoCheckedDeptDns.Contains(nodeDto.dn))
+                {
+                    return IsParentDeptChecked(node.Parent);
+                }
+                return true;
+            }
+            
+            return IsParentDeptChecked(node.Parent);
+        }
+
+        private void UpdateParentCheckState(TreeNode parentNode)
+        {
+            if (parentNode == null) return;
+
+            var parentDto = parentNode.Tag as LdapNodeDTO;
+            if (parentDto == null || parentDto.type == 1) return;
+
+            int checkedCount = 0;
+            int totalCount = 0;
+
+            foreach (TreeNode childNode in parentNode.Nodes)
+            {
+                var childDto = childNode.Tag as LdapNodeDTO;
+                if (childDto != null && childDto.type == 1)
+                {
+                    totalCount++;
+                    if (childNode.Checked)
+                    {
+                        checkedCount++;
+                    }
+                }
+            }
+
+            _isUpdatingCheckState = true;
+            try
+            {
+                if (checkedCount == 0)
+                {
+                    parentNode.Checked = false;
+                    _selectedDepts.RemoveAll(n => n.dn == parentDto.dn);
+                }
+                else if (checkedCount == totalCount)
+                {
+                    parentNode.Checked = true;
+                    if (!_selectedDepts.Exists(n => n.dn == parentDto.dn))
+                    {
+                        _selectedDepts.Add(parentDto);
+                    }
+                }
+                else
+                {
+                    parentNode.Checked = false;
+                }
+            }
+            finally
+            {
+                _isUpdatingCheckState = false;
+            }
+
+            UpdateParentCheckState(parentNode.Parent);
+        }
+
+        private void UpdateSelectedListBoxes()
+        {
+            _selectedDeptListBox.Items.Clear();
+            foreach (var dept in _selectedDepts)
+            {
+                string displayText = $"[{dept.name}]";
+                _selectedDeptListBox.Items.Add(new { Dn = dept.dn, DisplayText = displayText, Node = dept, IsDept = true });
+            }
+
+            _selectedEmpListBox.Items.Clear();
+            foreach (var emp in _selectedEmps)
+            {
+                string displayText = $"{emp.name} ({emp.account ?? ""})";
+                _selectedEmpListBox.Items.Add(new { Dn = emp.dn, DisplayText = displayText, Node = emp, IsDept = false });
+            }
+            UpdateSelectedCount();
+        }
+
+        private void UpdateSelectedCount()
+        {
+            _deptCountLabel.Text = $"({_selectedDepts.Count})";
+            _empCountLabel.Text = $"({_selectedEmps.Count})";
+        }
+
+        private void SelectedDeptListBox_DrawItem(object sender, DrawItemEventArgs e)
+        {
+            if (e.Index < 0) return;
+
+            var item = _selectedDeptListBox.Items[e.Index] as dynamic;
+            string displayText = item.DisplayText;
+
+            e.DrawBackground();
+
+            using (Brush textBrush = new SolidBrush(Color.Black))
+            {
+                e.Graphics.DrawString(displayText, e.Font, textBrush, e.Bounds.X + 5, e.Bounds.Y + 2);
+            }
+
+            using (Brush xBrush = new SolidBrush(Color.Gray))
+            {
+                Font xFont = new Font("微软雅黑", 10F, FontStyle.Bold);
+                e.Graphics.DrawString("×", xFont, xBrush, e.Bounds.Right - 18, e.Bounds.Y + 1);
+            }
+
+            e.DrawFocusRectangle();
+        }
+
+        private void SelectedEmpListBox_DrawItem(object sender, DrawItemEventArgs e)
+        {
+            if (e.Index < 0) return;
+
+            var item = _selectedEmpListBox.Items[e.Index] as dynamic;
+            string displayText = item.DisplayText;
+
+            e.DrawBackground();
+
+            using (Brush textBrush = new SolidBrush(Color.Black))
+            {
+                e.Graphics.DrawString(displayText, e.Font, textBrush, e.Bounds.X + 5, e.Bounds.Y + 2);
+            }
+
+            using (Brush xBrush = new SolidBrush(Color.Gray))
+            {
+                Font xFont = new Font("微软雅黑", 10F, FontStyle.Bold);
+                e.Graphics.DrawString("×", xFont, xBrush, e.Bounds.Right - 18, e.Bounds.Y + 1);
+            }
+
+            e.DrawFocusRectangle();
+        }
+
+        private void SelectedListBox_MouseClick(object sender, MouseEventArgs e)
+        {
+            ListBox listBox = sender as ListBox;
+            if (listBox == null) return;
+
+            int index = listBox.IndexFromPoint(e.Location);
+            if (index < 0) return;
+
+            var item = listBox.Items[index] as dynamic;
+            if (item == null) return;
+
+            int itemWidth = listBox.GetItemRectangle(index).Width;
+            if (e.X > itemWidth - 20)
+            {
+                LdapNodeDTO node = item.Node;
+                bool isDept = item.IsDept;
+
+                if (isDept)
+                {
+                    TreeNode treeNode = FindTreeNodeByDn(_authTreeView.Nodes, node.dn);
+                    if (treeNode != null)
+                    {
+                        HandleDeptNodeCheck(treeNode, false);
+                    }
+                }
+                else
+                {
+                    TreeNode treeNode = FindTreeNodeByDn(_authTreeView.Nodes, node.dn);
+                    if (treeNode != null)
+                    {
+                        _isUpdatingCheckState = true;
+                        try
+                        {
+                            treeNode.Checked = false;
+                        }
+                        finally
+                        {
+                            _isUpdatingCheckState = false;
+                        }
+                        HandleEmpNodeCheck(treeNode, false);
+                    }
+                }
+            }
+        }
+
+        private TreeNode FindTreeNodeByDn(TreeNodeCollection nodes, string dn)
+        {
+            foreach (TreeNode node in nodes)
+            {
+                var nodeDto = node.Tag as LdapNodeDTO;
+                if (nodeDto != null && nodeDto.dn == dn)
+                {
+                    return node;
+                }
+                TreeNode found = FindTreeNodeByDn(node.Nodes, dn);
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+            return null;
+        }
+
+        private void ConfirmButton_Click(object sender, EventArgs e)
+        {
+            Logger.Info($"确认选择了 {_selectedDepts.Count} 个部门和 {_selectedEmps.Count} 个员工");
+            this.Close();
+        }
+
+        private void ResetButton_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                _autoCheckedEmpDns.Clear();
+                _autoCheckedDeptDns.Clear();
+
+                _isUpdatingCheckState = true;
+                foreach (TreeNode node in _authTreeView.Nodes)
+                {
+                    UncheckAllNodes(node);
+                }
+                _isUpdatingCheckState = false;
+
+                _selectedDepts.Clear();
+                _selectedEmps.Clear();
+
+                UpdateSelectedListBoxes();
+
+                Logger.Info("已重置所有选择的部门和员工");
+                ShowNotification("已重置所有选择项");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"重置操作失败: {ex.Message}");
+                ShowNotification("重置失败");
+            }
+        }
+
+        private void UncheckAllNodes(TreeNode parentNode)
+        {
+            parentNode.Checked = false;
+            parentNode.ForeColor = Color.Black;
+
+            foreach (TreeNode childNode in parentNode.Nodes)
+            {
+                UncheckAllNodes(childNode);
+            }
+        }
+
+        private async void SaveButton_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                _saveButton.Enabled = false;
+
+                var accountDnList = _selectedEmps.Select(emp => emp.dn).ToList();
+                var deptDnList = _selectedDepts.Select(dept => dept.dn).ToList();
+
+                Logger.Info($"准备保存权限，部门数: {deptDnList.Count}，员工数: {accountDnList.Count}");
+
+                var requestData = new
+                {
+                    docId = _docId,
+                    accountDnList = accountDnList,
+                    deptDnList = deptDnList
+                };
+
+                var response = await _httpRequestService.PostAsync<object>(
+                    ApiRoutes.DocAuthUpdate,
+                    requestData,
+                    token: GlobalState.Instance.Token
+                );
+
+                if (response != null && response.status == 200)
+                {
+                    Logger.Info("权限更新成功");
+                    ShowNotification("权限保存成功");
+                }
+                else
+                {
+                    Logger.Warning($"权限更新失败: {response?.message ?? "未知错误"}");
+                    ShowNotification($"保存失败: {response?.message ?? "未知错误"}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"保存权限时出错: {ex.Message}");
+                ShowNotification($"保存失败: {ex.Message}");
+            }
+            finally
+            {
+                _saveButton.Enabled = true;
+            }
+        }
+
+        private void ShowNotification(string message)
+        {
+            MessageBox.Show(message, "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        private async void LoadAuthTreeAsync()
+        {
+            try
+            {
+                _errorLabel.Visible = false;
+                _loadingLabel.Text = "正在加载权限树...";
+                _loadingLabel.Visible = true;
+
+                Logger.Info($"开始加载文档权限树，docId: {_docId}");
+                var response = await _httpRequestService.GetAsync<LdapNodeDTO[]>(
+                    ApiRoutes.DocAuthTree,
+                    token: GlobalState.Instance.Token,
+                    queryParams: new { docId = _docId }
+                );
+
+                if (response != null && response.data != null)
+                {
+                    Logger.Info("权限树数据加载成功");
+                    PopulateTreeView(response.data);
+                    _loadingPanel.Visible = false;
+                    _leftPanel.Visible = true;
+                    _rightPanel.Visible = true;
+                    _confirmButton.Visible = true;
+                    _cancelButton.Visible = true;
+                    _saveButton.Visible = true;
+                    _resetButton.Visible = true;
+                }
+                else
+                {
+                    ShowError("未获取到权限树数据");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"加载权限树时出错: {ex.Message}");
+                ShowError($"加载失败: {ex.Message}");
+            }
+        }
+
+        private void ShowError(string message)
+        {
+            _loadingLabel.Visible = false;
+            _errorLabel.Text = message;
+            _errorLabel.Visible = true;
+        }
+
+        private void PopulateTreeView(LdapNodeDTO[] nodes)
+        {
+            _authTreeView.Nodes.Clear();
+            _selectedDepts.Clear();
+            _selectedEmps.Clear();
+            _autoCheckedEmpDns.Clear();
+            _autoCheckedDeptDns.Clear();
+
+            foreach (var node in nodes)
+            {
+                var treeNode = CreateTreeNode(node);
+                _authTreeView.Nodes.Add(treeNode);
+            }
+
+            _authTreeView.ExpandAll();
+            UpdateSelectedListBoxes();
+        }
+
+        private TreeNode CreateTreeNode(LdapNodeDTO node)
+        {
+            string nodeText = node.type == 0
+                ? $"[{node.name}]"
+                : $"{node.name} ({node.account ?? ""})";
+
+            var treeNode = new TreeNode(nodeText)
+            {
+                Tag = node,
+                Checked = node.hasAuth
+            };
+
+            if (node.deptList != null && node.deptList.Length > 0)
+            {
+                foreach (var dept in node.deptList)
+                {
+                    treeNode.Nodes.Add(CreateTreeNode(dept));
+                }
+            }
+
+            if (node.employList != null && node.employList.Length > 0)
+            {
+                foreach (var employ in node.employList)
+                {
+                    var empNode = CreateTreeNode(employ);
+                    treeNode.Nodes.Add(empNode);
+                }
+            }
+
+            if (node.hasAuth)
+            {
+                if (node.type == 0)
+                {
+                    _selectedDepts.Add(node);
+                    AutoCheckChildEmps(treeNode, true);
+                }
+                else
+                {
+                    _selectedEmps.Add(node);
+                }
+            }
+
+            return treeNode;
+        }
+
+        private void SearchButton_Click(object sender, EventArgs e)
+        {
+            PerformSearch();
+        }
+
+        private void SearchTextBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter)
+            {
+                PerformSearch();
+            }
+        }
+
+        private void PerformSearch()
+        {
+            string searchText = _searchTextBox.Text.Trim();
+            
+            if (string.IsNullOrEmpty(searchText))
+            {
+                ResetSearchHighlight();
+                return;
+            }
+
+            HighlightMatchingNodes(_authTreeView.Nodes, searchText, false);
+        }
+
+        private void HighlightMatchingNodes(TreeNodeCollection nodes, string searchText, bool parentMatched)
+        {
+            foreach (TreeNode node in nodes)
+            {
+                var nodeDto = node.Tag as LdapNodeDTO;
+                bool isMatch = false;
+
+                if (nodeDto != null)
+                {
+                    if (!string.IsNullOrEmpty(nodeDto.name) && 
+                        nodeDto.name.IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        isMatch = true;
+                    }
+                    else if (!string.IsNullOrEmpty(nodeDto.account) && 
+                             nodeDto.account.IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        isMatch = true;
+                    }
+                }
+
+                bool shouldShow = isMatch || parentMatched;
+                
+                if (shouldShow)
+                {
+                    node.ForeColor = Color.Red;
+                    node.EnsureVisible();
+                }
+                else
+                {
+                    node.ForeColor = Color.Black;
+                }
+
+                HighlightMatchingNodes(node.Nodes, searchText, shouldShow);
+            }
+        }
+
+        private void ResetSearchHighlight()
+        {
+            ResetHighlight(_authTreeView.Nodes);
+        }
+
+        private void ResetHighlight(TreeNodeCollection nodes)
+        {
+            foreach (TreeNode node in nodes)
+            {
+                node.ForeColor = _autoCheckedEmpDns.Contains(((LdapNodeDTO)node.Tag)?.dn) || 
+                               _autoCheckedDeptDns.Contains(((LdapNodeDTO)node.Tag)?.dn) 
+                               ? Color.Gray : Color.Black;
+                ResetHighlight(node.Nodes);
+            }
+        }
+    }
+
+    public class LdapNodeDTO
+    {
+        public string dn { get; set; }
+        public string name { get; set; }
+        public int type { get; set; }
+        public string account { get; set; }
+        public bool hasAuth { get; set; }
+        public LdapNodeDTO[] deptList { get; set; }
+        public LdapNodeDTO[] employList { get; set; }
+    }
+}

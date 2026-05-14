@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using WpsPasswordManager.Monitor;
 using WpsPasswordManager.Utils;
+using WpsPasswordManager.Business;
 
 namespace WpsPasswordManager.UI
 {
@@ -10,9 +11,21 @@ namespace WpsPasswordManager.UI
     {
         private Button _generateButton;
         private Button _extractPasswordButton;
+        private Button _authButton;
         private IntPtr _passwordEditHandle;
         private WpsMonitor _monitor;
         private bool _isVisible = false;
+        private FileMeta _currentFileMeta;
+
+        public FileMeta CurrentFileMeta
+        {
+            get => _currentFileMeta;
+            set
+            {
+                _currentFileMeta = value;
+                UpdateAuthButtonVisibility();
+            }
+        }
 
         // Win32 API 定义
         [DllImport("user32.dll")]
@@ -73,9 +86,70 @@ namespace WpsPasswordManager.UI
             _extractPasswordButton.FlatAppearance.BorderSize = 0;
             _extractPasswordButton.Click += ExtractPasswordButton_Click;
 
+            // 创建文档权限按钮
+            _authButton = new Button
+            {
+                Text = "文档权限",
+                FlatStyle = FlatStyle.Flat,
+                BackColor = System.Drawing.Color.FromArgb(156, 39, 176),
+                ForeColor = System.Drawing.Color.White,
+                Font = new System.Drawing.Font("微软雅黑", 9F, System.Drawing.FontStyle.Bold),
+                Size = new System.Drawing.Size(90, 32),
+                Location = new System.Drawing.Point(0, 72),
+                Cursor = System.Windows.Forms.Cursors.Hand,
+                Visible = false
+            };
+
+            _authButton.FlatAppearance.BorderSize = 0;
+            _authButton.Click += AuthButton_Click;
+
             this.Controls.Add(_generateButton);
             this.Controls.Add(_extractPasswordButton);
-            this.Size = new System.Drawing.Size(90, 68);
+            this.Controls.Add(_authButton);
+            this.Size = new System.Drawing.Size(90, 104);
+        }
+
+        private void AuthButton_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                Logger.Info("用户点击了文档权限按钮");
+                if (_currentFileMeta != null && !string.IsNullOrEmpty(_currentFileMeta.Uid))
+                {
+                    AuthTreeForm authForm = new AuthTreeForm(_currentFileMeta.Uid);
+                    authForm.ShowDialog();
+                }
+                else
+                {
+                    ShowNotification("文档ID为空，无法获取权限信息");
+                    Logger.Warning("文档ID为空，无法获取权限信息");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"打开文档权限对话框时出错: {ex.Message}");
+                ShowNotification("打开权限对话框时出错");
+            }
+        }
+
+        private void UpdateAuthButtonVisibility()
+        {
+            if (_authButton != null)
+            {
+                bool shouldShow = _currentFileMeta != null && _currentFileMeta.WriteAuth;
+                _authButton.Visible = shouldShow;
+                
+                if (shouldShow)
+                {
+                    this.Size = new System.Drawing.Size(90, 104);
+                }
+                else
+                {
+                    this.Size = new System.Drawing.Size(90, 68);
+                }
+                
+                Logger.Debug($"文档权限按钮显示状态更新: {shouldShow}");
+            }
         }
 
         private void ExtractPasswordButton_Click(object sender, EventArgs e)
