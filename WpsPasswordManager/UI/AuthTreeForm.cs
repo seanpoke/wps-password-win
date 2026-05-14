@@ -18,7 +18,6 @@ namespace WpsPasswordManager.UI
         private Panel _topPanel;
         private TextBox _searchTextBox;
         private Button _searchButton;
-        private Button _closeButton;
         private AuthTreeView _authTreeView;
         private Panel _loadingPanel;
         private Label _loadingLabel;
@@ -48,6 +47,12 @@ namespace WpsPasswordManager.UI
         private HashSet<string> _autoCheckedDeptDns = new HashSet<string>();
         private bool _isUpdatingCheckState = false;
 
+        private Button _searchUpButton;
+        private Button _searchDownButton;
+        private Label _searchCountLabel;
+        private List<TreeNode> _matchedNodes = new List<TreeNode>();
+        private int _currentMatchIndex = -1;
+
         public AuthTreeForm(string docId)
         {
             _docId = docId;
@@ -73,23 +78,6 @@ namespace WpsPasswordManager.UI
             this.MaximizeBox = false;
             this.MinimizeBox = false;
             this.ShowIcon = false;
-
-            _closeButton = new Button
-            {
-                Text = "×",
-                Font = new Font("微软雅黑", 14F, FontStyle.Bold),
-                ForeColor = Color.Gray,
-                BackColor = Color.White,
-                Size = new Size(30, 30),
-                Location = new Point(670, 5),
-                FlatStyle = FlatStyle.Flat,
-                Cursor = Cursors.Hand,
-                TabStop = false
-            };
-            _closeButton.FlatAppearance.BorderSize = 0;
-            _closeButton.Click += (sender, e) => this.Close();
-            _closeButton.MouseEnter += (sender, e) => _closeButton.ForeColor = Color.Black;
-            _closeButton.MouseLeave += (sender, e) => _closeButton.ForeColor = Color.Gray;
 
             _topPanel = new Panel
             {
@@ -125,6 +113,48 @@ namespace WpsPasswordManager.UI
             _searchButton.MouseEnter += (sender, e) => _searchButton.BackColor = Color.FromArgb(0, 100, 180);
             _searchButton.MouseLeave += (sender, e) => _searchButton.BackColor = Color.FromArgb(0, 120, 212);
 
+            _searchUpButton = new Button
+            {
+                Text = "◀",
+                Font = new Font("微软雅黑", 10F, FontStyle.Bold),
+                ForeColor = Color.Black,
+                BackColor = Color.White,
+                Size = new Size(28, 28),
+                Location = new Point(280, 6),
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand,
+                TabStop = false,
+                Enabled = false
+            };
+            _searchUpButton.FlatAppearance.BorderSize = 0;
+            _searchUpButton.Click += SearchUpButton_Click;
+
+            _searchDownButton = new Button
+            {
+                Text = "▶",
+                Font = new Font("微软雅黑", 10F, FontStyle.Bold),
+                ForeColor = Color.Black,
+                BackColor = Color.White,
+                Size = new Size(28, 28),
+                Location = new Point(310, 6),
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand,
+                TabStop = false,
+                Enabled = false
+            };
+            _searchDownButton.FlatAppearance.BorderSize = 0;
+            _searchDownButton.Click += SearchDownButton_Click;
+
+            _searchCountLabel = new Label
+            {
+                Text = "",
+                Font = new Font("微软雅黑", 9F),
+                ForeColor = Color.Gray,
+                Size = new Size(50, 28),
+                Location = new Point(342, 6),
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+
             _saveButton = new Button
             {
                 Text = "保存",
@@ -132,7 +162,7 @@ namespace WpsPasswordManager.UI
                 ForeColor = Color.White,
                 BackColor = Color.FromArgb(156, 39, 176),
                 Size = new Size(65, 28),
-                Location = new Point(625, 6),
+                Location = new Point(555, 6),
                 FlatStyle = FlatStyle.Flat,
                 Cursor = Cursors.Hand,
                 TabStop = false
@@ -149,7 +179,7 @@ namespace WpsPasswordManager.UI
                 ForeColor = Color.White,
                 BackColor = Color.FromArgb(156, 39, 176),
                 Size = new Size(65, 28),
-                Location = new Point(555, 6),
+                Location = new Point(475, 6),
                 FlatStyle = FlatStyle.Flat,
                 Cursor = Cursors.Hand,
                 TabStop = false
@@ -161,9 +191,11 @@ namespace WpsPasswordManager.UI
 
             _topPanel.Controls.Add(_searchTextBox);
             _topPanel.Controls.Add(_searchButton);
+            _topPanel.Controls.Add(_searchUpButton);
+            _topPanel.Controls.Add(_searchDownButton);
+            _topPanel.Controls.Add(_searchCountLabel);
             _topPanel.Controls.Add(_resetButton);
             _topPanel.Controls.Add(_saveButton);
-            _topPanel.Controls.Add(_closeButton);
 
             _leftPanel = new Panel
             {
@@ -437,7 +469,8 @@ namespace WpsPasswordManager.UI
                 if (!isChecked)
                 {
                     _autoCheckedEmpDns.Remove(empDto.dn);
-                    empNode.ForeColor = Color.Black;
+                    bool isMatched = _matchedNodes.Contains(empNode);
+                    empNode.ForeColor = isMatched ? Color.Red : Color.Black;
                 }
                 else
                 {
@@ -476,7 +509,8 @@ namespace WpsPasswordManager.UI
                             {
                                 _autoCheckedEmpDns.Add(childDto.dn);
                             }
-                            childNode.ForeColor = Color.Gray;
+                            bool isMatched = _matchedNodes.Contains(childNode);
+                            childNode.ForeColor = isMatched ? Color.Red : Color.Gray;
                             
                             _selectedEmps.RemoveAll(n => n.dn == childDto.dn);
                         }
@@ -491,7 +525,8 @@ namespace WpsPasswordManager.UI
                             {
                                 _autoCheckedDeptDns.Add(childDto.dn);
                             }
-                            childNode.ForeColor = Color.Gray;
+                            bool isMatched = _matchedNodes.Contains(childNode);
+                            childNode.ForeColor = isMatched ? Color.Red : Color.Gray;
                             
                             _selectedDepts.RemoveAll(n => n.dn == childDto.dn);
                             _selectedEmps.RemoveAll(emp => emp.dn.StartsWith(childDto.dn));
@@ -514,7 +549,8 @@ namespace WpsPasswordManager.UI
                         if (_autoCheckedEmpDns.Contains(childDto.dn))
                         {
                             _autoCheckedEmpDns.Remove(childDto.dn);
-                            childNode.ForeColor = Color.Black;
+                            bool isMatched = _matchedNodes.Contains(childNode);
+                            childNode.ForeColor = isMatched ? Color.Red : Color.Black;
                             
                             bool isManuallyChecked = _selectedEmps.Exists(n => n.dn == childDto.dn);
                             
@@ -529,7 +565,8 @@ namespace WpsPasswordManager.UI
                         if (_autoCheckedDeptDns.Contains(childDto.dn))
                         {
                             _autoCheckedDeptDns.Remove(childDto.dn);
-                            childNode.ForeColor = Color.Black;
+                            bool isMatched = _matchedNodes.Contains(childNode);
+                            childNode.ForeColor = isMatched ? Color.Red : Color.Black;
                             
                             bool isManuallyChecked = _selectedDepts.Exists(n => n.dn == childDto.dn);
                             
@@ -975,10 +1012,22 @@ namespace WpsPasswordManager.UI
                 return;
             }
 
-            HighlightMatchingNodes(_authTreeView.Nodes, searchText, false);
+            _matchedNodes.Clear();
+            _currentMatchIndex = -1;
+
+            bool firstMatchFound = false;
+            HighlightMatchingNodes(_authTreeView.Nodes, searchText, false, ref firstMatchFound);
+
+            UpdateSearchNavigation();
         }
 
         private void HighlightMatchingNodes(TreeNodeCollection nodes, string searchText, bool parentMatched)
+        {
+            bool firstMatchFound = false;
+            HighlightMatchingNodes(nodes, searchText, parentMatched, ref firstMatchFound);
+        }
+
+        private void HighlightMatchingNodes(TreeNodeCollection nodes, string searchText, bool parentMatched, ref bool firstMatchFound)
         {
             foreach (TreeNode node in nodes)
             {
@@ -1003,21 +1052,46 @@ namespace WpsPasswordManager.UI
                 
                 if (shouldShow)
                 {
-                    node.ForeColor = Color.Red;
-                    node.EnsureVisible();
+                    if (isMatch)
+                    {
+                        node.ForeColor = Color.Red;
+                        _matchedNodes.Add(node);
+                    }
+                    else
+                    {
+                        bool isAutoChecked = _autoCheckedEmpDns.Contains(nodeDto?.dn) || 
+                                             _autoCheckedDeptDns.Contains(nodeDto?.dn);
+                        node.ForeColor = isAutoChecked ? Color.Gray : Color.Black;
+                    }
+                    
+                    if (isMatch && !firstMatchFound)
+                    {
+                        node.EnsureVisible();
+                        firstMatchFound = true;
+                    }
+                    else if (!isMatch)
+                    {
+                        node.EnsureVisible();
+                    }
                 }
                 else
                 {
-                    node.ForeColor = Color.Black;
+                    bool isAutoChecked = _autoCheckedEmpDns.Contains(nodeDto?.dn) || 
+                                         _autoCheckedDeptDns.Contains(nodeDto?.dn);
+                    
+                    node.ForeColor = isAutoChecked ? Color.Gray : Color.Black;
                 }
 
-                HighlightMatchingNodes(node.Nodes, searchText, shouldShow);
+                HighlightMatchingNodes(node.Nodes, searchText, shouldShow, ref firstMatchFound);
             }
         }
 
         private void ResetSearchHighlight()
         {
             ResetHighlight(_authTreeView.Nodes);
+            _matchedNodes.Clear();
+            _currentMatchIndex = -1;
+            UpdateSearchNavigation();
         }
 
         private void ResetHighlight(TreeNodeCollection nodes)
@@ -1028,6 +1102,70 @@ namespace WpsPasswordManager.UI
                                _autoCheckedDeptDns.Contains(((LdapNodeDTO)node.Tag)?.dn) 
                                ? Color.Gray : Color.Black;
                 ResetHighlight(node.Nodes);
+            }
+        }
+
+        private void UpdateSearchNavigation()
+        {
+            if (_matchedNodes.Count == 0)
+            {
+                _searchCountLabel.Text = "";
+                _searchUpButton.Enabled = false;
+                _searchDownButton.Enabled = false;
+                _searchUpButton.Visible = false;
+                _searchDownButton.Visible = false;
+                _searchCountLabel.Visible = false;
+            }
+            else
+            {
+                if (_currentMatchIndex < 0)
+                {
+                    _currentMatchIndex = 0;
+                }
+                _searchCountLabel.Text = $"{_currentMatchIndex + 1}/{_matchedNodes.Count}";
+                _searchUpButton.Enabled = _matchedNodes.Count > 1;
+                _searchDownButton.Enabled = _matchedNodes.Count > 1;
+                _searchUpButton.Visible = true;
+                _searchDownButton.Visible = true;
+                _searchCountLabel.Visible = true;
+            }
+        }
+
+        private void SearchUpButton_Click(object sender, EventArgs e)
+        {
+            if (_matchedNodes.Count == 0) return;
+            
+            _currentMatchIndex--;
+            if (_currentMatchIndex < 0)
+            {
+                _currentMatchIndex = _matchedNodes.Count - 1;
+            }
+            
+            NavigateToMatch();
+        }
+
+        private void SearchDownButton_Click(object sender, EventArgs e)
+        {
+            if (_matchedNodes.Count == 0) return;
+            
+            _currentMatchIndex++;
+            if (_currentMatchIndex >= _matchedNodes.Count)
+            {
+                _currentMatchIndex = 0;
+            }
+            
+            NavigateToMatch();
+        }
+
+        private void NavigateToMatch()
+        {
+            if (_matchedNodes.Count > 0 && _currentMatchIndex >= 0 && _currentMatchIndex < _matchedNodes.Count)
+            {
+                TreeNode node = _matchedNodes[_currentMatchIndex];
+                node.TreeView.TopNode = node;
+                node.TreeView.SelectedNode = node;
+                node.EnsureVisible();
+                _searchCountLabel.Text = $"{_currentMatchIndex + 1}/{_matchedNodes.Count}";
             }
         }
     }
