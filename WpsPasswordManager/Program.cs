@@ -1659,227 +1659,54 @@ namespace WpsPasswordManager
             {
                 Logger.Debug("尝试找到并点击小眼睛按钮");
 
-                // 获取密码输入框的子元素，寻找小眼睛按钮
-                System.Reflection.MethodInfo findAllMethod = automationElementType.GetMethod("FindAll");
-                if (findAllMethod != null)
-                {
-                    try
-                    {
-                        // 获取TreeScope枚举
-                        System.Reflection.Assembly uiaTypesAssembly = System.Reflection.Assembly.Load("UIAutomationTypes");
-                        if (uiaTypesAssembly != null)
-                        {
-                            Type treeScopeType = uiaTypesAssembly.GetType("System.Windows.Automation.TreeScope");
-                            if (treeScopeType != null)
-                            {
-                                object treeScopeDescendants = Enum.Parse(treeScopeType, "Descendants");
-
-                                // 获取ControlType.Button
-                                Type controlTypeType = uiaTypesAssembly.GetType("System.Windows.Automation.ControlType");
-                                if (controlTypeType != null)
-                                {
-                                    System.Reflection.FieldInfo buttonField = controlTypeType.GetField("Button");
-                                    if (buttonField != null)
-                                    {
-                                        object buttonControlType = buttonField.GetValue(null);
-
-                                        // 获取PropertyCondition类
-                                        System.Reflection.Assembly uiaClientAssembly = System.Reflection.Assembly.Load("UIAutomationClient");
-                                        if (uiaClientAssembly != null)
-                                        {
-                                            Type propertyConditionType = uiaClientAssembly.GetType("System.Windows.Automation.PropertyCondition");
-                                            if (propertyConditionType != null)
-                                            {
-                                                // 获取ControlTypeProperty
-                                                System.Reflection.PropertyInfo controlTypePropertyInfo = automationElementType.GetProperty("ControlTypeProperty");
-                                                if (controlTypePropertyInfo != null)
-                                                {
-                                                    object controlTypeProperty = controlTypePropertyInfo.GetValue(null);
-                                                    if (controlTypeProperty != null)
-                                                    {
-                                                        // 创建按钮条件
-                                                        object buttonCondition = Activator.CreateInstance(propertyConditionType, new object[] { controlTypeProperty, buttonControlType });
-                                                        if (buttonCondition != null)
-                                                        {
-                                                            // 查找所有按钮
-                                                            object buttons = findAllMethod.Invoke(passwordEdit, new object[] { treeScopeDescendants, buttonCondition });
-                                                            if (buttons != null)
-                                                            {
-                                                                // 获取按钮数量
-                                                                System.Reflection.PropertyInfo countProperty = buttons.GetType().GetProperty("Count");
-                                                                if (countProperty != null)
-                                                                {
-                                                                    int count = (int)countProperty.GetValue(buttons);
-                                                                    Logger.Debug($"找到 {count} 个按钮");
-
-                                                                    // 遍历按钮，寻找小眼睛按钮
-                                                                    for (int i = 0; i < count; i++)
-                                                                    {
-                                                                        try
-                                                                        {
-                                                                            System.Reflection.MethodInfo getItemMethod = buttons.GetType().GetMethod("get_Item");
-                                                                            if (getItemMethod != null)
-                                                                            {
-                                                                                object button = getItemMethod.Invoke(buttons, new object[] { i });
-                                                                                if (button != null)
-                                                                                {
-                                                                                    // 获取按钮名称
-                                                                                    System.Reflection.PropertyInfo currentProperty = button.GetType().GetProperty("Current");
-                                                                                    if (currentProperty != null)
-                                                                                    {
-                                                                                        object current = currentProperty.GetValue(button);
-                                                                                        if (current != null)
-                                                                                        {
-                                                                                            System.Reflection.PropertyInfo nameProperty = current.GetType().GetProperty("Name");
-                                                                                            if (nameProperty != null)
-                                                                                            {
-                                                                                                string name = (string)nameProperty.GetValue(current);
-                                                                                                if (!string.IsNullOrEmpty(name))
-                                                                                                {
-                                                                                                    Logger.Debug($"按钮 #{i} 名称: {name}");
-
-                                                                                                    // 检查是否是小眼睛按钮
-                                                                                                    if (name.Contains("眼睛") || name.Contains("eye") || name.Contains("reveal") || name.Contains("显示"))
-                                                                                                    {
-                                                                                                        Logger.Info("找到小眼睛按钮");
-
-                                                                                                        // 获取按钮位置并点击
-                                                                                                        System.Reflection.PropertyInfo boundingRectangleProperty = current.GetType().GetProperty("BoundingRectangle");
-                                                                                                        if (boundingRectangleProperty != null)
-                                                                                                        {
-                                                                                                            object boundingRectangle = boundingRectangleProperty.GetValue(current);
-                                                                                                            if (boundingRectangle != null)
-                                                                                                            {
-                                                                                                                try
-                                                                                                                {
-                                                                                                                    // 获取矩形坐标
-                                                                                                                    System.Reflection.PropertyInfo leftProperty = boundingRectangle.GetType().GetProperty("Left");
-                                                                                                                    System.Reflection.PropertyInfo topProperty = boundingRectangle.GetType().GetProperty("Top");
-                                                                                                                    System.Reflection.PropertyInfo rightProperty = boundingRectangle.GetType().GetProperty("Right");
-                                                                                                                    System.Reflection.PropertyInfo bottomProperty = boundingRectangle.GetType().GetProperty("Bottom");
-
-                                                                                                                    if (leftProperty != null && topProperty != null && rightProperty != null && bottomProperty != null)
-                                                                                                                    {
-                                                                                                                        // 处理可能的类型转换问题
-                                                                                                                        object leftValue = leftProperty.GetValue(boundingRectangle);
-                                                                                                                        object topValue = topProperty.GetValue(boundingRectangle);
-                                                                                                                        object rightValue = rightProperty.GetValue(boundingRectangle);
-                                                                                                                        object bottomValue = bottomProperty.GetValue(boundingRectangle);
-
-                                                                                                                        int left = Convert.ToInt32(leftValue);
-                                                                                                                        int top = Convert.ToInt32(topValue);
-                                                                                                                        int right = Convert.ToInt32(rightValue);
-                                                                                                                        int bottom = Convert.ToInt32(bottomValue);
-
-                                                                                                                        // 计算按钮中心点
-                                                                                                                        int centerX = (left + right) / 2;
-                                                                                                                        int centerY = (top + bottom) / 2;
-
-                                                                                                                        // 模拟点击
-                                                                                                                        POINT point = new POINT { X = centerX, Y = centerY };
-                                                                                                                        SimulateMouseClick(point);
-                                                                                                                        Logger.Info("已点击小眼睛按钮");
-
-                                                                                                                        // 等待一小段时间让密码显示
-                                                                                                                        Thread.Sleep(100);
-                                                                                                                        return true;
-                                                                                                                    }
-                                                                                                                }
-                                                                                                                catch (Exception ex)
-                                                                                                                {
-                                                                                                                    Logger.Error($"获取按钮位置时出错: {ex.Message}");
-                                                                                                                }
-                                                                                                            }
-                                                                                                        }
-                                                                                                    }
-                                                                                                }
-                                                                                            }
-                                                                                        }
-                                                                                    }
-                                                                                }
-                                                                            }
-                                                                        }
-                                                                        catch (Exception ex)
-                                                                        {
-                                                                            Logger.Error($"处理按钮 #{i} 时出错: {ex.Message}");
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Error($"查找小眼睛按钮时出错: {ex.Message}");
-                    }
-                }
-
-                // 如果找不到小眼睛按钮，尝试其他方法
-                Logger.Warning("未找到小眼睛按钮，尝试其他方法");
-
-                // 尝试直接模拟点击密码输入框右侧区域（通常是小眼睛按钮的位置）
                 try
                 {
-                    // 获取密码输入框的位置
                     System.Reflection.PropertyInfo currentProperty = passwordEdit.GetType().GetProperty("Current");
-                    if (currentProperty != null)
-                    {
-                        object current = currentProperty.GetValue(passwordEdit);
-                        if (current != null)
-                        {
-                            System.Reflection.PropertyInfo boundingRectangleProperty = current.GetType().GetProperty("BoundingRectangle");
-                            if (boundingRectangleProperty != null)
-                            {
-                                object boundingRectangle = boundingRectangleProperty.GetValue(current);
-                                if (boundingRectangle != null)
-                                {
-                                    System.Reflection.PropertyInfo leftProperty = boundingRectangle.GetType().GetProperty("Left");
-                                    System.Reflection.PropertyInfo topProperty = boundingRectangle.GetType().GetProperty("Top");
-                                    System.Reflection.PropertyInfo rightProperty = boundingRectangle.GetType().GetProperty("Right");
-                                    System.Reflection.PropertyInfo bottomProperty = boundingRectangle.GetType().GetProperty("Bottom");
+                    if (currentProperty == null)
+                        return false;
 
-                                    if (leftProperty != null && topProperty != null && rightProperty != null && bottomProperty != null)
-                                    {
-                                        // 处理可能的类型转换问题
-                                        object leftValue = leftProperty.GetValue(boundingRectangle);
-                                        object topValue = topProperty.GetValue(boundingRectangle);
-                                        object rightValue = rightProperty.GetValue(boundingRectangle);
-                                        object bottomValue = bottomProperty.GetValue(boundingRectangle);
+                    object current = currentProperty.GetValue(passwordEdit);
+                    if (current == null)
+                        return false;
 
-                                        int left = Convert.ToInt32(leftValue);
-                                        int top = Convert.ToInt32(topValue);
-                                        int right = Convert.ToInt32(rightValue);
-                                        int bottom = Convert.ToInt32(bottomValue);
+                    System.Reflection.PropertyInfo boundingRectangleProperty = current.GetType().GetProperty("BoundingRectangle");
+                    if (boundingRectangleProperty == null)
+                        return false;
 
-                                        // 点击输入框右侧（小眼睛按钮通常在那里）
-                                        int eyeButtonX = right - 20; // 假设小眼睛按钮在右侧20像素处
-                                        int eyeButtonY = (top + bottom) / 2;
+                    object boundingRectangle = boundingRectangleProperty.GetValue(current);
+                    if (boundingRectangle == null)
+                        return false;
 
-                                        POINT point = new POINT { X = eyeButtonX, Y = eyeButtonY };
-                                        SimulateMouseClick(point);
-                                        Logger.Info("尝试点击密码输入框右侧区域（小眼睛按钮位置）");
-                                        Thread.Sleep(100);
-                                        return true;
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    System.Reflection.PropertyInfo leftProperty = boundingRectangle.GetType().GetProperty("Left");
+                    System.Reflection.PropertyInfo topProperty = boundingRectangle.GetType().GetProperty("Top");
+                    System.Reflection.PropertyInfo rightProperty = boundingRectangle.GetType().GetProperty("Right");
+                    System.Reflection.PropertyInfo bottomProperty = boundingRectangle.GetType().GetProperty("Bottom");
+
+                    if (leftProperty == null || topProperty == null || rightProperty == null || bottomProperty == null)
+                        return false;
+
+                    int left = Convert.ToInt32(leftProperty.GetValue(boundingRectangle));
+                    int top = Convert.ToInt32(topProperty.GetValue(boundingRectangle));
+                    int right = Convert.ToInt32(rightProperty.GetValue(boundingRectangle));
+                    int bottom = Convert.ToInt32(bottomProperty.GetValue(boundingRectangle));
+
+                    int eyeButtonX = right - 25;
+                    int eyeButtonY = (top + bottom) / 2;
+
+                    Logger.Debug($"计算小眼睛按钮位置: ({eyeButtonX}, {eyeButtonY})");
+
+                    POINT point = new POINT { X = eyeButtonX, Y = eyeButtonY };
+                    SimulateMouseClick(point);
+                    Logger.Info("通过位置估算点击小眼睛按钮区域");
+
+                    Thread.Sleep(100);
+                    return true;
                 }
                 catch (Exception ex)
                 {
-                    Logger.Error($"尝试点击小眼睛按钮位置时出错: {ex.Message}");
+                    Logger.Error($"尝试点击小眼睛按钮时出错: {ex.Message}");
+                    return false;
                 }
-
-                return false;
             }
             catch (Exception ex)
             {
