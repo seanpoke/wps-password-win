@@ -1023,40 +1023,66 @@ namespace WpsPasswordManager
 
                                         if (fileMeta != null)
                                         {
-                                            // 4. 判断元数据是否已修改
+                                            // 5. 判断元数据是否正在执行写操作
+                                            if (fileMeta.IsWriting)
+                                            {
+                                                Logger.Info($"文档 {documentPath} 正在写入中，跳过本次写入任务");
+                                                continue;
+                                            }
+
+                                            // 6. 判断是否需要执行元数据写入
+                                            bool needWriteMetadata = false;
+                                            bool isUidOnlyWrite = false;
+
+                                            // 触发条件1：元数据已修改
                                             if (fileMeta.IsModify)
                                             {
-                                                // 5. 判断元数据是否正在执行写操作
-                                                if (fileMeta.IsWriting)
+                                                needWriteMetadata = true;
+                                                Logger.Info($"文档 {documentPath} 的元数据已修改，需要执行元数据写入");
+                                            }
+                                            else
+                                            {
+                                                // 触发条件2：元数据未修改，但检测文档尾部是否存在UID元数据
+                                                FileMetaManager checkManager = new FileMetaManager();
+                                                bool hasUidMeta = checkManager.HasUidMetadata(documentPath);
+                                                
+                                                if (!hasUidMeta)
                                                 {
-                                                    Logger.Info($"文档 {documentPath} 正在写入中，跳过本次写入任务");
-                                                    continue;
+                                                    needWriteMetadata = true;
+                                                    isUidOnlyWrite = true;
+                                                    Logger.Info($"文档 {documentPath} 的元数据未修改，但文档尾部不存在UID元数据，需要执行UID写入");
                                                 }
+                                                else
+                                                {
+                                                    Logger.Info($"文档 {documentPath} 的元数据未修改且已存在UID元数据，无需执行写入");
+                                                }
+                                            }
 
-                                                // 6. 更新元数据的写变量（volatile保证可见性）
+                                            if (needWriteMetadata)
+                                            {
+                                                // 7. 更新元数据的写变量（volatile保证可见性）
                                                 fileMeta.IsWriting = true;
 
-                                                Logger.Info($"文档 {documentPath} 的元数据已修改，启动异步写入任务");
                                                 string pathCopy = documentPath;
 
                                                 string beforePassword = fileMeta.CurrentPassword;
-                                                string writePassword = FileMetaFactory.Instance.GetWritePassword(pathCopy);
-                                                SortedSet<string> pendingPasswords = fileMeta.PendingPasswordList != null ? new SortedSet<string>(fileMeta.PendingPasswordList) : null;
+                                                string writePassword = isUidOnlyWrite ? null : FileMetaFactory.Instance.GetWritePassword(pathCopy);
+                                                SortedSet<string> pendingPasswords = isUidOnlyWrite ? null : (fileMeta.PendingPasswordList != null ? new SortedSet<string>(fileMeta.PendingPasswordList) : null);
                                                 string fileUid = fileMeta.Uid;
-                                                string keyVersion = GlobalState.Instance.KeyVersion;
+                                                string keyVersion = isUidOnlyWrite ? null : GlobalState.Instance.KeyVersion;
 
                                                 FileMeta asyncFileMeta = new FileMeta(pathCopy)
                                                 {
-                                                    CurrentPassword = beforePassword,
+                                                    CurrentPassword = isUidOnlyWrite ? null : beforePassword,
                                                     AfterPassword = writePassword,
                                                     Uid = fileUid,
                                                     CurrentKeyVersion = keyVersion,
                                                     PendingPasswordList = pendingPasswords,
                                                 };
 
-                                                Logger.Info($"捕获密码信息用于上报: beforePassword={(string.IsNullOrEmpty(asyncFileMeta.CurrentPassword) ? "空" : "有值")}, pendingPasswords数量={(asyncFileMeta.PendingPasswordList?.Count ?? 0)}, fileUid={asyncFileMeta.Uid}");
+                                                Logger.Info($"捕获信息用于写入: isUidOnlyWrite={isUidOnlyWrite}, beforePassword={(string.IsNullOrEmpty(asyncFileMeta.CurrentPassword) ? "空" : "有值")}, afterPassword={(string.IsNullOrEmpty(asyncFileMeta.AfterPassword) ? "空" : "有值")}, fileUid={asyncFileMeta.Uid}");
 
-                                                // 7. 执行写密码和上报记录的异步操作
+                                                // 8. 执行写元数据的异步操作
                                                 Task.Run(async () =>
                                                 {
                                                     try
@@ -1074,31 +1100,39 @@ namespace WpsPasswordManager
                                                         {
                                                             Logger.Error($"文档 {pathCopy} 的元数据写入失败");
                                                         }
-                                                   
-                                                        var reportService = PasswordReportService.Instance;
 
-                                                        bool hasPasswordInfo = !string.IsNullOrEmpty(asyncFileMeta.CurrentPassword) ||
-                                                                                !string.IsNullOrEmpty(asyncFileMeta.AfterPassword) ||
-                                                                                (asyncFileMeta.PendingPasswordList != null && asyncFileMeta.PendingPasswordList.Count > 0);
-
-                                                        if (hasPasswordInfo)
+                                                        // 仅在非UID-only写入场景下才上报密码信息
+                                                        if (!isUidOnlyWrite)
                                                         {
-                                                            bool reportSuccess = await reportService.ReportSaveLogWithPasswords(asyncFileMeta);
+                                                            var reportService = PasswordReportService.Instance;
 
-                                                            if (reportSuccess)
+                                                            bool hasPasswordInfo = !string.IsNullOrEmpty(asyncFileMeta.CurrentPassword) ||
+                                                                                    !string.IsNullOrEmpty(asyncFileMeta.AfterPassword) ||
+                                                                                    (asyncFileMeta.PendingPasswordList != null && asyncFileMeta.PendingPasswordList.Count > 0);
+
+                                                            if (hasPasswordInfo)
                                                             {
-                                                                Logger.Info($"文档 {pathCopy} 的密码保存记录上报成功");
+                                                                bool reportSuccess = await reportService.ReportSaveLogWithPasswords(asyncFileMeta);
+
+                                                                if (reportSuccess)
+                                                                {
+                                                                    Logger.Info($"文档 {pathCopy} 的密码保存记录上报成功");
+                                                                }
+                                                                else
+                                                                {
+                                                                    Logger.Warning($"文档 {pathCopy} 的密码保存记录上报失败");
+                                                                }
                                                             }
                                                             else
                                                             {
-                                                                Logger.Warning($"文档 {pathCopy} 的密码保存记录上报失败");
+                                                                Logger.Info($"文档 {pathCopy} 无密码信息，跳过保存记录上报");
                                                             }
                                                         }
                                                         else
                                                         {
-                                                            Logger.Info($"文档 {pathCopy} 无密码信息，跳过保存记录上报");
+                                                            Logger.Info($"文档 {pathCopy} 为仅写入UID场景，跳过密码信息上报");
                                                         }
-                                                      
+
                                                     }
                                                     catch (Exception ex)
                                                     {

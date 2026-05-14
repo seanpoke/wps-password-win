@@ -447,6 +447,33 @@ namespace WpsPasswordManager.Business
             return !string.IsNullOrEmpty(ReadPasswordFromFile(filePath));
         }
 
+        public bool HasUidMetadata(string filePath)
+        {
+            if (!File.Exists(filePath))
+            {
+                Logger.Error($"文件不存在: {filePath}");
+                return false;
+            }
+
+            string extension = Path.GetExtension(filePath).ToLower();
+            if (!IsSupportedFormat(extension))
+            {
+                Logger.Warning($"不支持的文件格式: {extension}");
+                return false;
+            }
+
+            try
+            {
+                string uid = ReadUidFromFile(filePath);
+                return !string.IsNullOrEmpty(uid);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"检测UID元数据时发生异常: {ex.Message}");
+                return false;
+            }
+        }
+
         private bool IsSupportedFormat(string extension)
         {
             string[] supportedFormats = { ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt" };
