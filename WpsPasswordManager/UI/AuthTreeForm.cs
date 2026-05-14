@@ -7,6 +7,7 @@ using System.Linq;
 using WpsPasswordManager.Services.Request;
 using WpsPasswordManager.Services.Routing;
 using WpsPasswordManager.Utils;
+using WpsPasswordManager.UI.Controls;
 
 namespace WpsPasswordManager.UI
 {
@@ -18,7 +19,7 @@ namespace WpsPasswordManager.UI
         private TextBox _searchTextBox;
         private Button _searchButton;
         private Button _closeButton;
-        private TreeView _authTreeView;
+        private AuthTreeView _authTreeView;
         private Panel _loadingPanel;
         private Label _loadingLabel;
         private Label _errorLabel;
@@ -183,7 +184,7 @@ namespace WpsPasswordManager.UI
             };
             _leftPanel.Controls.Add(_leftTitleLabel);
 
-            _authTreeView = new TreeView
+            _authTreeView = new AuthTreeView
             {
                 Size = new Size(340, 435),
                 Location = new Point(0, 25),
