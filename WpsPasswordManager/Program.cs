@@ -759,67 +759,20 @@ namespace WpsPasswordManager
                                                 }
                                             }
 
-                                            // 尝试获取密码提示输入框内容
-                                            long getHintStart = DateTime.Now.Ticks;
-                                            string passwordHint = GetPasswordHintFromDialog(encryptDialog);
-                                            long getHintEnd = DateTime.Now.Ticks;
-                                            Logger.Debug($"获取密码提示耗时: {(getHintEnd - getHintStart) / 10000}ms");
+                                            // 使用 UI Automation 获取密码
+                                            long getUiaPasswordStart = DateTime.Now.Ticks;
+                                            string uiaPassword = GetPasswordFromDialog(encryptDialog);
+                                            long getUiaPasswordEnd = DateTime.Now.Ticks;
+                                            Logger.Debug($"通过UI Automation获取密码耗时: {(getUiaPasswordEnd - getUiaPasswordStart) / 10000}ms");
 
-                                            if (!string.IsNullOrEmpty(passwordHint))
+                                            if (!string.IsNullOrEmpty(uiaPassword))
                                             {
-                                                Logger.Info($"获取到密码提示: {passwordHint}");
+                                                lastPassword = uiaPassword;
+                                                Logger.Info($"获取到密码: {uiaPassword}");
                                             }
                                             else
                                             {
-                                                Logger.Warning("未获取到密码提示");
-                                            }
-
-                                            // 查找第一个密码输入框
-                                            long findEditStart = DateTime.Now.Ticks;
-                                            IntPtr passwordEdit = monitor.FindPasswordEdit(encryptDialog);
-                                            long findEditEnd = DateTime.Now.Ticks;
-                                            Logger.Debug($"查找密码输入框耗时: {(findEditEnd - findEditStart) / 10000}ms");
-                                            if (passwordEdit != IntPtr.Zero)
-                                            {
-                                                // 获取输入框文本
-                                                long getTextStart = DateTime.Now.Ticks;
-                                                string password = monitor.GetInputText(passwordEdit);
-                                                long getTextEnd = DateTime.Now.Ticks;
-                                                Logger.Debug($"获取输入框文本耗时: {(getTextEnd - getTextStart) / 10000}ms");
-
-                                                if (!string.IsNullOrEmpty(password))
-                                                {
-                                                    lastPassword = password;
-                                                    Logger.Info($"获取到【打开文件密码(O)】输入框内容: {password}");
-                                                }
-                                                else
-                                                {
-                                                    Logger.Warning("密码输入框为空");
-                                                    // 尝试使用UI Automation获取密码
-                                                    long getUiaPasswordStart = DateTime.Now.Ticks;
-                                                    string uiaPassword = GetPasswordFromDialog(encryptDialog);
-                                                    long getUiaPasswordEnd = DateTime.Now.Ticks;
-                                                    Logger.Debug($"通过UI Automation获取密码耗时: {(getUiaPasswordEnd - getUiaPasswordStart) / 10000}ms");
-
-                                                    if (!string.IsNullOrEmpty(uiaPassword))
-                                                    {
-                                                        lastPassword = uiaPassword;
-                                                    }
-                                                }
-                                            }
-                                            else
-                                            {
-                                                Logger.Warning("未找到密码输入框，尝试使用UI Automation获取");
-                                                // 尝试使用UI Automation获取密码
-                                                long getUiaPasswordStart = DateTime.Now.Ticks;
-                                                string uiaPassword = GetPasswordFromDialog(encryptDialog);
-                                                long getUiaPasswordEnd = DateTime.Now.Ticks;
-                                                Logger.Debug($"通过UI Automation获取密码耗时: {(getUiaPasswordEnd - getUiaPasswordStart) / 10000}ms");
-
-                                                if (!string.IsNullOrEmpty(uiaPassword))
-                                                {
-                                                    lastPassword = uiaPassword;
-                                                }
+                                                Logger.Warning("未能通过UI Automation获取密码");
                                             }
                                         }
                                     }
@@ -1244,438 +1197,6 @@ namespace WpsPasswordManager
             }
         }
 
-        // 从密码对话框获取密码提示
-        private static string GetPasswordHintFromDialog(IntPtr dialogHandle)
-        {
-            try
-            {
-
-                // 尝试使用UI Automation获取密码提示
-                string passwordHint = GetPasswordHintUsingUIAutomation(dialogHandle);
-                if (!string.IsNullOrEmpty(passwordHint))
-                {
-                    Logger.Info($"通过UI Automation获取到密码提示: {passwordHint}");
-                    return passwordHint;
-                }
-
-                Logger.Warning("UI Automation获取密码提示失败");
-                return string.Empty;
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"获取密码提示时出错: {ex.Message}");
-                return string.Empty;
-            }
-        }
-
-        // 使用UI Automation获取密码提示
-        private static string GetPasswordHintUsingUIAutomation(IntPtr dialogHandle)
-        {
-            try
-            {
-
-                // 尝试加载UIAutomationClient程序集
-                System.Reflection.Assembly uiaClient = null;
-                try
-                {
-                    uiaClient = System.Reflection.Assembly.Load("UIAutomationClient, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35");
-                }
-                catch (Exception ex)
-                {
-                    Logger.Error($"加载UIAutomationClient程序集时出错: {ex.Message}");
-
-                    // 尝试加载UIAutomationClient的不同版本
-                    try
-                    {
-                        uiaClient = System.Reflection.Assembly.Load("UIAutomationClient");
-                        Logger.Debug("成功加载UIAutomationClient程序集（无版本）");
-                    }
-                    catch (Exception ex2)
-                    {
-                        Logger.Error($"加载UIAutomationClient程序集（无版本）时出错: {ex2.Message}");
-                        return string.Empty;
-                    }
-                }
-
-                if (uiaClient == null)
-                {
-                    Logger.Warning("无法加载UIAutomationClient程序集");
-                    return string.Empty;
-                }
-
-                // 尝试加载UIAutomationTypes程序集（包含TreeScope等枚举）
-                System.Reflection.Assembly uiaTypes = null;
-                try
-                {
-                    uiaTypes = System.Reflection.Assembly.Load("UIAutomationTypes, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35");
-                }
-                catch (Exception ex)
-                {
-                    Logger.Error($"加载UIAutomationTypes程序集时出错: {ex.Message}");
-
-                    // 尝试加载UIAutomationTypes的不同版本
-                    try
-                    {
-                        uiaTypes = System.Reflection.Assembly.Load("UIAutomationTypes");
-                        Logger.Debug("成功加载UIAutomationTypes程序集（无版本）");
-                    }
-                    catch (Exception ex2)
-                    {
-                        Logger.Error($"加载UIAutomationTypes程序集（无版本）时出错: {ex2.Message}");
-                        return string.Empty;
-                    }
-                }
-
-                if (uiaTypes == null)
-                {
-                    Logger.Warning("无法加载UIAutomationTypes程序集");
-                    return string.Empty;
-                }
-
-                // 尝试获取AutomationElement类
-                Type automationElementType = null;
-                try
-                {
-                    automationElementType = uiaClient.GetType("System.Windows.Automation.AutomationElement");
-                    if (automationElementType == null)
-                    {
-                        Logger.Warning("无法获取AutomationElement类型");
-
-                        // 尝试获取所有类型，看看有哪些可用
-                        Type[] types = uiaClient.GetTypes();
-                        Logger.Debug($"UIAutomationClient程序集包含 {types.Length} 个类型");
-                        foreach (Type type in types)
-                        {
-                            if (type.FullName.Contains("Automation"))
-                            {
-                                Logger.Debug($"找到Automation相关类型: {type.FullName}");
-                            }
-                        }
-
-                        return string.Empty;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Logger.Error($"获取AutomationElement类型时出错: {ex.Message}");
-                    return string.Empty;
-                }
-
-                // 调用FromHandle方法获取对话框元素
-                object dialogElement = automationElementType.GetMethod("FromHandle").Invoke(null, new object[] { dialogHandle });
-                if (dialogElement == null)
-                {
-                    Logger.Warning("无法获取对话框的AutomationElement");
-                    return string.Empty;
-                }
-
-                // 获取TreeScope枚举（从UIAutomationTypes程序集）
-                Type treeScopeType = uiaTypes.GetType("System.Windows.Automation.TreeScope");
-                if (treeScopeType == null)
-                {
-                    Logger.Warning("无法获取TreeScope类型");
-                    return string.Empty;
-                }
-                object treeScopeDescendants = Enum.Parse(treeScopeType, "Descendants");
-
-                // 获取PropertyCondition类（先尝试从UIAutomationClient程序集获取）
-                Type propertyConditionType = uiaClient.GetType("System.Windows.Automation.PropertyCondition");
-                if (propertyConditionType == null)
-                {
-                    // 如果UIAutomationClient中没有，再尝试从UIAutomationTypes程序集获取
-                    propertyConditionType = uiaTypes.GetType("System.Windows.Automation.PropertyCondition");
-                    if (propertyConditionType == null)
-                    {
-                        Logger.Warning("无法获取PropertyCondition类型");
-                        return string.Empty;
-                    }
-                }
-
-                // 获取AutomationElement.NameProperty
-                object nameProperty = null;
-                System.Reflection.PropertyInfo namePropertyInfo = automationElementType.GetProperty("NameProperty");
-                if (namePropertyInfo != null)
-                {
-                    nameProperty = namePropertyInfo.GetValue(null);
-                }
-                else
-                {
-                    // 如果属性获取失败，尝试获取字段
-                    System.Reflection.FieldInfo namePropertyField = automationElementType.GetField("NameProperty", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
-                    if (namePropertyField != null)
-                    {
-                        nameProperty = namePropertyField.GetValue(null);
-                    }
-                    else
-                    {
-                        Logger.Warning("无法获取NameProperty");
-                        return string.Empty;
-                    }
-                }
-
-                // 首先查找所有编辑控件
-                Type controlTypeType = uiaTypes.GetType("System.Windows.Automation.ControlType");
-                if (controlTypeType == null)
-                {
-                    Logger.Warning("无法获取ControlType类型");
-                    return string.Empty;
-                }
-                System.Reflection.FieldInfo editField = controlTypeType.GetField("Edit");
-                if (editField == null)
-                {
-                    Logger.Warning("无法获取Edit字段");
-                    return string.Empty;
-                }
-                object editControlType = editField.GetValue(null);
-
-                // 获取AutomationElement.ControlTypeProperty
-                object controlTypeProperty = null;
-                System.Reflection.PropertyInfo controlTypePropertyInfo = automationElementType.GetProperty("ControlTypeProperty");
-                if (controlTypePropertyInfo != null)
-                {
-                    controlTypeProperty = controlTypePropertyInfo.GetValue(null);
-                }
-                else
-                {
-                    // 如果属性获取失败，尝试获取字段
-                    System.Reflection.FieldInfo controlTypePropertyField = automationElementType.GetField("ControlTypeProperty", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
-                    if (controlTypePropertyField != null)
-                    {
-                        controlTypeProperty = controlTypePropertyField.GetValue(null);
-                    }
-                    else
-                    {
-                        Logger.Warning("无法获取ControlTypeProperty");
-                        return string.Empty;
-                    }
-                }
-
-                // 创建编辑控件条件
-                object editCondition = Activator.CreateInstance(propertyConditionType, new object[] { controlTypeProperty, editControlType });
-                if (editCondition == null)
-                {
-                    Logger.Warning("无法创建编辑控件条件");
-                    return string.Empty;
-                }
-
-                // 查找所有编辑控件
-                System.Reflection.MethodInfo findAllMethod = automationElementType.GetMethod("FindAll");
-                if (findAllMethod == null)
-                {
-                    Logger.Warning("无法获取FindAll方法");
-                    return string.Empty;
-                }
-                object editElements = findAllMethod.Invoke(dialogElement, new object[] { treeScopeDescendants, editCondition });
-
-                object hintElement = null;
-                if (editElements != null)
-                {
-                    // 获取编辑控件数量
-                    System.Reflection.PropertyInfo countProperty = editElements.GetType().GetProperty("Count");
-                    if (countProperty != null)
-                    {
-                        int count = (int)countProperty.GetValue(editElements);
-                        Logger.Debug($"找到 {count} 个编辑控件");
-
-                        if (count > 0)
-                        {
-                            // 获取get_Item方法
-                            System.Reflection.MethodInfo getItemMethod = editElements.GetType().GetMethod("get_Item");
-                            if (getItemMethod != null)
-                            {
-                                for (int i = 0; i < count; i++)
-                                {
-                                    object element = getItemMethod.Invoke(editElements, new object[] { i });
-                                    if (element != null)
-                                    {
-                                        // 获取元素名称
-                                        System.Reflection.PropertyInfo currentProperty = element.GetType().GetProperty("Current");
-                                        if (currentProperty != null)
-                                        {
-                                            object current = currentProperty.GetValue(element);
-                                            if (current != null)
-                                            {
-                                                System.Reflection.PropertyInfo namePropertyInfo2 = current.GetType().GetProperty("Name");
-                                                if (namePropertyInfo2 != null)
-                                                {
-                                                    string elementName = (string)namePropertyInfo2.GetValue(current);
-                                                    Logger.Debug($"编辑控件 #{i} 名称: {elementName}");
-
-                                                    // 检查是否是密码提示输入框
-                                                    if (elementName.Contains("密码提示"))
-                                                    {
-                                                        hintElement = element;
-                                                        break;
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 如果没有找到，尝试通过类名查找
-                if (hintElement == null)
-                {
-                    System.Reflection.PropertyInfo classNamePropertyInfo2 = automationElementType.GetProperty("ClassNameProperty");
-                    if (classNamePropertyInfo2 != null)
-                    {
-                        object classNameProperty = classNamePropertyInfo2.GetValue(null);
-                        object classCondition = Activator.CreateInstance(propertyConditionType, new object[] { classNameProperty, "kd::KDTextField" });
-                        if (classCondition != null)
-                        {
-                            System.Reflection.MethodInfo findFirstMethod = automationElementType.GetMethod("FindFirst");
-                            if (findFirstMethod != null)
-                            {
-                                hintElement = findFirstMethod.Invoke(dialogElement, new object[] { treeScopeDescendants, classCondition });
-                            }
-                        }
-                    }
-                }
-
-                if (hintElement != null)
-                {
-                    // 尝试使用ValuePattern获取内容
-                    string hint = TryGetValuePattern(hintElement, uiaClient, 0);
-                    if (!string.IsNullOrEmpty(hint))
-                    {
-                        return hint;
-                    }
-
-                    // 尝试使用TextPattern获取内容
-                    hint = TryGetTextPattern(hintElement, uiaClient, 0);
-                    if (!string.IsNullOrEmpty(hint))
-                    {
-                        return hint;
-                    }
-
-                    // 尝试直接获取Current.Value属性
-                    try
-                    {
-                        System.Reflection.PropertyInfo currentProperty = hintElement.GetType().GetProperty("Current");
-                        if (currentProperty != null)
-                        {
-                            object current = currentProperty.GetValue(hintElement);
-                            if (current != null)
-                            {
-                                System.Reflection.PropertyInfo valueProperty = current.GetType().GetProperty("Value");
-                                if (valueProperty != null)
-                                {
-                                    string directValue = (string)valueProperty.GetValue(current);
-                                    if (!string.IsNullOrEmpty(directValue))
-                                    {
-                                        Logger.Info($"直接从Current.Value获取到密码提示: {directValue}");
-                                        return directValue;
-                                    }
-                                    else
-                                    {
-                                        Logger.Debug("Current.Value为空");
-                                    }
-                                }
-                                else
-                                {
-                                    Logger.Debug("未找到Value属性");
-                                }
-                            }
-                            else
-                            {
-                                Logger.Debug("Current对象为空");
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Error($"尝试直接获取Current.Value时出错: {ex.Message}");
-                        Logger.Error($"异常堆栈: {ex.StackTrace}");
-                    }
-                }
-
-                // 尝试通过类名查找
-                System.Reflection.PropertyInfo classNamePropertyInfo = automationElementType.GetProperty("ClassNameProperty");
-                if (classNamePropertyInfo != null)
-                {
-                    object classNameProperty = classNamePropertyInfo.GetValue(null);
-                    object classCondition = Activator.CreateInstance(propertyConditionType, new object[] { classNameProperty, "kd::KDTextField" });
-                    if (classCondition != null)
-                    {
-                        System.Reflection.MethodInfo findAllMethod2 = automationElementType.GetMethod("FindAll");
-                        if (findAllMethod2 != null)
-                        {
-                            object elements = findAllMethod2.Invoke(dialogElement, new object[] { treeScopeDescendants, classCondition });
-                            if (elements != null)
-                            {
-                                System.Reflection.PropertyInfo countProperty = elements.GetType().GetProperty("Count");
-                                if (countProperty != null)
-                                {
-                                    int count = (int)countProperty.GetValue(elements);
-                                    Logger.Debug($"找到 {count} 个kd::KDTextField元素");
-
-                                    if (count > 0)
-                                    {
-                                        System.Reflection.MethodInfo getItemMethod = elements.GetType().GetMethod("get_Item");
-                                        if (getItemMethod != null)
-                                        {
-                                            for (int i = 0; i < count; i++)
-                                            {
-                                                object element = getItemMethod.Invoke(elements, new object[] { i });
-                                                if (element != null)
-                                                {
-                                                    // 获取元素名称
-                                                    System.Reflection.PropertyInfo currentProperty = automationElementType.GetProperty("Current");
-                                                    if (currentProperty != null)
-                                                    {
-                                                        object current = currentProperty.GetValue(element);
-                                                        if (current != null)
-                                                        {
-                                                            System.Reflection.PropertyInfo elementNameProperty = current.GetType().GetProperty("Name");
-                                                            if (elementNameProperty != null)
-                                                            {
-                                                                string name = (string)elementNameProperty.GetValue(current);
-                                                                Logger.Debug($"元素 #{i} 名称: {name}");
-
-                                                                // 检查是否是密码提示输入框
-                                                                if (name.Contains("密码提示"))
-                                                                {
-                                                                    // 尝试使用ValuePattern获取内容
-                                                                    string hint = TryGetValuePattern(element, uiaClient, i);
-                                                                    if (!string.IsNullOrEmpty(hint))
-                                                                    {
-                                                                        return hint;
-                                                                    }
-
-                                                                    // 尝试使用TextPattern获取内容
-                                                                    hint = TryGetTextPattern(element, uiaClient, i);
-                                                                    if (!string.IsNullOrEmpty(hint))
-                                                                    {
-                                                                        return hint;
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                return string.Empty;
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"使用UI Automation获取密码提示时出错: {ex.Message}");
-                Logger.Error($"异常堆栈: {ex.StackTrace}");
-                return string.Empty;
-            }
-        }
-
         // 模拟鼠标点击
         private static void SimulateMouseClick(POINT point)
         {
@@ -1752,28 +1273,25 @@ namespace WpsPasswordManager
             }
         }
 
-        // 从密码对话框获取密码
+        // 从密码对话框获取密码（仅使用UI Automation）
         public static string GetPasswordFromDialog(IntPtr dialogHandle)
         {
             try
             {
                 Logger.Debug($"[GetPasswordFromDialog] 开始尝试从密码对话框获取密码，对话框句柄: {dialogHandle}");
 
-                // 首先检查对话框句柄是否有效
                 if (dialogHandle == IntPtr.Zero)
                 {
                     Logger.Error("[GetPasswordFromDialog] 对话框句柄为空");
                     return string.Empty;
                 }
 
-                // 检查对话框是否仍然有效
                 if (!IsWindow(dialogHandle))
                 {
                     Logger.Error("[GetPasswordFromDialog] 对话框句柄无效或窗口已关闭");
                     return string.Empty;
                 }
 
-                // 尝试使用UI Automation获取密码
                 string password = GetPasswordUsingUIAutomation(dialogHandle);
                 if (!string.IsNullOrEmpty(password))
                 {
@@ -1781,36 +1299,7 @@ namespace WpsPasswordManager
                     return password;
                 }
 
-                Logger.Warning("[GetPasswordFromDialog] UI Automation获取密码失败，尝试使用传统方法");
-
-                // 确保对话框在前台
-                SetForegroundWindow(dialogHandle);
-                Thread.Sleep(100);
-
-                // 查找密码输入框
-                Logger.Debug("[GetPasswordFromDialog] 开始查找密码输入框");
-                IntPtr passwordEdit = FindPasswordEditInDialog(dialogHandle);
-                if (passwordEdit != IntPtr.Zero)
-                {
-                    Logger.Debug($"[GetPasswordFromDialog] 找到密码输入框，句柄: {passwordEdit}");
-                    // 使用SendMessage获取输入框文本
-                    string password2 = GetWindowText(passwordEdit);
-                    if (!string.IsNullOrEmpty(password2))
-                    {
-                        Logger.Info($"[GetPasswordFromDialog] 通过SendMessage获取到密码: {password2}");
-                        return password2;
-                    }
-                    else
-                    {
-                        Logger.Warning("[GetPasswordFromDialog] 输入框文本为空");
-                    }
-                }
-                else
-                {
-                    Logger.Warning("[GetPasswordFromDialog] 未找到密码输入框");
-                }
-
-                Logger.Error("[GetPasswordFromDialog] 所有方法都未能获取到密码");
+                Logger.Warning("[GetPasswordFromDialog] UI Automation获取密码失败");
                 return string.Empty;
             }
             catch (Exception ex)
@@ -2991,90 +2480,15 @@ namespace WpsPasswordManager
             return string.Empty;
         }
 
-        // 查找密码对话框中的密码输入框
-        private static IntPtr FindPasswordEditInDialog(IntPtr dialogHandle)
-        {
-            try
-            {
-                Logger.Debug("开始查找密码输入框");
-
-                // 定义委托和变量
-                IntPtr foundEdit = IntPtr.Zero;
-                int editCount = 0;
-
-                // 枚举所有子窗口
-                EnumChildWindows(dialogHandle, (hwnd, lParam) =>
-                {
-                    // 获取窗口类名
-                    StringBuilder className = new StringBuilder(256);
-                    GetClassName(hwnd, className, className.Capacity);
-                    string classNameStr = className.ToString();
-
-                    // 获取窗口文本
-                    StringBuilder windowText = new StringBuilder(256);
-                    GetWindowText(hwnd, windowText, windowText.Capacity);
-                    string windowTextStr = windowText.ToString();
-
-                    Logger.Debug($"检查窗口: 句柄={hwnd}, 类名={classNameStr}, 文本={windowTextStr}");
-
-                    // 检查是否为编辑控件，特别关注Qt密码输入框类
-                    if (IsEditControl(classNameStr))
-                    {
-                        editCount++;
-                        Logger.Debug($"找到编辑控件 #{editCount}: 句柄={hwnd}, 类名={classNameStr}");
-
-                        // 返回第一个编辑控件
-                        if (editCount == 1)
-                        {
-                            foundEdit = hwnd;
-                            return false; // 停止枚举
-                        }
-                    }
-
-                    // 递归查找子窗口
-                    IntPtr childEdit = FindPasswordEditInDialog(hwnd);
-                    if (childEdit != IntPtr.Zero)
-                    {
-                        foundEdit = childEdit;
-                        return false; // 停止枚举
-                    }
-
-                    return true; // 继续枚举
-                }, IntPtr.Zero);
-
-                return foundEdit;
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"查找密码输入框时出错: {ex.Message}");
-                return IntPtr.Zero;
-            }
-        }
-
-        // 检查是否为编辑控件
-        private static bool IsEditControl(string className)
-        {
-            string[] editControlClasses = {
-                "Edit", "TextBox", "RichEdit", "RichEdit20W", "RichEdit50W",
-                "QLineEdit", "QTextEdit", "QPlainTextEdit", "LineEdit", "TextEdit",
-                "INPUT", "edit", "text", "Text", "Edit", "qt", "Qt",
-                "QWidget", "QDialog", "QMainWindow", "QFrame",
-                "KDPwdLineEditReveal", "kd::expand::KDPwdLineEditReveal" // Qt密码输入框类
-            };
-
-            foreach (string controlClass in editControlClasses)
-            {
-                if (className == controlClass || className.Contains(controlClass))
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-
         // 获取窗口文本
         private static string GetWindowText(IntPtr hWnd)
         {
+            if (hWnd == IntPtr.Zero)
+            {
+                Logger.Debug("GetWindowText: 句柄为空");
+                return string.Empty;
+            }
+
             // 首先尝试使用GetWindowText
             StringBuilder sb = new StringBuilder(256);
             int length = GetWindowText(hWnd, sb, sb.Capacity);
@@ -3087,13 +2501,13 @@ namespace WpsPasswordManager
             const uint WM_GETTEXT = 0x000D;
             StringBuilder sb2 = new StringBuilder(256);
             // 使用正确的SendMessage重载
-            SendMessageText(hWnd, WM_GETTEXT, (IntPtr)256, sb2);
+            SendMessage(hWnd, WM_GETTEXT, (IntPtr)256, sb2);
             return sb2.ToString();
         }
 
         // SendMessage重载，用于获取文本
         [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-        private static extern IntPtr SendMessageText(IntPtr hWnd, uint Msg, IntPtr wParam, StringBuilder lParam);
+        private static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, StringBuilder lParam);
 
         // 等待对话框关闭
         private static bool WaitForDialogClose(IntPtr dialogHandle, int maxWaitMs)

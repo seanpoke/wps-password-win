@@ -199,35 +199,15 @@ namespace WpsPasswordManager.UI
             {
                 Logger.Info("FloatingButton: 尝试从密码对话框获取密码");
                 
-                // 首先尝试使用传统方法获取密码
-                IntPtr passwordEdit = _monitor.FindPasswordEdit(dialogHandle);
-                if (passwordEdit != IntPtr.Zero)
+                // 使用UI Automation获取密码
+                string password = GetPasswordUsingUIAutomation(dialogHandle);
+                if (!string.IsNullOrEmpty(password))
                 {
-                    string password = _monitor.GetInputText(passwordEdit);
-                    if (!string.IsNullOrEmpty(password))
-                    {
-                        Logger.Info($"FloatingButton: 通过传统方法获取到密码: {password}");
-                        return password;
-                    }
-                    else
-                    {
-                        Logger.Info("FloatingButton: 传统方法获取到的密码为空，尝试使用UI Automation");
-                    }
-                }
-                else
-                {
-                    Logger.Info("FloatingButton: 未找到密码输入框，尝试使用UI Automation");
+                    Logger.Info($"FloatingButton: 通过UI Automation获取到密码: {password}");
+                    return password;
                 }
                 
-                // 尝试使用UI Automation获取密码
-                string password2 = GetPasswordUsingUIAutomation(dialogHandle);
-                if (!string.IsNullOrEmpty(password2))
-                {
-                    Logger.Info($"FloatingButton: 通过UI Automation获取到密码: {password2}");
-                    return password2;
-                }
-                
-                Logger.Warning("FloatingButton: 所有方法都无法获取密码");
+                Logger.Warning("FloatingButton: 无法通过UI Automation获取密码");
                 return string.Empty;
             }
             catch (Exception ex)
