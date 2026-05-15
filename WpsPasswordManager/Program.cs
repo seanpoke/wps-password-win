@@ -739,13 +739,24 @@ namespace WpsPasswordManager
                                             lastDialogTitle = title;
                                             Logger.Info($"记录密码加密窗口: {encryptDialog}");
 
-                                            // 尝试获取文档路径并生成UID
+                                            // 尝试获取文档路径并获取UID
                                             string documentPath = monitor.GetDocumentPath(IntPtr.Zero);
                                             if (!string.IsNullOrEmpty(documentPath))
                                             {
-                                                // 获取文档的UID，确保UID被生成和缓存
-                                                string uid = metadataManager.GetDocumentUid(documentPath);
-                                                Logger.Info($"获取到文档UID: {uid}");
+                                                // 优先从FileMetaFactory缓存获取UID
+                                                FileMeta cachedFileMeta = FileMetaFactory.Instance.GetFileMeta(documentPath);
+                                                string uid = cachedFileMeta?.Uid;
+                                                
+                                                // 如果缓存中没有，才从文件读取并生成
+                                                if (string.IsNullOrEmpty(uid))
+                                                {
+                                                    uid = metadataManager.GetDocumentUid(documentPath);
+                                                    Logger.Info($"从文件读取到文档UID: {uid}");
+                                                }
+                                                else
+                                                {
+                                                    Logger.Info($"从缓存获取到文档UID: {uid}");
+                                                }
                                             }
 
                                             // 尝试获取密码提示输入框内容
