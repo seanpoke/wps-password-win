@@ -154,6 +154,21 @@ namespace WpsPasswordManager
         
         static async Task MainAsync()
         {
+            // WPS进程检测阶段：检查是否有WPS相关进程正在运行
+            if (IsWpsProcessRunning())
+            {
+                // 检测到WPS进程，显示模态对话框
+                MessageBox.Show(
+                    "请先关闭wps应用，再启动本程序",
+                    "提示",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                
+                // 立即终止程序，确保不残留任何后台进程
+                Environment.Exit(0);
+                return;
+            }
+
             // 检查进程唯一性
             bool isNewInstance;
             using (System.Threading.Mutex mutex = new System.Threading.Mutex(true, "WpsPasswordManagerMutex", out isNewInstance))
@@ -1167,6 +1182,43 @@ namespace WpsPasswordManager
                 Application.Run();
             }
         }
+
+        // 检查WPS进程是否正在运行（仅检测有可见窗口的进程）
+        private static bool IsWpsProcessRunning()
+        {
+            try
+            {
+                Process[] processes = Process.GetProcessesByName("wps");
+                foreach (Process process in processes)
+                {
+                    try
+                    {
+                        // 检查进程是否有主窗口且窗口可见
+                        if (process.MainWindowHandle != IntPtr.Zero && IsWindowVisible(process.MainWindowHandle))
+                        {
+                            Logger.Info("检测到WPS窗口进程正在运行");
+                            return true;
+                        }
+                    }
+                    catch
+                    {
+                        // 进程可能已退出，忽略异常
+                    }
+                }
+                
+                Logger.Info("未检测到WPS窗口进程");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"检测WPS进程时发生错误: {ex.Message}");
+                return false;
+            }
+        }
+
+        // 检查窗口是否可见
+        [DllImport("user32.dll")]
+        private static extern bool IsWindowVisible(IntPtr hWnd);
 
         // 检查文档是否打开
         private static bool IsDocumentOpen(string documentPath)
