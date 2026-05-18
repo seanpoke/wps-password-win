@@ -18,6 +18,7 @@ namespace WpsPasswordManager.Utils
         private volatile bool _isLoggedIn;
         private string _publicKey;
         private string _keyVersion;
+        private string _lastFailedFileName;
 
         private const string DEFAULT_PUBLIC_KEY = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEuY2/Hz7c7gM0O8P/8VYjDasWhdW4jyS99+Xwyghe+CVFko7KPeamzaOsUffIHQz0VAA8RH9MV1BYyuZAJ7X05Q==";
         private const string DEFAULT_KEY_VERSION = "default";
@@ -270,6 +271,25 @@ namespace WpsPasswordManager.Utils
                 lock (_lock)
                 {
                     _keyVersion = value;
+                }
+            }
+        }
+
+        // LastFailedFileName - 上次文件识别失败的文件名
+        public string LastFailedFileName
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return _lastFailedFileName;
+                }
+            }
+            set
+            {
+                lock (_lock)
+                {
+                    _lastFailedFileName = value;
                 }
             }
         }
