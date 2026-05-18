@@ -927,7 +927,6 @@ namespace WpsPasswordManager
                                                 else
                                                 {
                                                     Logger.Warning("未找到文件元数据或密码为空");
-                                                    AutoFillAttemptManager.Instance.RemoveRecord(documentPath);
                                                 }
                                             }
                                             else
