@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using WpsPasswordManager.Utils;
 using WpsPasswordManager.Locator;
+using WpsPasswordManager.UI;
 
 #pragma warning disable CS8600, CS8601, CS8602, CS8603, CS8604, CS8605, CS8618, CS8625
 
@@ -1319,6 +1320,7 @@ namespace WpsPasswordManager.Monitor
                 }
                 
                 // 如果成功提取到文档名，查找最近文档
+                bool foundInRecentDocs = false;
                 if (!string.IsNullOrEmpty(docName))
                 {
                     // 尝试查找最近打开的WPS文档
@@ -1350,11 +1352,20 @@ namespace WpsPasswordManager.Monitor
                                 if (fileName.Equals(docName, StringComparison.OrdinalIgnoreCase))
                                 {
                                     // Logger.Debug($"从最近文档中匹配到与窗口标题相同的文档: {targetPath}");
+                                    foundInRecentDocs = true;
+                                    FileRecognitionFailedForm.ClearFailedRecord();
                                     return targetPath;
                                 }
                             }
                         }
                         catch { }
+                    }
+
+                    // 在最近文档中未找到匹配的文档，记录识别失败并显示弹窗
+                    if (!foundInRecentDocs)
+                    {
+                        Logger.Info($"文档识别失败，文档名: {docName}，准备显示弹窗提示");
+                        FileRecognitionFailedForm.ShowDialogIfNeeded(docName);
                     }
                 }
             }
