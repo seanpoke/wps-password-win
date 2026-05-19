@@ -78,6 +78,7 @@ namespace WpsPasswordManager.UI
             this.MaximizeBox = false;
             this.MinimizeBox = false;
             this.ShowIcon = false;
+            this.TopMost = true;
 
             _topPanel = new Panel
             {

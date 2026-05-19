@@ -16,6 +16,7 @@ namespace WpsPasswordManager.UI
         private WpsMonitor _monitor;
         private bool _isVisible = false;
         private FileMeta _currentFileMeta;
+        private IntPtr _parentDialogHandle = IntPtr.Zero;
 
         public FileMeta CurrentFileMeta
         {
@@ -31,11 +32,18 @@ namespace WpsPasswordManager.UI
         [DllImport("user32.dll")]
         private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
+
+        [DllImport("user32.dll")]
+        private static extern bool IsWindow(IntPtr hWnd);
+
         // 常量定义
         private const uint SWP_NOSIZE = 0x0001;
         private const uint SWP_NOMOVE = 0x0002;
         private const uint SWP_NOACTIVATE = 0x0010;
         private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+        private static readonly IntPtr HWND_NOTOPMOST = new IntPtr(-2);
 
         public event EventHandler GeneratePasswordClicked;
 
@@ -49,10 +57,11 @@ namespace WpsPasswordManager.UI
         {
             // 配置表单
             this.FormBorderStyle = FormBorderStyle.None;
-            this.TopMost = true;
+            this.TopMost = false;
             this.ShowInTaskbar = false;
-            this.BackColor = System.Drawing.Color.FromArgb(240, 240, 240);
             this.TransparencyKey = System.Drawing.Color.Magenta;
+            this.BackColor = System.Drawing.Color.Magenta;
+            this.StartPosition = FormStartPosition.Manual;
 
             // 创建生成密码按钮
             _generateButton = new Button
@@ -64,11 +73,15 @@ namespace WpsPasswordManager.UI
                 Font = new System.Drawing.Font("微软雅黑", 9F, System.Drawing.FontStyle.Bold),
                 Size = new System.Drawing.Size(90, 32),
                 Location = new System.Drawing.Point(0, 0),
-                Cursor = System.Windows.Forms.Cursors.Hand
+                Cursor = System.Windows.Forms.Cursors.Hand,
+                UseVisualStyleBackColor = false,
+                FlatAppearance = { BorderSize = 0 }
             };
-
-            _generateButton.FlatAppearance.BorderSize = 0;
             _generateButton.Click += (sender, e) => GeneratePasswordClicked?.Invoke(this, EventArgs.Empty);
+            _generateButton.MouseEnter += (sender, e) => _generateButton.BackColor = System.Drawing.Color.FromArgb(26, 115, 232);
+            _generateButton.MouseLeave += (sender, e) => _generateButton.BackColor = System.Drawing.Color.FromArgb(0, 120, 212);
+            _generateButton.MouseDown += (sender, e) => _generateButton.BackColor = System.Drawing.Color.FromArgb(0, 90, 170);
+            _generateButton.MouseUp += (sender, e) => _generateButton.BackColor = System.Drawing.Color.FromArgb(26, 115, 232);
 
             // 创建提取密码按钮
             _extractPasswordButton = new Button
@@ -80,11 +93,15 @@ namespace WpsPasswordManager.UI
                 Font = new System.Drawing.Font("微软雅黑", 9F, System.Drawing.FontStyle.Bold),
                 Size = new System.Drawing.Size(90, 32),
                 Location = new System.Drawing.Point(0, 36),
-                Cursor = System.Windows.Forms.Cursors.Hand
+                Cursor = System.Windows.Forms.Cursors.Hand,
+                UseVisualStyleBackColor = false,
+                FlatAppearance = { BorderSize = 0 }
             };
-
-            _extractPasswordButton.FlatAppearance.BorderSize = 0;
             _extractPasswordButton.Click += ExtractPasswordButton_Click;
+            _extractPasswordButton.MouseEnter += (sender, e) => _extractPasswordButton.BackColor = System.Drawing.Color.FromArgb(0, 170, 156);
+            _extractPasswordButton.MouseLeave += (sender, e) => _extractPasswordButton.BackColor = System.Drawing.Color.FromArgb(0, 150, 136);
+            _extractPasswordButton.MouseDown += (sender, e) => _extractPasswordButton.BackColor = System.Drawing.Color.FromArgb(0, 120, 110);
+            _extractPasswordButton.MouseUp += (sender, e) => _extractPasswordButton.BackColor = System.Drawing.Color.FromArgb(0, 170, 156);
 
             // 创建文档权限按钮
             _authButton = new Button
@@ -97,11 +114,15 @@ namespace WpsPasswordManager.UI
                 Size = new System.Drawing.Size(90, 32),
                 Location = new System.Drawing.Point(0, 72),
                 Cursor = System.Windows.Forms.Cursors.Hand,
-                Visible = false
+                Visible = false,
+                UseVisualStyleBackColor = false,
+                FlatAppearance = { BorderSize = 0 }
             };
-
-            _authButton.FlatAppearance.BorderSize = 0;
             _authButton.Click += AuthButton_Click;
+            _authButton.MouseEnter += (sender, e) => _authButton.BackColor = System.Drawing.Color.FromArgb(176, 59, 196);
+            _authButton.MouseLeave += (sender, e) => _authButton.BackColor = System.Drawing.Color.FromArgb(156, 39, 176);
+            _authButton.MouseDown += (sender, e) => _authButton.BackColor = System.Drawing.Color.FromArgb(126, 29, 146);
+            _authButton.MouseUp += (sender, e) => _authButton.BackColor = System.Drawing.Color.FromArgb(176, 59, 196);
 
             this.Controls.Add(_generateButton);
             this.Controls.Add(_extractPasswordButton);
@@ -550,17 +571,11 @@ namespace WpsPasswordManager.UI
             notificationForm.ShowNotification(message);
         }
 
-        // 重写 Show 方法，确保每次显示时都在最顶层
         public new void Show()
         {
-            // 设置窗口为最顶层
-            SetWindowPos(this.Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
             base.Show();
-            // 只有在按钮首次显示时才设置焦点，避免重复设置焦点导致鼠标自动移动
             if (!_isVisible)
             {
-                // 移除焦点设置，避免鼠标自动移动到按钮上
-                // _generateButton.Focus();
                 _isVisible = true;
             }
         }
@@ -601,13 +616,13 @@ namespace WpsPasswordManager.UI
                 return;
             }
 
-            // 获取对话框位置
+            // 获取对话框位置（相对于屏幕）
             WpsMonitor.RECT rect = _monitor.GetWindowRect(dialogHandle);
             float dpiScale = _monitor.GetDpiScale();
 
-            // 计算按钮位置（对话框右侧紧靠着窗口，垂直居中）
-            int x = (int)(rect.Right - 5 * dpiScale); // 距离窗口右侧5px
-            int y = (int)((rect.Top + rect.Bottom) / 2 * dpiScale - this.Height / 2); // 垂直居中
+            // 计算按钮位置（对话框右侧，距离右边框5px，垂直居中）
+            int x = (int)(rect.Right + 5 * dpiScale);
+            int y = (int)(rect.Top + (rect.Bottom - rect.Top - this.Height) / 2 * dpiScale);
 
             // 只有在位置发生变化时才更新位置
             if (this.Location.X != x || this.Location.Y != y)
@@ -615,14 +630,20 @@ namespace WpsPasswordManager.UI
                 Logger.Debug($"显示悬浮按钮在对话框右侧，位置: X={x}, Y={y}, DPI缩放: {dpiScale}");
                 this.Location = new System.Drawing.Point(x, y);
             }
-            Show(); // 调用重写的 Show 方法
+
+            // 设置按钮在对话框之后显示，确保层级同步
+            SetWindowPos(this.Handle, dialogHandle, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            Logger.Debug($"设置悬浮按钮在对话框 {dialogHandle} 之后显示");
+
+            Show();
         }
 
         public void HideButton()
         {
             this.Hide();
-            // 重置可见状态
             _isVisible = false;
+            _parentDialogHandle = IntPtr.Zero;
+            Logger.Debug("悬浮按钮已隐藏");
         }
 
         protected override void OnDeactivate(EventArgs e)
