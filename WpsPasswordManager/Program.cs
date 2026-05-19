@@ -63,19 +63,6 @@ namespace WpsPasswordManager
         [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
         private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
 
-        // 鼠标钩子相关的Win32 API
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern IntPtr SetWindowsHookEx(int idHook, HookProc lpfn, IntPtr hMod, uint dwThreadId);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool UnhookWindowsHookEx(IntPtr hhk);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern IntPtr GetModuleHandle(string lpModuleName);
-
         [DllImport("user32.dll")]
         private static extern IntPtr WindowFromPoint(POINT pt);
 
@@ -99,33 +86,11 @@ namespace WpsPasswordManager
         [DllImport("user32.dll")]
         private static extern bool IsWindow(IntPtr hWnd);
 
-        // 钩子回调函数
-        private delegate IntPtr HookProc(int nCode, IntPtr wParam, IntPtr lParam);
-
-        // 鼠标钩子变量
-        private static HookProc _mouseHookProc;
-        private static IntPtr _mouseHook;
-
-
-
         // 常量定义
-        private const int WH_MOUSE_LL = 14;
-        private const int WM_LBUTTONDOWN = 0x0201;
         private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
         private const uint MOUSEEVENTF_LEFTUP = 0x0004;
-        private const uint WM_CANCELMODE = 0x001F;
 
         // 结构体定义
-        [StructLayout(LayoutKind.Sequential)]
-        private struct MSLLHOOKSTRUCT
-        {
-            public POINT pt;
-            public int mouseData;
-            public int flags;
-            public int time;
-            public IntPtr dwExtraInfo;
-        }
-
         [StructLayout(LayoutKind.Sequential)]
         private struct POINT
         {
@@ -872,7 +837,7 @@ namespace WpsPasswordManager
 
                                             if (!AutoFillAttemptManager.Instance.HasAttempted(documentPath))
                                             {
-                                                AutoFillAttemptManager.Instance.AddAttempt(documentPath);
+                                                AutoFillAttemptManager.Instance.MarkAttempted(documentPath);
                                                 
                                                 var fileMeta = FileMetaFactory.Instance.GetFileMeta(documentPath);
                                                 if (fileMeta != null && !string.IsNullOrEmpty(fileMeta.CurrentPassword))
@@ -884,50 +849,19 @@ namespace WpsPasswordManager
                                                     if (success)
                                                     {
                                                         Logger.Info("解密密码自动填充成功");
-                                                        bool dialogClosed = WaitForDialogClose(decryptDialog, 2500);
-                                                        if (dialogClosed)
-                                                        {
-                                                            AutoFillAttemptManager.Instance.MarkSuccess(documentPath);
-                                                            Logger.Info($"已标记文档 {documentPath} 为已尝试自动填充密码");
-                                                        }
                                                     }
                                                     else
                                                     {
-                                                        Logger.Warning("自动填充失败，回退到传统方式");
-                                                        
-                                                        SetForegroundWindow(decryptDialog);
-                                                        Thread.Sleep(200);
-
-                                                        IntPtr passwordEdit = monitor.FindPasswordEdit(decryptDialog);
-                                                        if (passwordEdit != IntPtr.Zero)
-                                                        {
-                                                            simulator.ClearInput(passwordEdit);
-                                                            simulator.SimulatePasswordInput(passwordEdit, password);
-                                                            Thread.Sleep(100);
-                                                            simulator.SimulateEnterKey();
-                                                        }
-                                                        else
-                                                        {
-                                                            Logger.Info("未找到密码输入框，使用Tab键导航");
-                                                            keybd_event(0x09, 0, 0, UIntPtr.Zero);
-                                                            keybd_event(0x09, 0, 2, UIntPtr.Zero);
-                                                            Thread.Sleep(100);
-                                                            simulator.SimulateTextInput(password);
-                                                            Thread.Sleep(100);
-                                                            simulator.SimulateEnterKey();
-                                                        }
-                                                        
-                                                        bool dialogClosed = WaitForDialogClose(decryptDialog, 2500);
-                                                        if (dialogClosed)
-                                                        {
-                                                            AutoFillAttemptManager.Instance.MarkSuccess(documentPath);
-                                                        }
+                                                        Logger.Warning("自动填充失败");
                                                     }
                                                 }
                                                 else
                                                 {
                                                     Logger.Warning("未找到文件元数据或密码为空");
                                                 }
+                                                
+                                                WaitForDialogClose(decryptDialog, 2500);
+                                                AutoFillAttemptManager.Instance.ResetAttempt(documentPath);
                                             }
                                             else
                                             {
@@ -993,8 +927,7 @@ namespace WpsPasswordManager
                                     if (!IsDocumentOpen(documentPath))
                                     {
                                         // 2. 已关闭则清理AutoFillAttemptManager中的记录
-                                        AutoFillAttemptManager.Instance.RemoveRecord(documentPath);
-                                        Logger.Info($"文档已关闭，清理自动填充尝试记录: {documentPath}");
+                                        AutoFillAttemptManager.Instance.OnDocumentClosed(documentPath);
 
                                         // 3. 从FileMetaFactory获取元数据
                                         FileMeta fileMeta = FileMetaFactory.Instance.GetFileMeta(documentPath);

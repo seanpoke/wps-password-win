@@ -130,8 +130,8 @@ namespace WpsPasswordManager.Monitor
                 GetWindowText(hWnd, windowTitle, windowTitle.Capacity);
                 string title = windowTitle.ToString();
 
-                // 检查窗口标题是否包含密码相关关键词
-                if (!title.Contains("密码") && !title.Contains("加密") && !title.Contains("解密"))
+                // 精确匹配密码对话框标题
+                if (title != "密码加密" && title != "文档已加密")
                 {
                     return true; // 继续枚举
                 }

@@ -159,27 +159,6 @@ namespace WpsPasswordManager.Utils
             }
         }
         
-        // 暂停状态
-        public bool IsPaused
-        {
-            get
-            {
-                lock (_lock)
-                {
-                    // IsPaused与IsLoggedIn状态相反
-                    return !_isLoggedIn;
-                }
-            }
-            set
-            {
-                lock (_lock)
-                {
-                    // IsPaused与IsLoggedIn状态相反
-                    _isLoggedIn = !value;
-                }
-            }
-        }
-        
         // Token
         public string Token
         {
@@ -316,7 +295,6 @@ namespace WpsPasswordManager.Utils
                 _name = null;
                 _token = null;
                 _isLoggedIn = false;
-                // 保留IsPaused状态，不进行重置
                 // 保留配置信息（serverIp和serverPort）
             }
         }
