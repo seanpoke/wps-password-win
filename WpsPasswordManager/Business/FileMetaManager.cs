@@ -476,7 +476,7 @@ namespace WpsPasswordManager.Business
 
         private bool IsSupportedFormat(string extension)
         {
-            string[] supportedFormats = { ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt" };
+            string[] supportedFormats = { ".docx", ".xlsx", ".pptx" };
             foreach (string format in supportedFormats)
             {
                 if (extension == format)
