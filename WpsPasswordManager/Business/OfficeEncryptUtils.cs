@@ -25,10 +25,6 @@ namespace WpsPasswordManager.Business
                     case ".xlsx":
                     case ".pptx":
                         return IsOfficeOpenXmlEncrypted(filePath);
-                    case ".doc":
-                    case ".xls":
-                    case ".ppt":
-                        return IsOfficeOleEncrypted(filePath);
                     default:
                         return false;
                 }
@@ -128,61 +124,6 @@ namespace WpsPasswordManager.Business
             catch (Exception ex)
             {
                 Logger.Debug($"检查Open XML加密失败: {ex.Message}");
-                return false;
-            }
-        }
-
-        private static bool IsOfficeOleEncrypted(string filePath)
-        {
-            try
-            {
-                using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read))
-                {
-                    byte[] header = new byte[8];
-                    if (fs.Read(header, 0, 8) < 8)
-                    {
-                        return false;
-                    }
-
-                    if (header[0] == 0xD0 && header[1] == 0xCF && header[2] == 0x11 && header[3] == 0xE0)
-                    {
-                        fs.Seek(0, SeekOrigin.Begin);
-                        byte[] sectorTable = new byte[512];
-                        fs.Read(sectorTable, 0, 512);
-
-                        int dirSectorCount = BitConverter.ToInt32(sectorTable, 0x2C);
-                        if (dirSectorCount < 0 || dirSectorCount > 100)
-                        {
-                            return false;
-                        }
-
-                        fs.Seek(0x44, SeekOrigin.Begin);
-                        byte[] propertyBytes = new byte[4];
-                        fs.Read(propertyBytes, 0, 4);
-                        int propertyStartSector = BitConverter.ToInt32(propertyBytes, 0);
-
-                        long propertyOffset = 512 + propertyStartSector * 512;
-                        if (propertyOffset >= fs.Length)
-                        {
-                            return false;
-                        }
-
-                        fs.Seek(propertyOffset, SeekOrigin.Begin);
-                        byte[] propertyEntry = new byte[128];
-                        fs.Read(propertyEntry, 0, 128);
-
-                        if (propertyEntry[0x42] == 0xFF && propertyEntry[0x43] == 0xFF)
-                        {
-                            Logger.Debug($"文件 {filePath} 是加密的Office OLE文档");
-                            return true;
-                        }
-                    }
-                    return false;
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Debug($"检查OLE加密失败: {ex.Message}");
                 return false;
             }
         }

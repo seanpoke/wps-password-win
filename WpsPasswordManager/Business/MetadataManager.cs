@@ -765,7 +765,7 @@ namespace WpsPasswordManager.Business
         // 检查是否支持的文件格式
         private bool IsSupportedFormat(string extension)
         {
-            string[] supportedFormats = { ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt" };
+            string[] supportedFormats = { ".docx", ".xlsx", ".pptx" };
             foreach (string format in supportedFormats)
             {
                 if (extension == format)
@@ -1174,16 +1174,8 @@ namespace WpsPasswordManager.Business
                     case ".pptx":
                         return PresentationDocument.Open(filePath, isEditable);
                     default:
-                        // 对于.doc, .xls, .ppt等旧格式，尝试使用WordprocessingDocument打开
-                        try
-                        {
-                            return WordprocessingDocument.Open(filePath, isEditable);
-                        }
-                        catch
-                        {
-                            Logger.Error($"无法打开旧格式文档: {filePath}");
-                            return null;
-                        }
+                        Logger.Error($"不支持的文件格式: {filePath}");
+                        return null;
                 }
             }
             catch (Exception ex)

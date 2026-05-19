@@ -468,6 +468,23 @@ namespace WpsPasswordManager
                 // 获取主线程的同步上下文
                 var mainThreadSyncContext = SynchronizationContext.Current;
 
+                // 创建并启动悬浮按钮管理器
+                FloatingButtonManager buttonManager = new FloatingButtonManager(floatingButton, mainThreadSyncContext);
+                buttonManager.Start();
+
+                // 注册状态变更事件
+                buttonManager.ButtonStateChanged += (sender, e) =>
+                {
+                    Logger.Debug($"悬浮按钮状态变更: 可见={e.IsVisible}, 对话框={e.DialogHandle}, 时间={e.Timestamp}");
+                };
+
+                // 程序退出时清理资源
+                Application.ApplicationExit += (sender, e) =>
+                {
+                    Logger.Info("应用程序退出，清理悬浮按钮管理器");
+                    buttonManager.Dispose();
+                };
+
                 // 启动监控线程
                 Thread monitorThread = new Thread(() =>
                 {
@@ -594,16 +611,26 @@ namespace WpsPasswordManager
                                                                 var requestData = new { docId = uid, encryPassword = password, keyVersion = keyVersion };
                                                                 var response = httpRequestService.PostAsync<DocPasswordInfo>(ApiRoutes.DocPassword, requestData, GlobalState.Instance.Token).GetAwaiter().GetResult();
                                                                 
-                                                                if (response != null && response.data != null && !string.IsNullOrEmpty(response.data.password))
+                                                                if (response != null && response.status == 200 && response.data != null && !string.IsNullOrEmpty(response.data.password))
                                                                 {
                                                                     password = response.data.password;
                                                                     Logger.Info($"获取解密后的密码成功");
+                                                                }
+                                                                else
+                                                                {
+                                                                    password = null;
+                                                                    string errorMsg = response?.message ?? "未知错误";
+                                                                    Logger.Warning($"获取解密后的密码失败: {errorMsg}");
+                                                                    System.Windows.Forms.MessageBox.Show($"填充密码失败：{errorMsg}", "提示", System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Warning, System.Windows.Forms.MessageBoxDefaultButton.Button1, System.Windows.Forms.MessageBoxOptions.DefaultDesktopOnly);
                                                                 }
                                                             }
                                                         }
                                                         catch (Exception ex)
                                                         {
-                                                            Logger.Error($"获取解密后的密码失败: {ex.Message}");
+                                                            password = null;
+                                                            string errorMsg = ex.Message;
+                                                            Logger.Error($"获取解密后的密码失败: {errorMsg}");
+                                                            System.Windows.Forms.MessageBox.Show($"填充密码失败：{errorMsg}", "提示", System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Warning, System.Windows.Forms.MessageBoxDefaultButton.Button1, System.Windows.Forms.MessageBoxOptions.DefaultDesktopOnly);
                                                         }
                                                     }
 
@@ -643,18 +670,26 @@ namespace WpsPasswordManager
                                     Logger.Error($"设置文件监控时出错: {ex.Message}");
                                 }
                                 
-                                // 检查加密对话框
+                                // 获取当前文档路径，用于检查文件格式
+                                string currentDocumentPath = monitor.GetDocumentPath(IntPtr.Zero);
+                                
+                                // 检查文件格式是否支持
+                                bool isSupportedFormat = false;
+                                if (!string.IsNullOrEmpty(currentDocumentPath))
+                                {
+                                    string extension = System.IO.Path.GetExtension(currentDocumentPath).ToLower();
+                                    isSupportedFormat = (extension == ".docx" || extension == ".xlsx" || extension == ".pptx");
+                                }
+                                
+                                // 检查加密对话框（仅处理支持的文件格式）
                                 long findDialogStart = DateTime.Now.Ticks;
-                                IntPtr encryptDialog = monitor.FindPasswordDialog();
+                                IntPtr encryptDialog = isSupportedFormat ? monitor.FindPasswordDialog() : IntPtr.Zero;
                                 long findDialogEnd = DateTime.Now.Ticks;
                                 
                                 // 如果文档权限窗口打开，隐藏悬浮按钮并跳过对话框处理
                                 if (AuthTreeForm.IsOpen)
                                 {
-                                    mainThreadSyncContext?.Post((state) =>
-                                    {
-                                        floatingButton.HideButton();
-                                    }, null);
+                                    buttonManager.HideButton();
                                 }
                                 else if (encryptDialog != IntPtr.Zero)
                                 {
@@ -666,26 +701,15 @@ namespace WpsPasswordManager
                                     Logger.Debug($"找到对话框: {encryptDialog}, 标题: {title}");
 
                                     // 只有在加密窗口中显示悬浮按钮，解密窗口不显示
-                                    if (title == "文档加密" || title == "密码加密")
+                                    if (title == "密码加密")
                                     {
                                         Logger.Debug($"找到加密对话框: {encryptDialog}, 标题: {title}");
                                         
-                                        string btnDocumentPath = monitor.GetDocumentPath(IntPtr.Zero);
-                                        FileMeta currentFileMeta = null;
-                                        if (!string.IsNullOrEmpty(btnDocumentPath))
-                                        {
-                                            currentFileMeta = FileMetaFactory.Instance.GetFileMeta(btnDocumentPath);
-                                            Logger.Info($"获取到文件元数据: Uid={currentFileMeta?.Uid}, WriteAuth={currentFileMeta?.WriteAuth}");
-                                        }
+                                        FileMeta currentFileMeta = FileMetaFactory.Instance.GetFileMeta(currentDocumentPath);
+                                        Logger.Info($"获取到文件元数据: Uid={currentFileMeta?.Uid}, WriteAuth={currentFileMeta?.WriteAuth}");
                                         
-                                        // 每次循环都更新按钮位置，确保按钮能随着窗口拖动而移动
-                                        // 使用同步上下文在主线程中执行UI操作
-                                        var fileMeta = currentFileMeta;
-                                        mainThreadSyncContext?.Post((state) =>
-                                        {
-                                            floatingButton.CurrentFileMeta = fileMeta;
-                                            floatingButton.ShowAtDialog(encryptDialog);
-                                        }, null);
+                                        // 使用按钮管理器显示悬浮按钮
+                                        buttonManager.ShowButton(encryptDialog, currentFileMeta);
 
                                         // 如果是密码加密窗口，记录密码
                                         if (title == "密码加密")
@@ -738,19 +762,13 @@ namespace WpsPasswordManager
                                     {
                                         Logger.Debug($"找到解密对话框: {encryptDialog}, 标题: {title}，不显示悬浮按钮");
                                         // 隐藏悬浮按钮
-                                        mainThreadSyncContext?.Post((state) =>
-                                        {
-                                            floatingButton.HideButton();
-                                        }, null);
+                                        buttonManager.HideButton();
                                     }
                                 }
                                 else
                                 {
                                     // 隐藏悬浮按钮
-                                    mainThreadSyncContext?.Post((state) =>
-                                    {
-                                        floatingButton.HideButton();
-                                    }, null);
+                                    buttonManager.HideButton();
                                     // 重置显示状态
                                     lastShownDialog = IntPtr.Zero;
 
@@ -796,8 +814,8 @@ namespace WpsPasswordManager
                                     }
                                 }
 
-                                // 检查解密对话框
-                                IntPtr decryptDialog = monitor.FindPasswordDialog();
+                                // 检查解密对话框（仅处理支持的文件格式）
+                                IntPtr decryptDialog = isSupportedFormat ? monitor.FindPasswordDialog() : IntPtr.Zero;
                                 if (decryptDialog != IntPtr.Zero)
                                 {
                                     StringBuilder dialogTitle = new StringBuilder(256);
@@ -811,6 +829,14 @@ namespace WpsPasswordManager
                                         string documentPath = monitor.GetDocumentPath(decryptDialog);
                                         if (!string.IsNullOrEmpty(documentPath))
                                         {
+                                            // 检查文件格式是否支持
+                                            string extension = System.IO.Path.GetExtension(documentPath).ToLower();
+                                            if (extension != ".docx" && extension != ".xlsx" && extension != ".pptx")
+                                            {
+                                                Logger.Debug($"不支持的文件格式: {extension}，跳过自动填充");
+                                                continue;
+                                            }
+
                                             // Logger.Info($"获取到文档路径: {documentPath}");
 
                                             if (!AutoFillAttemptManager.Instance.HasAttempted(documentPath))
@@ -838,8 +864,17 @@ namespace WpsPasswordManager
                                                     Logger.Warning("未找到文件元数据或密码为空");
                                                 }
                                                 
-                                                WaitForDialogClose(decryptDialog, 2500);
-                                                AutoFillAttemptManager.Instance.ResetAttempt(documentPath);
+                                                // 等待对话框关闭，只有当对话框真正关闭时才重置尝试记录
+                                                bool dialogClosed = WaitForDialogClose(decryptDialog, 2500);
+                                                if (dialogClosed)
+                                                {
+                                                    Logger.Info("对话框已关闭，重置自动填充尝试记录");
+                                                    AutoFillAttemptManager.Instance.ResetAttempt(documentPath);
+                                                }
+                                                else
+                                                {
+                                                    Logger.Warning("对话框未关闭（可能密码错误），保留自动填充尝试记录");
+                                                }
                                             }
                                             else
                                             {
@@ -857,7 +892,7 @@ namespace WpsPasswordManager
                             else
                             {
                                 // 隐藏悬浮按钮
-                                floatingButton.HideButton();
+                                buttonManager.HideButton();
                                 Logger.Debug("WPS 未运行，隐藏悬浮按钮");
 
                                 // 重置记录

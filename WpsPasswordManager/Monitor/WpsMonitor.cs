@@ -79,7 +79,7 @@ namespace WpsPasswordManager.Monitor
                 return handle;
             }
 
-            string[] dialogTitles = { "密码加密", "文档加密", "文档已加密", "密码" };
+            string[] dialogTitles = { "密码加密", "文档已加密" };
             foreach (string title in dialogTitles)
             {
                 string[] classNames = { "Qt5QWindow", "#32770", "", "QWidget", "QDialog" };
@@ -158,7 +158,7 @@ namespace WpsPasswordManager.Monitor
                     GetWindowText(activeWindow, windowTitle, windowTitle.Capacity);
                     string title = windowTitle.ToString();
 
-                    bool isEncryptDialog = title.Contains("文档已加密") || title.Contains("密码");
+                    bool isEncryptDialog = title.Contains("文档已加密") || title.Contains("密码加密");
 
                     if (isEncryptDialog)
                     {
@@ -220,11 +220,8 @@ namespace WpsPasswordManager.Monitor
                             string targetPath = ResolveShortcut(lnkPath);
                             if (!string.IsNullOrEmpty(targetPath) &&
                                 (targetPath.EndsWith(".docx", StringComparison.OrdinalIgnoreCase) ||
-                                 targetPath.EndsWith(".doc", StringComparison.OrdinalIgnoreCase) ||
                                  targetPath.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) ||
-                                 targetPath.EndsWith(".xls", StringComparison.OrdinalIgnoreCase) ||
-                                 targetPath.EndsWith(".pptx", StringComparison.OrdinalIgnoreCase) ||
-                                 targetPath.EndsWith(".ppt", StringComparison.OrdinalIgnoreCase)) &&
+                                 targetPath.EndsWith(".pptx", StringComparison.OrdinalIgnoreCase)) &&
                                 System.IO.File.Exists(targetPath))
                             {
                                 string fileName = Path.GetFileName(targetPath);

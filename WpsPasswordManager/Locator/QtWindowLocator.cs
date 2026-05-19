@@ -32,11 +32,7 @@ namespace WpsPasswordManager.Locator
         private readonly List<string> _passwordDialogTitles = new List<string>
         {
             "文档已加密",
-            "密码加密", 
-            "文档加密",
-            "密码",
-            "输入密码",
-            "请输入密码"
+            "密码加密"
         };
 
         private readonly List<string> _qtClassNames = new List<string>
@@ -263,17 +259,13 @@ namespace WpsPasswordManager.Locator
         public bool IsDecryptDialog(IntPtr hWnd)
         {
             string title = GetWindowTitle(hWnd);
-            return title.Contains("文档已加密") || 
-                   title.Contains("请输入密码") || 
-                   title.Contains("打开密码");
+            return title.Contains("文档已加密");
         }
 
         public bool IsEncryptDialog(IntPtr hWnd)
         {
             string title = GetWindowTitle(hWnd);
-            return title.Contains("文档加密") || 
-                   title.Contains("密码加密") || 
-                   title.Contains("加密");
+            return title.Contains("密码加密");
         }
     }
 }
