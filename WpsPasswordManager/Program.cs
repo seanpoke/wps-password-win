@@ -455,40 +455,13 @@ namespace WpsPasswordManager
                     string password = passwordGenerator.GeneratePassword();
                     Logger.Debug($"生成密码: {password}");
 
-                    bool success = autoFiller.FillEncryptPassword(password);
-                    if (success)
+                    if (autoFiller.FillEncryptPassword(password))
                     {
                         Logger.Info("密码填充成功");
                     }
                     else
                     {
-                        Logger.Warning("密码填充失败，回退到传统方式");
-                        
-                        IntPtr dialogHandle = monitor.FindPasswordDialog();
-                        if (dialogHandle != IntPtr.Zero)
-                        {
-                            SetForegroundWindow(dialogHandle);
-                            System.Threading.Thread.Sleep(100);
-
-                            IntPtr passwordEdit = monitor.FindPasswordEdit(dialogHandle);
-                            IntPtr confirmPasswordEdit = monitor.FindConfirmPasswordEdit(dialogHandle, passwordEdit);
-
-                            if (passwordEdit != IntPtr.Zero)
-                            {
-                                simulator.ClearInput(passwordEdit);
-                                simulator.SimulatePasswordInput(passwordEdit, password);
-
-                                if (confirmPasswordEdit != IntPtr.Zero)
-                                {
-                                    simulator.ClearInput(confirmPasswordEdit);
-                                    simulator.SimulatePasswordInput(confirmPasswordEdit, password);
-                                }
-                            }
-                            else
-                            {
-                                simulator.SimulatePasswordInputWithTab(dialogHandle, password);
-                            }
-                        }
+                        Logger.Warning("密码填充失败");
                     }
                 };
 
@@ -535,7 +508,12 @@ namespace WpsPasswordManager
                             
                             if (wpsRunning)
                             {
-                                // Logger.Info("WPS 正在运行");
+                                // 如果文档权限窗口已打开，跳过所有识别行为
+                                if (AuthTreeForm.IsOpen)
+                                {
+                                    Thread.Sleep(1000);
+                                    continue;
+                                }
                                 
                                 // 获取当前文档路径并设置文件监控
                                 try
