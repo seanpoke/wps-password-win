@@ -113,7 +113,7 @@ namespace WpsPasswordManager.Locator
                 GetWindowText(hWnd, windowTitle, windowTitle.Capacity);
                 string title = windowTitle.ToString();
 
-                if (!ContainsPasswordKeyword(title))
+                if (title != "密码加密" && title != "文档已加密")
                     return true;
 
                 StringBuilder className = new StringBuilder(256);
@@ -150,7 +150,7 @@ namespace WpsPasswordManager.Locator
                 GetWindowText(hWnd, windowTitle, windowTitle.Capacity);
                 string title = windowTitle.ToString();
 
-                if (!ContainsPasswordKeyword(title))
+                if (title != "密码加密" && title != "文档已加密")
                     return true;
 
                 StringBuilder className = new StringBuilder(256);
@@ -180,7 +180,7 @@ namespace WpsPasswordManager.Locator
                 GetWindowText(hWnd, windowTitle, windowTitle.Capacity);
                 string title = windowTitle.ToString();
 
-                if (!ContainsPasswordKeyword(title))
+                if (title != "密码加密" && title != "文档已加密")
                     return false;
 
                 StringBuilder className = new StringBuilder(256);
@@ -198,19 +198,7 @@ namespace WpsPasswordManager.Locator
             }
         }
 
-        private bool ContainsPasswordKeyword(string title)
-        {
-            if (string.IsNullOrEmpty(title))
-                return false;
-
-            string[] keywords = { "密码", "加密", "解密", "Password", "Encrypt", "Decrypt" };
-            foreach (string keyword in keywords)
-            {
-                if (title.Contains(keyword))
-                    return true;
-            }
-            return false;
-        }
+       
 
         private bool IsQtWindow(string className)
         {
