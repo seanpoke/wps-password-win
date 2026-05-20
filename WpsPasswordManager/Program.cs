@@ -7,7 +7,6 @@ using System.Text;
 using System.Diagnostics;
 using WpsPasswordManager.Monitor;
 using WpsPasswordManager.Business;
-using WpsPasswordManager.Simulator;
 using WpsPasswordManager.UI;
 using WpsPasswordManager.Utils;
 using WpsPasswordManager.Services.Request;
@@ -420,11 +419,9 @@ namespace WpsPasswordManager
                 WpsMonitor monitor = new WpsMonitor();
                 PasswordGenerator passwordGenerator = new PasswordGenerator();
                 MetadataManager metadataManager = new MetadataManager();
-                InputSimulator simulator = new InputSimulator();
                 PasswordAutoFiller autoFiller = new PasswordAutoFiller();
                 TrayIcon trayIcon = new TrayIcon();
                 FloatingButton floatingButton = new FloatingButton(monitor);
-                NotificationForm notificationForm = new NotificationForm();
 
                 // 初始化系统托盘
                 Logger.Info("初始化系统托盘");
