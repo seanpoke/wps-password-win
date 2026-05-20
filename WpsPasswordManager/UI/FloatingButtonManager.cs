@@ -208,8 +208,6 @@ namespace WpsPasswordManager.UI
         {
             _commandQueue.Enqueue(new ButtonCommand { Type = CommandType.Hide });
             _commandSignal.Set();
-            
-            Logger.Debug("已提交隐藏命令");
         }
 
         public void UpdateButtonPosition(int x, int y)

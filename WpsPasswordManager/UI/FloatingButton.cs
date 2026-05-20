@@ -643,7 +643,6 @@ namespace WpsPasswordManager.UI
             this.Hide();
             _isVisible = false;
             _parentDialogHandle = IntPtr.Zero;
-            Logger.Debug("悬浮按钮已隐藏");
         }
 
         protected override void OnDeactivate(EventArgs e)

@@ -357,6 +357,7 @@ namespace WpsPasswordManager.Business
 
             int retryCount = 3;
             int delayMs = 500;
+            string lastErrorMessage = string.Empty;
 
             while (retryCount > 0)
             {
@@ -370,12 +371,15 @@ namespace WpsPasswordManager.Business
                     }
                     else
                     {
-                        throw new Exception("无法写入ZIP UID元数据");
+                        // AppendMetadataToFileEnd 内部已经抛出异常，这里不会执行到
+                        Logger.Error("写入ZIP元数据失败");
+                        return false;
                     }
                 }
                 catch (Exception ex)
                 {
-                    Logger.Error($"写入UID失败: {ex.Message}");
+                    lastErrorMessage = ex.Message;
+                    Logger.Error($"写入UID失败: {lastErrorMessage}");
                     retryCount--;
                     if (retryCount > 0)
                     {
@@ -386,6 +390,42 @@ namespace WpsPasswordManager.Business
             }
 
             Logger.Error($"多次尝试后仍无法写入UID到 {filePath}");
+            
+            string errorReason = "未知原因";
+            if (lastErrorMessage.Contains("ZIP签名") && lastErrorMessage.Contains("不具有"))
+            {
+                errorReason = "文档文件格式不正确，可能是新建的临时文件尚未保存，无法写入UID";
+            }
+            else if (lastErrorMessage.Contains("文件太小") || lastErrorMessage.Contains("空白文件"))
+            {
+                errorReason = "文件太小或为空文件，无法写入UID";
+            }
+            else if (lastErrorMessage.Contains("文件不存在"))
+            {
+                errorReason = "文件不存在，无法写入UID";
+            }
+            else if (lastErrorMessage.Contains("被占用") || lastErrorMessage.Contains("锁定"))
+            {
+                errorReason = "文件被其他程序占用，无法写入UID";
+            }
+            else if (!string.IsNullOrEmpty(lastErrorMessage))
+            {
+                errorReason = $"{lastErrorMessage}，无法写入UID";
+            }
+            
+            // 异步显示弹窗，不阻塞后台任务线程
+            string message = $"无法将文档标识写入文件\n\n文件: {filePath}\n\n原因: {errorReason}";
+            Task.Run(() => 
+            {
+                System.Windows.Forms.MessageBox.Show(
+                    message, 
+                    "提示", 
+                    System.Windows.Forms.MessageBoxButtons.OK, 
+                    System.Windows.Forms.MessageBoxIcon.Warning,
+                    System.Windows.Forms.MessageBoxDefaultButton.Button1,
+                    System.Windows.Forms.MessageBoxOptions.DefaultDesktopOnly);
+            });
+            
             return false;
         }
 

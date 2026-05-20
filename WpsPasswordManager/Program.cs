@@ -468,11 +468,6 @@ namespace WpsPasswordManager
                 FloatingButtonManager buttonManager = new FloatingButtonManager(floatingButton, mainThreadSyncContext);
                 buttonManager.Start();
 
-                // 注册状态变更事件
-                buttonManager.ButtonStateChanged += (sender, e) =>
-                {
-                    Logger.Debug($"悬浮按钮状态变更: 可见={e.IsVisible}, 对话框={e.DialogHandle}, 时间={e.Timestamp}");
-                };
 
                 // 程序退出时清理资源
                 Application.ApplicationExit += (sender, e) =>
