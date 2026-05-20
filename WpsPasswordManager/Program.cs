@@ -418,7 +418,6 @@ namespace WpsPasswordManager
                 Logger.Info("初始化各个模块");
                 WpsMonitor monitor = new WpsMonitor();
                 PasswordGenerator passwordGenerator = new PasswordGenerator();
-                MetadataManager metadataManager = new MetadataManager();
                 PasswordAutoFiller autoFiller = new PasswordAutoFiller();
                 TrayIcon trayIcon = new TrayIcon();
                 FloatingButton floatingButton = new FloatingButton(monitor);
@@ -729,7 +728,8 @@ namespace WpsPasswordManager
                                                 // 如果缓存中没有，才从文件读取并生成
                                                 if (string.IsNullOrEmpty(uid))
                                                 {
-                                                    uid = metadataManager.GetDocumentUid(documentPath);
+                                                    FileMetaManager fileMetaManager = new FileMetaManager();
+                                                    uid = fileMetaManager.GetDocumentUid(documentPath);
                                                     Logger.Info($"从文件读取到文档UID: {uid}");
                                                 }
                                                 else
