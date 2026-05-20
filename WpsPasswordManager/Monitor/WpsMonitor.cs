@@ -206,7 +206,6 @@ namespace WpsPasswordManager.Monitor
                     }
                 }
 
-                bool foundInRecentDocs = false;
                 if (!string.IsNullOrEmpty(docName))
                 {
                     string recentDocsPath = Environment.GetFolderPath(Environment.SpecialFolder.Recent);
@@ -227,7 +226,6 @@ namespace WpsPasswordManager.Monitor
                                 string fileName = Path.GetFileName(targetPath);
                                 if (fileName.Equals(docName, StringComparison.OrdinalIgnoreCase))
                                 {
-                                    foundInRecentDocs = true;
                                     return targetPath;
                                 }
                             }

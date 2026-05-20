@@ -487,9 +487,6 @@ namespace WpsPasswordManager
                     string lastDialogTitle = string.Empty;
                     // 记录上一次显示悬浮按钮的对话框句柄
                     IntPtr lastShownDialog = IntPtr.Zero;
-                    // 记录密码加密窗口的位置
-                    RECT passwordDialogRect = new RECT();
-
                     while (true)
                     {
                         try

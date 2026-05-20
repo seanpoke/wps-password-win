@@ -559,7 +559,7 @@ namespace WpsPasswordManager.Business
                     fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
                     Logger.Info("成功以读写共享模式打开文件");
                 }
-                catch (Exception ex1)
+                catch
                 {
                     try
                     {
