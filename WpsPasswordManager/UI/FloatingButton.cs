@@ -213,31 +213,6 @@ namespace WpsPasswordManager.UI
             }
         }
 
-        // 从密码对话框获取密码（使用UI Automation）
-        private string GetPasswordFromDialog(IntPtr dialogHandle)
-        {
-            try
-            {
-                Logger.Info("FloatingButton: 尝试从密码对话框获取密码");
-                
-                // 使用UI Automation获取密码
-                string password = GetPasswordUsingUIAutomation(dialogHandle);
-                if (!string.IsNullOrEmpty(password))
-                {
-                    Logger.Info($"FloatingButton: 通过UI Automation获取到密码: {password}");
-                    return password;
-                }
-                
-                Logger.Warning("FloatingButton: 无法通过UI Automation获取密码");
-                return string.Empty;
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"FloatingButton: 获取密码时出错: {ex.Message}");
-                return string.Empty;
-            }
-        }
-
         // 使用UI Automation获取密码
         private string GetPasswordUsingUIAutomation(IntPtr dialogHandle)
         {
