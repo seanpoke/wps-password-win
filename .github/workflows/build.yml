@@ -1,0 +1,94 @@
+name: Build and Package
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    name: Build on Windows
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '6.0.x'
+        include-prerelease: false
+
+    - name: Restore dependencies
+      run: dotnet restore WpsPasswordManager/WpsPasswordManager.csproj
+      working-directory: ${{ github.workspace }}
+      continue-on-error: false
+      id: restore
+
+    - name: Build the project
+      run: dotnet build WpsPasswordManager/WpsPasswordManager.csproj --configuration Release --no-restore
+      working-directory: ${{ github.workspace }}
+      continue-on-error: false
+      id: build
+      env:
+        DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+    - name: List build output
+      run: Get-ChildItem -Path "WpsPasswordManager/bin/Release" -Recurse -Name
+      working-directory: ${{ github.workspace }}
+      id: list-output
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: WpsPasswordManager-Release
+        path: |
+          WpsPasswordManager/bin/Release/**/*.exe
+          WpsPasswordManager/bin/Release/**/*.dll
+          WpsPasswordManager/bin/Release/**/*.config
+          WpsPasswordManager/bin/Release/**/*.json
+        if-no-files-found: error
+      id: upload-artifact
+
+    - name: Upload build logs on failure
+      uses: actions/upload-artifact@v4
+      if: failure()
+      with:
+        name: build-logs
+        path: |
+          **/*.log
+          **/bin/**/*.pdb
+        if-no-files-found: ignore
+
+  validate-code:
+    runs-on: ubuntu-latest
+    name: Validate Code Quality
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '6.0.x'
+        include-prerelease: false
+
+    - name: Restore dependencies
+      run: dotnet restore WpsPasswordManager/WpsPasswordManager.csproj
+      working-directory: ${{ github.workspace }}
+
+    - name: Build (without publish)
+      run: dotnet build WpsPasswordManager/WpsPasswordManager.csproj --configuration Release --no-restore --warnaserror
+      working-directory: ${{ github.workspace }}
+      continue-on-error: true
+
+    - name: Check for format issues
+      run: dotnet format WpsPasswordManager/WpsPasswordManager.csproj --check --verbosity diagnostic
+      working-directory: ${{ github.workspace }}
+      continue-on-error: true
