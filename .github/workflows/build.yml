@@ -30,7 +30,7 @@ jobs:
       id: restore
 
     - name: Build the project
-      run: dotnet build WpsPasswordManager/WpsPasswordManager.csproj --configuration Release --no-restore
+      run: dotnet build WpsPasswordManager/WpsPasswordManager.csproj --configuration Release --no-restore --property:OutputPath=bin/Release/net6.0-windows
       working-directory: ${{ github.workspace }}
       continue-on-error: false
       id: build
