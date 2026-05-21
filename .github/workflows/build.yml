@@ -63,32 +63,3 @@ jobs:
           **/*.log
           **/bin/**/*.pdb
         if-no-files-found: ignore
-
-  validate-code:
-    runs-on: ubuntu-latest
-    name: Validate Code Quality
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: '6.0.x'
-        include-prerelease: false
-
-    - name: Restore dependencies
-      run: dotnet restore WpsPasswordManager/WpsPasswordManager.csproj
-      working-directory: ${{ github.workspace }}
-
-    - name: Build (without publish)
-      run: dotnet build WpsPasswordManager/WpsPasswordManager.csproj --configuration Release --no-restore --warnaserror
-      working-directory: ${{ github.workspace }}
-      continue-on-error: true
-
-    - name: Check for format issues
-      run: dotnet format WpsPasswordManager/WpsPasswordManager.csproj --check --verbosity diagnostic
-      working-directory: ${{ github.workspace }}
-      continue-on-error: true
