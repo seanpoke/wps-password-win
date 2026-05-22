@@ -539,124 +539,13 @@ namespace WpsPasswordManager
                                     string documentPath = monitor.GetDocumentPath(IntPtr.Zero);
                                     if (!string.IsNullOrEmpty(documentPath))
                                     {
-                                        // 检查文档是否真的被打开，避免重复监控已关闭的文档
+                                        // 尝试初始化文件元数据（不依赖文档是否打开）
+                                        TryInitializeFileMeta(documentPath);
+                                        
+                                        // 只有文档真正打开后才启动文件监控
                                         if (IsDocumentOpen(documentPath))
                                         {
                                             Logger.Info($"获取到文档路径: {documentPath}");
-                                            
-                                            // 检查文件元数据是否已存在
-                                            if (!FileMetaFactory.Instance.HasFileMeta(documentPath))
-                                            {
-                                                try
-                                                {
-                                                    // 初始化文件元数据
-                                                    FileMetaManager fileMetaManager = new FileMetaManager();
-                                                    
-                                                    // 读取文件尾部的uid信息
-                                                    string uid = fileMetaManager.ReadUidFromFile(documentPath);
-                                                    // 如果uid不存在，创建新的uid
-                                                    if (string.IsNullOrEmpty(uid))
-                                                    {
-                                                        uid = FileMetaFactory.Instance.CreateUid();
-                                                    }
-                                                    
-                                                    // 调用 /doc/owner 接口获取文档信息
-                                                    string ownerAccount = null;
-                                                    string ownerName = null;
-                                                    bool readAuth = false;
-                                                    bool writeAuth = false;
-                                                    
-                                                    try
-                                                    {
-                                                        if (GlobalState.Instance.IsLoggedIn && !string.IsNullOrEmpty(GlobalState.Instance.Token))
-                                                        {
-                                                            var httpRequestService = RequestFactory.GetHttpRequestService();
-                                                            string fileName = System.IO.Path.GetFileName(documentPath);
-                                                            var requestData = new { docId = uid, fileName = fileName };
-                                                            var response = httpRequestService.PostAsync<DocOwnerInfo>(ApiRoutes.DocOwner, requestData, GlobalState.Instance.Token).GetAwaiter().GetResult();
-                                                            
-                                                            if (response != null && response.data != null)
-                                                            {
-                                                                ownerAccount = response.data.ownerAccount;
-                                                                ownerName = response.data.ownerName;
-                                                                readAuth = response.data.readAuth;
-                                                                writeAuth = response.data.writeAuth;
-                                                                Logger.Info($"获取文档信息成功: 所有者={ownerName}({ownerAccount}), 读权限={readAuth}, 写权限={writeAuth}");
-                                                            }
-                                                        }
-                                                    }
-                                                    catch (Exception ex)
-                                                    {
-                                                        Logger.Error($"获取文档信息失败: {ex.Message}");
-                                                    }
-                                                    
-                                                    // 读取文件尾部的密码信息
-                                                    string password = fileMetaManager.ReadPasswordFromFile(documentPath);
-                                                    
-                                                    // 读取文件尾部的keyVersion信息
-                                                    string keyVersion = fileMetaManager.ReadKeyVersionFromFile(documentPath);
-                                                    if (string.IsNullOrEmpty(keyVersion))
-                                                    {
-                                                        keyVersion = "default";
-                                                    }
-                                                    
-                                                    // 如果有读权限且密码不为空，调用 /doc/password 接口获取解密后的密码
-                                                    if ((readAuth || writeAuth) && !string.IsNullOrEmpty(password))
-                                                    {
-                                                        try
-                                                        {
-                                                            if (GlobalState.Instance.IsLoggedIn && !string.IsNullOrEmpty(GlobalState.Instance.Token))
-                                                            {
-                                                                var httpRequestService = RequestFactory.GetHttpRequestService();
-                                                                var requestData = new { docId = uid, encryPassword = password, keyVersion = keyVersion };
-                                                                var response = httpRequestService.PostAsync<DocPasswordInfo>(ApiRoutes.DocPassword, requestData, GlobalState.Instance.Token).GetAwaiter().GetResult();
-                                                                
-                                                                if (response != null && response.status == 200 && response.data != null && !string.IsNullOrEmpty(response.data.password))
-                                                                {
-                                                                    password = response.data.password;
-                                                                    Logger.Info($"获取解密后的密码成功");
-                                                                }
-                                                                else
-                                                                {
-                                                                    password = null;
-                                                                    string errorMsg = response?.message ?? "未知错误";
-                                                                    Logger.Warning($"获取解密后的密码失败: {errorMsg}");
-                                                                    System.Windows.Forms.MessageBox.Show($"填充密码失败：{errorMsg}", "提示", System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Warning, System.Windows.Forms.MessageBoxDefaultButton.Button1, System.Windows.Forms.MessageBoxOptions.DefaultDesktopOnly);
-                                                                }
-                                                            }
-                                                        }
-                                                        catch (Exception ex)
-                                                        {
-                                                            password = null;
-                                                            string errorMsg = ex.Message;
-                                                            Logger.Error($"获取解密后的密码失败: {errorMsg}");
-                                                            System.Windows.Forms.MessageBox.Show($"填充密码失败：{errorMsg}", "提示", System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Warning, System.Windows.Forms.MessageBoxDefaultButton.Button1, System.Windows.Forms.MessageBoxOptions.DefaultDesktopOnly);
-                                                        }
-                                                    }
-
-                                                    // 创建并初始化FileMeta对象
-                                                    FileMeta fileMeta = new FileMeta(documentPath)
-                                                    {
-                                                        Uid = uid,
-                                                        CurrentPassword = password,
-                                                        OwnerAccount = ownerAccount,
-                                                        OwnerName = ownerName,
-                                                        ReadAuth = readAuth,
-                                                        WriteAuth = writeAuth,
-                                                        CurrentKeyVersion = keyVersion
-                                                    };
-                                                    
-                                                    // 添加到FileMetaFactory
-                                                    FileMetaFactory.Instance.AddFileMeta(fileMeta);
-                                                    Logger.Info($"文件元数据初始化完成: {documentPath}");
-                                                }
-                                                catch (Exception ex)
-                                                {
-                                                    Logger.Error($"文件元数据初始化失败: {ex.Message}");
-                                                }
-                                            }
-                                            
-                                            // 启动文件监控
                                             FileMonitor.StartWatchingFile(documentPath);
                                         }
                                     }
@@ -838,12 +727,14 @@ namespace WpsPasswordManager
                                                 continue;
                                             }
 
-                                            // Logger.Info($"获取到文档路径: {documentPath}");
-
                                             if (!AutoFillAttemptManager.Instance.HasAttempted(documentPath))
                                             {
                                                 AutoFillAttemptManager.Instance.MarkAttempted(documentPath);
                                                 
+                                                // 等待元数据初始化完成（最多等待5秒）
+                                                FileMetaFactory.Instance.WaitForInit(documentPath);
+                                                
+                                                // 获取元数据
                                                 var fileMeta = FileMetaFactory.Instance.GetFileMeta(documentPath);
                                                 if (fileMeta != null && !string.IsNullOrEmpty(fileMeta.CurrentPassword))
                                                 {
@@ -1285,6 +1176,134 @@ namespace WpsPasswordManager
             {
                 Logger.Error($"尝试显示密码时出错: {ex.Message}");
                 return false;
+            }
+        }
+
+        // 尝试初始化文件元数据（如果尚未初始化）
+        private static void TryInitializeFileMeta(string documentPath)
+        {
+            if (string.IsNullOrEmpty(documentPath))
+            {
+                return;
+            }
+
+            // 检查文件元数据是否已存在
+            if (FileMetaFactory.Instance.HasFileMeta(documentPath))
+            {
+                Logger.Debug($"文件元数据已存在，无需重新初始化: {documentPath}");
+                return;
+            }
+
+            Logger.Info($"开始初始化文件元数据: {documentPath}");
+
+            try
+            {
+                // 初始化文件元数据
+                FileMetaManager fileMetaManager = new FileMetaManager();
+                
+                // 读取文件尾部的uid信息
+                string uid = fileMetaManager.ReadUidFromFile(documentPath);
+                // 如果uid不存在，创建新的uid
+                if (string.IsNullOrEmpty(uid))
+                {
+                    uid = FileMetaFactory.Instance.CreateUid();
+                }
+                
+                // 调用 /doc/owner 接口获取文档信息
+                string ownerAccount = null;
+                string ownerName = null;
+                bool readAuth = false;
+                bool writeAuth = false;
+                
+                try
+                {
+                    if (GlobalState.Instance.IsLoggedIn && !string.IsNullOrEmpty(GlobalState.Instance.Token))
+                    {
+                        var httpRequestService = RequestFactory.GetHttpRequestService();
+                        string fileName = System.IO.Path.GetFileName(documentPath);
+                        var requestData = new { docId = uid, fileName = fileName };
+                        var response = httpRequestService.PostAsync<DocOwnerInfo>(ApiRoutes.DocOwner, requestData, GlobalState.Instance.Token).GetAwaiter().GetResult();
+                        
+                        if (response != null && response.data != null)
+                        {
+                            ownerAccount = response.data.ownerAccount;
+                            ownerName = response.data.ownerName;
+                            readAuth = response.data.readAuth;
+                            writeAuth = response.data.writeAuth;
+                            Logger.Info($"获取文档信息成功: 所有者={ownerName}({ownerAccount}), 读权限={readAuth}, 写权限={writeAuth}");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"获取文档信息失败: {ex.Message}");
+                }
+                
+                // 读取文件尾部的密码信息
+                string password = fileMetaManager.ReadPasswordFromFile(documentPath);
+                
+                // 读取文件尾部的keyVersion信息
+                string keyVersion = fileMetaManager.ReadKeyVersionFromFile(documentPath);
+                if (string.IsNullOrEmpty(keyVersion))
+                {
+                    keyVersion = "default";
+                }
+                
+                // 如果有读权限且密码不为空，调用 /doc/password 接口获取解密后的密码
+                if ((readAuth || writeAuth) && !string.IsNullOrEmpty(password))
+                {
+                    try
+                    {
+                        if (GlobalState.Instance.IsLoggedIn && !string.IsNullOrEmpty(GlobalState.Instance.Token))
+                        {
+                            var httpRequestService = RequestFactory.GetHttpRequestService();
+                            var requestData = new { docId = uid, encryPassword = password, keyVersion = keyVersion };
+                            var response = httpRequestService.PostAsync<DocPasswordInfo>(ApiRoutes.DocPassword, requestData, GlobalState.Instance.Token).GetAwaiter().GetResult();
+                            
+                            if (response != null && response.status == 200 && response.data != null && !string.IsNullOrEmpty(response.data.password))
+                            {
+                                password = response.data.password;
+                                Logger.Info($"获取解密后的密码成功");
+                            }
+                            else
+                            {
+                                password = null;
+                                string errorMsg = response?.message ?? "未知错误";
+                                Logger.Warning($"获取解密后的密码失败: {errorMsg}");
+                                System.Windows.Forms.MessageBox.Show($"填充密码失败：{errorMsg}", "提示", System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Warning, System.Windows.Forms.MessageBoxDefaultButton.Button1, System.Windows.Forms.MessageBoxOptions.DefaultDesktopOnly);
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        password = null;
+                        string errorMsg = ex.Message;
+                        Logger.Error($"获取解密后的密码失败: {errorMsg}");
+                        System.Windows.Forms.MessageBox.Show($"填充密码失败：{errorMsg}", "提示", System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Warning, System.Windows.Forms.MessageBoxDefaultButton.Button1, System.Windows.Forms.MessageBoxOptions.DefaultDesktopOnly);
+                    }
+                }
+
+                // 创建并初始化FileMeta对象
+                FileMeta fileMeta = new FileMeta(documentPath)
+                {
+                    Uid = uid,
+                    CurrentPassword = password,
+                    OwnerAccount = ownerAccount,
+                    OwnerName = ownerName,
+                    ReadAuth = readAuth,
+                    WriteAuth = writeAuth,
+                    CurrentKeyVersion = keyVersion
+                };
+                
+                // 添加到FileMetaFactory
+                FileMetaFactory.Instance.AddFileMeta(fileMeta);
+                // 发出元数据初始化完成的信号
+                FileMetaFactory.Instance.SignalInitComplete(documentPath);
+                Logger.Info($"文件元数据初始化完成: {documentPath}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"文件元数据初始化失败: {ex.Message}");
             }
         }
 

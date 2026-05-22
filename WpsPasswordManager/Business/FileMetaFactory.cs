@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using WpsPasswordManager.Utils;
 
 namespace WpsPasswordManager.Business
@@ -11,13 +12,20 @@ namespace WpsPasswordManager.Business
         private static FileMetaFactory instance;
         private static readonly object lockObject = new object();
         private ConcurrentDictionary<string, FileMeta> fileMetaMap;
+        
+        // 用于等待元数据初始化完成的事件字典
+        private ConcurrentDictionary<string, AutoResetEvent> initWaitEvents;
 
         private long pluginOperationTimestamp;
         private const long PLUGIN_OPERATION_TIMEOUT = 1000L;
+        
+        // 等待初始化的超时时间（5秒）
+        private const int INIT_WAIT_TIMEOUT = 5000;
 
         private FileMetaFactory()
         {
             fileMetaMap = new ConcurrentDictionary<string, FileMeta>();
+            initWaitEvents = new ConcurrentDictionary<string, AutoResetEvent>();
         }
 
         public static FileMetaFactory Instance
@@ -180,6 +188,9 @@ namespace WpsPasswordManager.Business
             if (!string.IsNullOrEmpty(filePath) && fileMetaMap.TryRemove(filePath, out _))
             {
                 Logger.Info($"清理文件 {filePath} 的元数据");
+                AutoFillAttemptManager.Instance.ResetAttempt(filePath);
+                // 清理对应的等待事件
+                RemoveInitWaitEvent(filePath);
             }
         }
 
@@ -187,6 +198,96 @@ namespace WpsPasswordManager.Business
         {
             fileMetaMap.Clear();
             Logger.Info("清理所有文件元数据");
+            AutoFillAttemptManager.Instance.RemoveAllRecords();
+            // 清理所有等待事件
+            foreach (var kvp in initWaitEvents)
+            {
+                kvp.Value.Dispose();
+            }
+            initWaitEvents.Clear();
+        }
+
+        /// <summary>
+        /// 等待文件元数据初始化完成
+        /// </summary>
+        /// <param name="filePath">文件路径</param>
+        /// <returns>true表示初始化完成，false表示超时</returns>
+        public bool WaitForInit(string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath))
+            {
+                Logger.Warning("WaitForInit: 文件路径为空");
+                return false;
+            }
+
+            // 如果已经有元数据，直接返回
+            if (HasFileMeta(filePath))
+            {
+                Logger.Info($"WaitForInit: 文件 {filePath} 元数据已存在，无需等待");
+                return true;
+            }
+
+            Logger.Info($"WaitForInit: 等待文件 {filePath} 的元数据初始化...");
+            
+            // 获取或创建等待事件
+            AutoResetEvent waitEvent = initWaitEvents.GetOrAdd(filePath, _ => new AutoResetEvent(false));
+            
+            try
+            {
+                // 等待初始化完成（最多等待5秒）
+                bool initialized = waitEvent.WaitOne(INIT_WAIT_TIMEOUT);
+                
+                if (initialized)
+                {
+                    Logger.Info($"WaitForInit: 文件 {filePath} 元数据初始化完成");
+                }
+                else
+                {
+                    Logger.Warning($"WaitForInit: 文件 {filePath} 元数据初始化等待超时 ({INIT_WAIT_TIMEOUT}ms)");
+                }
+                
+                return initialized;
+            }
+            finally
+            {
+                // 无论成功与否，清理等待事件（避免内存泄漏）
+                RemoveInitWaitEvent(filePath);
+            }
+        }
+
+        /// <summary>
+        /// 发出元数据初始化完成的信号
+        /// </summary>
+        /// <param name="filePath">文件路径</param>
+        public void SignalInitComplete(string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath))
+            {
+                return;
+            }
+
+            if (initWaitEvents.TryGetValue(filePath, out AutoResetEvent waitEvent))
+            {
+                Logger.Info($"SignalInitComplete: 通知文件 {filePath} 的元数据初始化完成");
+                waitEvent.Set();
+            }
+            else
+            {
+                Logger.Debug($"SignalInitComplete: 未找到文件 {filePath} 的等待事件，可能没有等待者");
+            }
+        }
+
+        /// <summary>
+        /// 移除等待事件
+        /// </summary>
+        /// <param name="filePath">文件路径</param>
+        private void RemoveInitWaitEvent(string filePath)
+        {
+            if (initWaitEvents.TryRemove(filePath, out AutoResetEvent waitEvent))
+            {
+                waitEvent.Dispose();
+                Logger.Debug($"RemoveInitWaitEvent: 清理文件 {filePath} 的等待事件");
+            }
         }
 
         public bool HasFileMeta(string filePath)
