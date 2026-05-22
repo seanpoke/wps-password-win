@@ -43,7 +43,7 @@ namespace WpsPasswordManager.Utils
             {
                 string logEntry = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [{level}] {message}";
                 Console.WriteLine(logEntry);
-                File.AppendAllText(LogFilePath, logEntry + Environment.NewLine);
+                File.AppendAllText(LogFilePath, logEntry + Environment.NewLine, System.Text.Encoding.UTF8);
             }
             catch { }
         }

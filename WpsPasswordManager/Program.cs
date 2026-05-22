@@ -85,6 +85,14 @@ namespace WpsPasswordManager
         [DllImport("user32.dll")]
         private static extern bool IsWindow(IntPtr hWnd);
 
+        [DllImport("kernel32.dll")]
+        private static extern IntPtr GetConsoleWindow();
+
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        private const int SW_HIDE = 0;
+
         // 常量定义
         private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
         private const uint MOUSEEVENTF_LEFTUP = 0x0004;
@@ -118,6 +126,9 @@ namespace WpsPasswordManager
         
         static async Task MainAsync()
         {
+            // 隐藏控制台窗口
+            HideConsoleWindow();
+
             // WPS进程检测阶段：检查是否有WPS相关进程正在运行
             if (IsWpsProcessRunning())
             {
@@ -153,8 +164,33 @@ namespace WpsPasswordManager
 
                 Logger.Info("WPS 密码自动填充插件启动");
 
+                // 先初始化系统托盘图标
+                TrayIcon trayIcon = new TrayIcon();
+                Logger.Info("初始化系统托盘");
+                trayIcon.Initialize();
+                trayIcon.ExitClicked += (sender, e) =>
+                {
+                    Logger.Info("用户点击退出");
+                    Application.Exit();
+                };
+                trayIcon.OpenFolderClicked += (sender, e) =>
+                {
+                    Logger.Info("用户点击打开文件夹");
+                    try
+                    {
+                        System.Diagnostics.Process.Start("explorer.exe", Environment.CurrentDirectory);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"打开文件夹失败: {ex.Message}");
+                    }
+                };
+                trayIcon.ShowLogClicked += (sender, e) =>
+                {
+                    Logger.Info("用户点击显示日志");
+                    WpsPasswordManager.UI.LogForm.ShowLogWindow();
+                };
 
-                
                 // 创建登录窗口
                 WpsPasswordManager.UI.LoginForm loginForm = new WpsPasswordManager.UI.LoginForm();
                 
@@ -373,18 +409,16 @@ namespace WpsPasswordManager
                         // 没有token，直接显示登录窗口
                         if (loginForm.ShowDialog() != System.Windows.Forms.DialogResult.OK)
                         {
-                            Logger.Info("用户取消登录，退出程序");
-                            return;
+                            Logger.Info("用户取消登录，程序继续在后台运行");
+                            // 不退出程序，继续在后台运行
                         }
-                        
                     }
                 }
                 
-                // 等待登录流程完成
-                while (!GlobalState.Instance.IsLoggedIn)
+                // 如果未登录，继续运行但处于未登录状态
+                if (!GlobalState.Instance.IsLoggedIn)
                 {
-                    Application.DoEvents();
-                    Thread.Sleep(100);
+                    Logger.Info("程序在未登录状态下继续运行");
                 }
 
                 // 调用 /config/latest-key 接口获取公钥和keyVersion
@@ -419,29 +453,7 @@ namespace WpsPasswordManager
                 WpsMonitor monitor = new WpsMonitor();
                 PasswordGenerator passwordGenerator = new PasswordGenerator();
                 PasswordAutoFiller autoFiller = new PasswordAutoFiller();
-                TrayIcon trayIcon = new TrayIcon();
                 FloatingButton floatingButton = new FloatingButton(monitor);
-
-                // 初始化系统托盘
-                Logger.Info("初始化系统托盘");
-                trayIcon.Initialize();
-                trayIcon.ExitClicked += (sender, e) =>
-                {
-                    Logger.Info("用户点击退出");
-                    Application.Exit();
-                };
-                trayIcon.OpenFolderClicked += (sender, e) =>
-                {
-                    Logger.Info("用户点击打开文件夹");
-                    try
-                    {
-                        System.Diagnostics.Process.Start("explorer.exe", Environment.CurrentDirectory);
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Error($"打开文件夹失败: {ex.Message}");
-                    }
-                };
 
                 // 悬浮按钮事件
                 floatingButton.GeneratePasswordClicked += (sender, e) =>
@@ -1153,6 +1165,23 @@ namespace WpsPasswordManager
         // 检查窗口是否可见
         [DllImport("user32.dll")]
         private static extern bool IsWindowVisible(IntPtr hWnd);
+
+        // 隐藏控制台窗口
+        private static void HideConsoleWindow()
+        {
+            try
+            {
+                IntPtr consoleWindow = GetConsoleWindow();
+                if (consoleWindow != IntPtr.Zero)
+                {
+                    ShowWindow(consoleWindow, SW_HIDE);
+                }
+            }
+            catch (Exception ex)
+            {
+                // 如果隐藏控制台失败，不影响程序运行
+            }
+        }
 
         // 检查文档是否打开
         private static bool IsDocumentOpen(string documentPath)

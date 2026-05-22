@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace WpsPasswordManager.UI
@@ -11,31 +12,42 @@ namespace WpsPasswordManager.UI
 
         public event EventHandler ExitClicked;
         public event EventHandler OpenFolderClicked;
+        public event EventHandler ShowLogClicked;
 
         public void Initialize()
         {
-            // 创建系统托盘图标
-            _notifyIcon = new NotifyIcon
+            try
             {
-                Icon = System.Drawing.Icon.ExtractAssociatedIcon(System.Reflection.Assembly.GetExecutingAssembly().Location),
-                Text = "WPS 密码自动填充插件",
-                Visible = true
-            };
+                _notifyIcon = new NotifyIcon
+                {
+                    Icon = GetAppIcon(),
+                    Text = "WPS 密码自动填充插件",
+                    Visible = true
+                };
+                System.Diagnostics.Debug.WriteLine("托盘图标初始化成功");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"托盘图标初始化失败: {ex.Message}");
+                throw;
+            }
 
-            // 创建上下文菜单
             _contextMenu = new ContextMenuStrip();
-            
-            // 添加菜单项
+
             ToolStripMenuItem homeItem = new ToolStripMenuItem("主页");
             homeItem.Click += (sender, e) => ShowMainWindow();
-            
+
+            ToolStripMenuItem showLogItem = new ToolStripMenuItem("显示日志");
+            showLogItem.Click += (sender, e) => ShowLogClicked?.Invoke(this, EventArgs.Empty);
+
             ToolStripMenuItem openFolderItem = new ToolStripMenuItem("打开安装目录");
             openFolderItem.Click += (sender, e) => OpenFolderClicked?.Invoke(this, EventArgs.Empty);
-            
+
             ToolStripMenuItem exitItem = new ToolStripMenuItem("退出");
             exitItem.Click += (sender, e) => ExitClicked?.Invoke(this, EventArgs.Empty);
 
             _contextMenu.Items.Add(homeItem);
+            _contextMenu.Items.Add(showLogItem);
             _contextMenu.Items.Add(new ToolStripSeparator());
             _contextMenu.Items.Add(openFolderItem);
             _contextMenu.Items.Add(new ToolStripSeparator());
@@ -43,33 +55,41 @@ namespace WpsPasswordManager.UI
 
             _notifyIcon.ContextMenuStrip = _contextMenu;
 
-            // 双击图标事件
             _notifyIcon.DoubleClick += (sender, e) =>
             {
                 ShowMainWindow();
             };
         }
-        
+
+        private System.Drawing.Icon GetAppIcon()
+        {
+            try
+            {
+                return System.Drawing.Icon.ExtractAssociatedIcon(System.Reflection.Assembly.GetExecutingAssembly().Location);
+            }
+            catch
+            {
+                return System.Drawing.SystemIcons.Application;
+            }
+        }
+
         private void ShowMainWindow()
         {
-            // 检查登录窗口是否已经存在
-            if (_loginForm != null && !_loginForm.IsDisposed)
+            LoginForm existingForm = Application.OpenForms.OfType<LoginForm>().FirstOrDefault();
+            if (existingForm != null && !existingForm.IsDisposed)
             {
-                // 如果窗口存在且未被销毁，激活它
-                _loginForm.Activate();
-                if (_loginForm.WindowState == FormWindowState.Minimized)
+                existingForm.Activate();
+                if (existingForm.WindowState == FormWindowState.Minimized)
                 {
-                    _loginForm.WindowState = FormWindowState.Normal;
+                    existingForm.WindowState = FormWindowState.Normal;
                 }
             }
             else
             {
-                // 创建并显示登录窗口
                 _loginForm = new LoginForm();
                 _loginForm.StartPosition = FormStartPosition.CenterScreen;
                 _loginForm.FormClosed += (sender, e) =>
                 {
-                    // 窗口关闭时重置引用
                     _loginForm = null;
                 };
                 _loginForm.Show();
