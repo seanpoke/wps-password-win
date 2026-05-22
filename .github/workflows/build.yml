@@ -46,17 +46,18 @@ jobs:
       run: |
         $version = "1.0.0"
         $timestamp = Get-Date -Format "yyyyMMddHHmm"
-        $archiveName = "文档密码管理_${version}_${timestamp}.zip"
+        $archiveName = "文档密码管理_${version}_${timestamp}"
         $publishDir = "WpsPasswordManager/bin/Release/net6.0-windows/win-x64/publish"
-        Compress-Archive -Path "$publishDir/*" -DestinationPath "$archiveName" -Force
-        Write-Output "Archive created: $archiveName"
+        Compress-Archive -Path "$publishDir/*" -DestinationPath "${archiveName}.zip" -Force
+        Write-Output "::set-output name=archiveName::$archiveName"
+        Write-Output "Archive created: ${archiveName}.zip"
       working-directory: ${{ github.workspace }}
       id: create-archive
 
     - name: Upload publish artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: 文档密码管理
+        name: ${{ steps.create-archive.outputs.archiveName }}
         path: |
           *.zip
         if-no-files-found: error
