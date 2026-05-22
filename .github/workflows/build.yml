@@ -42,15 +42,23 @@ jobs:
       working-directory: ${{ github.workspace }}
       id: list-output
 
+    - name: Create archive with version and timestamp
+      run: |
+        $version = "1.0.0"
+        $timestamp = Get-Date -Format "yyyyMMddHHmm"
+        $archiveName = "文档密码管理_${version}_${timestamp}.zip"
+        $publishDir = "WpsPasswordManager/bin/Release/net6.0-windows/win-x64/publish"
+        Compress-Archive -Path "$publishDir/*" -DestinationPath "$archiveName" -Force
+        Write-Output "Archive created: $archiveName"
+      working-directory: ${{ github.workspace }}
+      id: create-archive
+
     - name: Upload publish artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: WpsPasswordManager-Release
+        name: 文档密码管理
         path: |
-          WpsPasswordManager/bin/Release/net6.0-windows/win-x64/publish/**/*.exe
-          WpsPasswordManager/bin/Release/net6.0-windows/win-x64/publish/**/*.dll
-          WpsPasswordManager/bin/Release/net6.0-windows/win-x64/publish/**/*.config
-          WpsPasswordManager/bin/Release/net6.0-windows/win-x64/publish/**/*.json
+          *.zip
         if-no-files-found: error
       id: upload-artifact
 
