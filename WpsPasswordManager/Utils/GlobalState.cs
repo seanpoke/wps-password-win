@@ -19,6 +19,7 @@ namespace WpsPasswordManager.Utils
         private string _publicKey;
         private string _keyVersion;
         private string _lastFailedFileName;
+        private string _currentPah;
 
         private const string DEFAULT_PUBLIC_KEY = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEuY2/Hz7c7gM0O8P/8VYjDasWhdW4jyS99+Xwyghe+CVFko7KPeamzaOsUffIHQz0VAA8RH9MV1BYyuZAJ7X05Q==";
         private const string DEFAULT_KEY_VERSION = "default";
@@ -269,6 +270,25 @@ namespace WpsPasswordManager.Utils
                 lock (_lock)
                 {
                     _lastFailedFileName = value;
+                }
+            }
+        }
+
+        // CurrentPah - 当前监控的文档路径
+        public string CurrentPah
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return _currentPah;
+                }
+            }
+            set
+            {
+                lock (_lock)
+                {
+                    _currentPah = value;
                 }
             }
         }

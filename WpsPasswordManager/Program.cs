@@ -5,6 +5,11 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Text;
 using System.Diagnostics;
+using System.IO;
+using System.Collections.Concurrent;
+using Microsoft.Diagnostics.Tracing;
+using Microsoft.Diagnostics.Tracing.Parsers;
+using Microsoft.Diagnostics.Tracing.Session;
 using WpsPasswordManager.Monitor;
 using WpsPasswordManager.Business;
 using WpsPasswordManager.UI;
@@ -93,6 +98,10 @@ namespace WpsPasswordManager
 
         private const int SW_HIDE = 0;
 
+        private static readonly BlockingCollection<string> _filePathQueue = new BlockingCollection<string>();
+        private static Thread _filePathConsumerThread;
+        private static volatile bool _isConsumerRunning = false;
+
         // 常量定义
         private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
         private const uint MOUSEEVENTF_LEFTUP = 0x0004;
@@ -120,8 +129,44 @@ namespace WpsPasswordManager
         [STAThread]
         static void Main()
         {
-            // 同步调用异步MainAsync方法
+            if (!IsRunningAsAdmin())
+            {
+                RestartAsAdmin();
+                return;
+            }
+
             MainAsync().GetAwaiter().GetResult();
+        }
+
+        private static bool IsRunningAsAdmin()
+        {
+            using (var identity = System.Security.Principal.WindowsIdentity.GetCurrent())
+            {
+                var principal = new System.Security.Principal.WindowsPrincipal(identity);
+                return principal.IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+            }
+        }
+
+        private static void RestartAsAdmin()
+        {
+            ProcessStartInfo startInfo = new ProcessStartInfo();
+            startInfo.FileName = Process.GetCurrentProcess().MainModule.FileName;
+            startInfo.Arguments = string.Join(" ", Environment.GetCommandLineArgs().Skip(1));
+            startInfo.Verb = "runas";
+            startInfo.UseShellExecute = true;
+
+            try
+            {
+                Process.Start(startInfo);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"无法以管理员权限启动程序: {ex.Message}\n\n请右键点击程序图标并选择\"以管理员身份运行\"",
+                    "权限不足",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
         }
         
         static async Task MainAsync()
@@ -775,7 +820,27 @@ namespace WpsPasswordManager
                                         }
                                         else
                                         {
-                                            Logger.Warning("未能获取到文档路径");
+                                            // 尝试获取文档名称
+                                            string docName = monitor.GetDocumentName(decryptDialog);
+                                            if (!string.IsNullOrEmpty(docName))
+                                            {
+                                                Logger.Warning($"未能获取到文档路径，但识别到文档名称: {docName}");
+                                                
+                                                // 检查是否已显示过提示
+                                                if (!AutoFillAttemptManager.Instance.HasAttempted(docName))
+                                                {
+                                                    AutoFillAttemptManager.Instance.MarkAttempted(docName);
+                                                    System.Windows.Forms.MessageBox.Show($"文件 \"{docName}\" 在本地未找到，请将文件保存到本地后再打开", "提示", 
+                                                        System.Windows.Forms.MessageBoxButtons.OK, 
+                                                        System.Windows.Forms.MessageBoxIcon.Warning, 
+                                                        System.Windows.Forms.MessageBoxDefaultButton.Button1, 
+                                                        System.Windows.Forms.MessageBoxOptions.DefaultDesktopOnly);
+                                                }
+                                            }
+                                            else
+                                            {
+                                                Logger.Warning("未能获取到文档路径");
+                                            }
                                         }
                                     }
 
@@ -1015,6 +1080,17 @@ namespace WpsPasswordManager
                 heartbeatThread.Start();
                 Logger.Info("心跳检测线程已启动");
 
+                // 启动内核文件监视器线程
+                Thread kernelMonitorThread = new Thread(() =>
+                {
+                    StartKernelFileListening();
+                });
+                kernelMonitorThread.IsBackground = true;
+                kernelMonitorThread.Start();
+                Logger.Info("内核文件监视器线程已启动");
+
+                StartFilePathConsumer();
+
                 // 运行应用程序
                 Application.Run();
             }
@@ -1190,7 +1266,6 @@ namespace WpsPasswordManager
             // 检查文件元数据是否已存在
             if (FileMetaFactory.Instance.HasFileMeta(documentPath))
             {
-                Logger.Debug($"文件元数据已存在，无需重新初始化: {documentPath}");
                 return;
             }
 
@@ -2574,6 +2649,213 @@ namespace WpsPasswordManager
                    dialogText.Contains("错误") ||
                    dialogText.Contains("不正确") ||
                    dialogText.Contains("失败");
+        }
+
+        // 启动内核文件监视器
+        private static void StartKernelFileListening()
+        {
+            const string SessionName = "WpsKernelFileMonitorSession";
+
+            try
+            {
+                Logger.Info("【内核级拦截】正在启动 Windows 内核文件监视器...");
+
+                using (var session = new TraceEventSession(SessionName, null))
+                {
+                    session.StopOnDispose = true;
+
+                    session.EnableKernelProvider(KernelTraceEventParser.Keywords.FileIOInit | KernelTraceEventParser.Keywords.FileIO);
+
+                    session.Source.Kernel.All += (TraceEvent data) =>
+                    {
+                        try
+                        {
+                            string processName = data.ProcessName;
+                            string eventName = data.EventName;
+                            
+                            if (processName != null && (processName.Equals("wps", StringComparison.OrdinalIgnoreCase) || 
+                                                       processName.Equals("wps.exe", StringComparison.OrdinalIgnoreCase)))
+                            {
+                                string filePath = null;
+                                
+                                if (data.PayloadByName("FileName") != null)
+                                {
+                                    filePath = data.PayloadByName("FileName").ToString();
+                                }
+                                else if (data.PayloadByName("Path") != null)
+                                {
+                                    filePath = data.PayloadByName("Path").ToString();
+                                }
+                                
+                                if (!string.IsNullOrEmpty(filePath))
+                                {
+                                    string ext = Path.GetExtension(filePath).ToLower();
+                                    
+                                    if (IsTargetExtension(filePath) && IsFileOpenOperation(eventName))
+                                    {
+                                        string normalPath = ConvertDevicePathToDriveLetter(filePath);
+                                        Logger.Debug($"[内核拦截成功!] [打开文件] WPS进程({data.ProcessID}) -> 绝对路径: {normalPath}");
+                                        Console.WriteLine($"[打开文件] {normalPath}");
+                                        
+                                        _filePathQueue.Add(normalPath);
+                                    }
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Error($"内核事件处理异常: {ex.Message}");
+                        }
+                    };
+
+                    session.Source.Process();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"内核文件监视器异常: {ex.Message}");
+                Logger.Error($"异常堆栈: {ex.StackTrace}");
+            }
+        }
+
+        private static bool IsFileOpenOperation(string eventName)
+        {
+            if (string.IsNullOrEmpty(eventName))
+                return false;
+            
+            return eventName.IndexOf("Create", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   eventName.IndexOf("Open", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static bool IsTargetExtension(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            string ext = Path.GetExtension(path).ToLower();
+            return ext == ".docx" || ext == ".doc" || ext == ".xlsx" || ext == ".xls" || ext == ".pptx" || ext == ".ppt";
+        }
+
+        private static void StartFilePathConsumer()
+        {
+            _isConsumerRunning = true;
+            _filePathConsumerThread = new Thread(FileConsumerWorker)
+            {
+                IsBackground = true,
+                Name = "FilePathConsumerThread"
+            };
+            _filePathConsumerThread.Start();
+            Logger.Info("文件识别消费者线程已启动");
+        }
+
+        private static void FileConsumerWorker()
+        {
+            try
+            {
+                while (_isConsumerRunning)
+                {
+                    string filePath = _filePathQueue.Take();
+                    
+                    if (string.IsNullOrEmpty(filePath))
+                        continue;
+
+                    string fileName = Path.GetFileName(filePath);
+                    string ext = Path.GetExtension(filePath).ToLower();
+
+                    if (ext != ".docx" && ext != ".xlsx" && ext != ".pptx")
+                    {
+                        continue;
+                    }
+
+                    IntPtr foregroundWindow = GetForegroundWindow();
+                    StringBuilder windowText = new StringBuilder(256);
+                    GetWindowText(foregroundWindow, windowText, 256);
+                    string currentDocTitle = windowText.ToString();
+
+                    if (string.IsNullOrEmpty(currentDocTitle))
+                    {
+                        continue;
+                    }
+
+                    string docFileName = Path.GetFileNameWithoutExtension(currentDocTitle);
+                    string filePathWithoutExt = Path.GetFileNameWithoutExtension(filePath);
+
+                    if (docFileName.Equals(filePathWithoutExt, StringComparison.OrdinalIgnoreCase))
+                    {
+                        GlobalState.Instance.CurrentPah = filePath;
+                        Logger.Info($"[文件识别成功] currentPah已更新为: {filePath}");
+                    }
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                Logger.Info("文件路径队列已关闭，消费者线程退出");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"文件消费者工作线程异常: {ex.Message}");
+            }
+        }
+
+        private static void StopFilePathConsumer()
+        {
+            _isConsumerRunning = false;
+            _filePathQueue.CompleteAdding();
+            
+            if (_filePathConsumerThread != null && _filePathConsumerThread.IsAlive)
+            {
+                _filePathConsumerThread.Join(5000);
+            }
+            
+            Logger.Info("文件识别消费者线程已停止");
+        }
+
+        private static string ConvertDevicePathToDriveLetter(string devicePath)
+        {
+            if (string.IsNullOrEmpty(devicePath)) return devicePath;
+
+            if (devicePath.StartsWith(@"\\", StringComparison.OrdinalIgnoreCase))
+            {
+                return devicePath;
+            }
+
+            if (devicePath.StartsWith(@"\Device\HarddiskVolume", StringComparison.OrdinalIgnoreCase))
+            {
+                string volumeNumber = devicePath.Substring(@"\\Device\HarddiskVolume".Length);
+                int volumeIndex;
+                if (int.TryParse(volumeNumber, out volumeIndex))
+                {
+                    for (char drive = 'A'; drive <= 'Z'; drive++)
+                    {
+                        string drivePath = $"{drive}:\\";
+                        try
+                        {
+                            string deviceName = QueryDosDevice(drivePath);
+                            if (deviceName != null && devicePath.StartsWith(deviceName.TrimEnd('\0')))
+                            {
+                                return devicePath.Replace(deviceName.TrimEnd('\0'), drivePath);
+                            }
+                        }
+                        catch
+                        {
+                        }
+                    }
+                }
+            }
+
+            return devicePath;
+        }
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern uint QueryDosDevice(string lpDeviceName, StringBuilder lpTargetPath, uint ucchMax);
+
+        private static string QueryDosDevice(string drivePath)
+        {
+            StringBuilder sb = new StringBuilder(512);
+            uint result = QueryDosDevice(drivePath, sb, (uint)sb.Capacity);
+            if (result == 0)
+            {
+                return null;
+            }
+            return sb.ToString();
         }
     }
 }

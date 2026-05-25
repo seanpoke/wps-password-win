@@ -145,7 +145,7 @@ namespace WpsPasswordManager.Monitor
             return foundHandle;
         }
 
-        public string GetDocumentPath(IntPtr dialogHandle)
+        public string GetDocumentName(IntPtr dialogHandle)
         {
             try
             {
@@ -206,31 +206,32 @@ namespace WpsPasswordManager.Monitor
                     }
                 }
 
+                return docName;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"获取文档名称时出错: {ex.Message}");
+                return string.Empty;
+            }
+        }
+
+        public string GetDocumentPath(IntPtr dialogHandle)
+        {
+            try
+            {
+                string docName = GetDocumentName(dialogHandle);
+
                 if (!string.IsNullOrEmpty(docName))
                 {
-                    string recentDocsPath = Environment.GetFolderPath(Environment.SpecialFolder.Recent);
-                    string[] recentFiles = Directory.GetFiles(recentDocsPath, "*.lnk");
-                    Array.Sort(recentFiles, (a, b) => File.GetLastWriteTime(b).CompareTo(File.GetLastWriteTime(a)));
-
-                    foreach (string lnkPath in recentFiles)
+                    string currentPah = GlobalState.Instance.CurrentPah;
+                    
+                    if (!string.IsNullOrEmpty(currentPah))
                     {
-                        try
+                        string fileName = Path.GetFileName(currentPah);
+                        if (fileName.Equals(docName, StringComparison.OrdinalIgnoreCase))
                         {
-                            string targetPath = ResolveShortcut(lnkPath);
-                            if (!string.IsNullOrEmpty(targetPath) &&
-                                (targetPath.EndsWith(".docx", StringComparison.OrdinalIgnoreCase) ||
-                                 targetPath.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) ||
-                                 targetPath.EndsWith(".pptx", StringComparison.OrdinalIgnoreCase)) &&
-                                System.IO.File.Exists(targetPath))
-                            {
-                                string fileName = Path.GetFileName(targetPath);
-                                if (fileName.Equals(docName, StringComparison.OrdinalIgnoreCase))
-                                {
-                                    return targetPath;
-                                }
-                            }
+                            return currentPah;
                         }
-                        catch { }
                     }
                 }
             }
@@ -239,7 +240,7 @@ namespace WpsPasswordManager.Monitor
                 Logger.Error($"获取文档路径时出错: {ex.Message}");
             }
 
-            return string.Empty;
+            return null;
         }
 
         private string ResolveShortcut(string lnkPath)

@@ -9,9 +9,12 @@ namespace WpsPasswordManager.UI
     {
         private RichTextBox _logTextBox;
         private Button _closeButton;
+        private Button _pauseButton;
+        private Button _resumeButton;
         private System.Timers.Timer _refreshTimer;
         private string _logFilePath;
         private long _lastFileSize;
+        private bool _isPaused;
 
         public static LogForm Instance { get; private set; }
 
@@ -47,13 +50,46 @@ namespace WpsPasswordManager.UI
             _closeButton = new Button
             {
                 Text = "关闭",
-                Dock = DockStyle.Bottom,
+                Width = 80,
                 Height = 35
             };
             _closeButton.Click += CloseButton_Click;
 
+            _pauseButton = new Button
+            {
+                Text = "暂停",
+                Width = 80,
+                Height = 35
+            };
+            _pauseButton.Click += PauseButton_Click;
+
+            _resumeButton = new Button
+            {
+                Text = "恢复",
+                Width = 80,
+                Height = 35,
+                Enabled = false
+            };
+            _resumeButton.Click += ResumeButton_Click;
+
+            FlowLayoutPanel buttonPanel = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Bottom,
+                Height = 45,
+                FlowDirection = FlowDirection.RightToLeft,
+                Padding = new Padding(10, 5, 10, 5),
+                Margin = new Padding(0),
+                AutoSize = false
+            };
+            _closeButton.Margin = new Padding(10, 0, 0, 0);
+            _resumeButton.Margin = new Padding(10, 0, 0, 0);
+            _pauseButton.Margin = new Padding(0);
+            buttonPanel.Controls.Add(_closeButton);
+            buttonPanel.Controls.Add(_resumeButton);
+            buttonPanel.Controls.Add(_pauseButton);
+
             this.Controls.Add(_logTextBox);
-            this.Controls.Add(_closeButton);
+            this.Controls.Add(buttonPanel);
 
             this.FormClosing += LogForm_FormClosing;
         }
@@ -98,6 +134,9 @@ namespace WpsPasswordManager.UI
 
         private void RefreshTimer_Elapsed(object sender, ElapsedEventArgs e)
         {
+            if (_isPaused)
+                return;
+
             try
             {
                 if (File.Exists(_logFilePath))
@@ -125,6 +164,21 @@ namespace WpsPasswordManager.UI
                 }
             }
             catch { }
+        }
+
+        private void PauseButton_Click(object sender, EventArgs e)
+        {
+            _isPaused = true;
+            _pauseButton.Enabled = false;
+            _resumeButton.Enabled = true;
+        }
+
+        private void ResumeButton_Click(object sender, EventArgs e)
+        {
+            _isPaused = false;
+            _pauseButton.Enabled = true;
+            _resumeButton.Enabled = false;
+            LoadLogContent();
         }
 
         private void CloseButton_Click(object sender, EventArgs e)
@@ -169,6 +223,8 @@ namespace WpsPasswordManager.UI
                 _refreshTimer?.Stop();
                 _refreshTimer?.Dispose();
                 _closeButton?.Dispose();
+                _pauseButton?.Dispose();
+                _resumeButton?.Dispose();
                 _logTextBox?.Dispose();
             }
             base.Dispose(disposing);
