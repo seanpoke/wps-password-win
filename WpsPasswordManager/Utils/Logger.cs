@@ -29,12 +29,35 @@ namespace WpsPasswordManager.Utils
         private static volatile bool _windowPaused = false;
         private static Action<string> _logWindowUpdateCallback;
 
-        private static volatile LogLevel _minLogLevel = LogLevel.Info;
+        private static volatile LogLevel _minLogLevel = GetInitialLogLevel();
+
+        private static LogLevel GetInitialLogLevel()
+        {
+            string envLogLevel = Environment.GetEnvironmentVariable("WPS_PASSWORD_LOG_LEVEL");
+            if (!string.IsNullOrEmpty(envLogLevel))
+            {
+                if (Enum.TryParse<LogLevel>(envLogLevel, true, out LogLevel parsedLevel))
+                {
+                    return parsedLevel;
+                }
+            }
+#if DEBUG
+            return LogLevel.Info;
+#else
+            return LogLevel.Info;
+#endif
+        }
 
         public static LogLevel MinLogLevel
         {
             get => _minLogLevel;
             set => _minLogLevel = value;
+        }
+
+        public static void SetLogLevel(LogLevel level)
+        {
+            _minLogLevel = level;
+            Logger.Info($"日志级别已设置为: {level}");
         }
 
         static Logger()

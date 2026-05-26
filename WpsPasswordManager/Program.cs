@@ -90,18 +90,15 @@ namespace WpsPasswordManager
         [DllImport("user32.dll")]
         private static extern bool IsWindow(IntPtr hWnd);
 
-        [DllImport("kernel32.dll")]
-        private static extern IntPtr GetConsoleWindow();
-
-        [DllImport("user32.dll")]
-        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-
-        private const int SW_HIDE = 0;
-        private const int SW_SHOW = 5;
-
         private static readonly BlockingCollection<string> _filePathQueue = new BlockingCollection<string>();
+
+        public static BlockingCollection<string> GetFilePathQueue()
+        {
+            return _filePathQueue;
+        }
         private static Thread _filePathConsumerThread;
         private static volatile bool _isConsumerRunning = false;
+        private static volatile string _lastPostedFilePath = null;
 
         // 常量定义
         private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
@@ -172,9 +169,6 @@ namespace WpsPasswordManager
         
         static async Task MainAsync()
         {
-            // 隐藏控制台窗口
-            HideConsoleWindow();
-
             // WPS进程检测阶段：检查是否有WPS相关进程正在运行
             if (IsWpsProcessRunning())
             {
@@ -1135,37 +1129,7 @@ namespace WpsPasswordManager
         private static extern bool IsWindowVisible(IntPtr hWnd);
 
         // 隐藏控制台窗口
-        private static void HideConsoleWindow()
-        {
-            try
-            {
-                IntPtr consoleWindow = GetConsoleWindow();
-                if (consoleWindow != IntPtr.Zero)
-                {
-                    ShowWindow(consoleWindow, SW_HIDE);
-                }
-            }
-            catch (Exception ex)
-            {
-                // 如果隐藏控制台失败，不影响程序运行
-            }
-        }
-
-        private static void ShowConsoleWindow()
-        {
-            try
-            {
-                IntPtr consoleWindow = GetConsoleWindow();
-                if (consoleWindow != IntPtr.Zero)
-                {
-                    ShowWindow(consoleWindow, SW_SHOW);
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"显示控制台窗口失败: {ex.Message}");
-            }
-        }
+        
 
         // 检查文档是否打开
         private static bool IsDocumentOpen(string documentPath)
@@ -2684,46 +2648,53 @@ namespace WpsPasswordManager
                     session.EnableKernelProvider(KernelTraceEventParser.Keywords.FileIOInit | KernelTraceEventParser.Keywords.FileIO);
 
                     session.Source.Kernel.All += (TraceEvent data) =>
-                    {
-                        try
                         {
-                            string processName = data.ProcessName;
-                            string eventName = data.EventName;
-                            
-                            if (processName != null && (processName.Equals("wps", StringComparison.OrdinalIgnoreCase) || 
-                                                       processName.Equals("wps.exe", StringComparison.OrdinalIgnoreCase)))
+                            try
                             {
-                                string filePath = null;
+                                string processName = data.ProcessName;
+                                string eventName = data.EventName;
                                 
-                                if (data.PayloadByName("FileName") != null)
+                                if (processName != null && (processName.Equals("wps", StringComparison.OrdinalIgnoreCase) || 
+                                                           processName.Equals("wps.exe", StringComparison.OrdinalIgnoreCase)))
                                 {
-                                    filePath = data.PayloadByName("FileName").ToString();
-                                }
-                                else if (data.PayloadByName("Path") != null)
-                                {
-                                    filePath = data.PayloadByName("Path").ToString();
-                                }
-                                
-                                if (!string.IsNullOrEmpty(filePath))
-                                {
-                                    string ext = Path.GetExtension(filePath).ToLower();
+                                    string filePath = null;
+                                    string fileNamePayload = data.PayloadByName("FileName")?.ToString();
+                                    string pathPayload = data.PayloadByName("Path")?.ToString();
                                     
-                                    if (IsTargetExtension(filePath) && IsFileOpenOperation(eventName))
+                                    if (!string.IsNullOrEmpty(fileNamePayload))
                                     {
-                                        string normalPath = ConvertDevicePathToDriveLetter(filePath);
-                                        Logger.Debug($"[内核拦截成功!] [打开文件] WPS进程({data.ProcessID}) -> 绝对路径: {normalPath}");
-                                        Console.WriteLine($"[打开文件] {normalPath}");
+                                        filePath = fileNamePayload;
+                                    }
+                                    else if (!string.IsNullOrEmpty(pathPayload))
+                                    {
+                                        filePath = pathPayload;
+                                    }
+                                    
+                                    if (!string.IsNullOrEmpty(filePath))
+                                    {
+                                        bool isTargetExt = IsTargetExtension(filePath);
+                                        bool isOpenOp = IsFileOpenOperation(eventName);
                                         
-                                        _filePathQueue.Add(normalPath);
+                                        if (isTargetExt && isOpenOp)
+                                        {
+                                            string normalPath = ConvertDevicePathToDriveLetter(filePath);
+                                            
+                                            if (!string.Equals(_lastPostedFilePath, normalPath, StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                _lastPostedFilePath = normalPath;
+                                                Console.WriteLine($"[打开文件] {normalPath}");
+                                                _filePathQueue.Add(normalPath);
+                                                Logger.Info($"[文件识别] WPS打开文档: {normalPath}");
+                                            }
+                                        }
                                     }
                                 }
                             }
-                        }
-                        catch (Exception ex)
-                        {
-                            Logger.Error($"内核事件处理异常: {ex.Message}");
-                        }
-                    };
+                            catch (Exception ex)
+                            {
+                                Logger.Error($"内核事件处理异常: {ex.Message}");
+                            }
+                        };
 
                     session.Source.Process();
                 }
@@ -2772,9 +2743,10 @@ namespace WpsPasswordManager
                     string filePath = _filePathQueue.Take();
                     
                     if (string.IsNullOrEmpty(filePath))
+                    {
                         continue;
+                    }
 
-                    string fileName = Path.GetFileName(filePath);
                     string ext = Path.GetExtension(filePath).ToLower();
 
                     if (ext != ".docx" && ext != ".xlsx" && ext != ".pptx")
@@ -2782,24 +2754,8 @@ namespace WpsPasswordManager
                         continue;
                     }
 
-                    IntPtr foregroundWindow = GetForegroundWindow();
-                    StringBuilder windowText = new StringBuilder(256);
-                    GetWindowText(foregroundWindow, windowText, 256);
-                    string currentDocTitle = windowText.ToString();
-
-                    if (string.IsNullOrEmpty(currentDocTitle))
-                    {
-                        continue;
-                    }
-
-                    string docFileName = Path.GetFileNameWithoutExtension(currentDocTitle);
-                    string filePathWithoutExt = Path.GetFileNameWithoutExtension(filePath);
-
-                    if (docFileName.Equals(filePathWithoutExt, StringComparison.OrdinalIgnoreCase))
-                    {
-                        GlobalState.Instance.CurrentPah = filePath;
-                        Logger.Info($"[文件识别成功] currentPah已更新为: {filePath}");
-                    }
+                    GlobalState.Instance.CurrentPah = filePath;
+                    Logger.Info($"[文件识别成功] 当前监控文档: {filePath}");
                 }
             }
             catch (InvalidOperationException)
