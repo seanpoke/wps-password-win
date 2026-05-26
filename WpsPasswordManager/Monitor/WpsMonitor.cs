@@ -4,6 +4,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.RegularExpressions;
+using System.Threading;
 using WpsPasswordManager.Utils;
 using WpsPasswordManager.Locator;
 
@@ -215,6 +217,11 @@ namespace WpsPasswordManager.Monitor
             }
         }
 
+        private static readonly object _pathMatchCacheLock = new object();
+        private static readonly Dictionary<string, string> _pathMatchCache = new Dictionary<string, string>();
+        private static long _lastCacheCleanupTime = 0;
+        private const long CACHE_CLEANUP_INTERVAL = 300000;
+
         public string GetDocumentPath(IntPtr dialogHandle)
         {
             try
@@ -223,16 +230,49 @@ namespace WpsPasswordManager.Monitor
 
                 if (!string.IsNullOrEmpty(docName))
                 {
-                    string currentPah = GlobalState.Instance.CurrentPah;
-                    
-                    if (!string.IsNullOrEmpty(currentPah))
+                    CleanupCacheIfNeeded();
+
+                    string cachedPath;
+                    lock (_pathMatchCacheLock)
                     {
-                        string fileName = Path.GetFileName(currentPah);
-                        if (fileName.Equals(docName, StringComparison.OrdinalIgnoreCase))
+                        if (_pathMatchCache.TryGetValue(docName, out cachedPath))
                         {
-                            return currentPah;
+                            if (File.Exists(cachedPath))
+                            {
+                                Logger.Info($"[路径匹配] 从缓存中找到文档路径: {cachedPath}");
+                                return cachedPath;
+                            }
+                            _pathMatchCache.Remove(docName);
                         }
                     }
+
+                    List<string> possiblePaths = GlobalState.Instance.GetPossiblePaths();
+                    
+                    for (int i = possiblePaths.Count - 1; i >= 0; i--)
+                    {
+                        string path = possiblePaths[i];
+                        if (string.IsNullOrEmpty(path))
+                        {
+                            continue;
+                        }
+
+                        string fileName = Path.GetFileName(path);
+                        string pattern = $"^{Regex.Escape(fileName)}$";
+                        if (Regex.IsMatch(docName, pattern, RegexOptions.IgnoreCase))
+                        {
+                            if (File.Exists(path))
+                            {
+                                Logger.Info($"[路径匹配] 成功匹配文档路径: {path}");
+                                lock (_pathMatchCacheLock)
+                                {
+                                    _pathMatchCache[docName] = path;
+                                }
+                                return path;
+                            }
+                        }
+                    }
+
+
                 }
             }
             catch (Exception ex)
@@ -241,6 +281,31 @@ namespace WpsPasswordManager.Monitor
             }
 
             return null;
+        }
+
+        private void CleanupCacheIfNeeded()
+        {
+            long currentTime = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+            if (currentTime - _lastCacheCleanupTime > CACHE_CLEANUP_INTERVAL)
+            {
+                lock (_pathMatchCacheLock)
+                {
+                    List<string> keysToRemove = new List<string>();
+                    foreach (var kvp in _pathMatchCache)
+                    {
+                        if (!File.Exists(kvp.Value))
+                        {
+                            keysToRemove.Add(kvp.Key);
+                        }
+                    }
+                    foreach (string key in keysToRemove)
+                    {
+                        _pathMatchCache.Remove(key);
+                    }
+                    _lastCacheCleanupTime = currentTime;
+                    Logger.Info($"[路径匹配] 缓存清理完成，移除 {keysToRemove.Count} 条无效记录");
+                }
+            }
         }
 
         private string ResolveShortcut(string lnkPath)

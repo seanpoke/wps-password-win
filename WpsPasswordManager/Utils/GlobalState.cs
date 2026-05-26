@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using WpsPasswordManager.Business;
 using WpsPasswordManager.Monitor;
@@ -19,7 +21,7 @@ namespace WpsPasswordManager.Utils
         private string _publicKey;
         private string _keyVersion;
         private string _lastFailedFileName;
-        private string _currentPah;
+
 
         private const string DEFAULT_PUBLIC_KEY = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEuY2/Hz7c7gM0O8P/8VYjDasWhdW4jyS99+Xwyghe+CVFko7KPeamzaOsUffIHQz0VAA8RH9MV1BYyuZAJ7X05Q==";
         private const string DEFAULT_KEY_VERSION = "default";
@@ -274,22 +276,50 @@ namespace WpsPasswordManager.Utils
             }
         }
 
-        // CurrentPah - 当前监控的文档路径
-        public string CurrentPah
+
+
+        private readonly object _possiblePathsLock = new object();
+        private LinkedList<string> _possiblePaths = new LinkedList<string>();
+        private volatile List<string> _possiblePathsReadCopy = new List<string>();
+        private const int MAX_POSSIBLE_PATHS = 20;
+
+        public void AddPossiblePath(string path)
         {
-            get
+            if (string.IsNullOrEmpty(path))
             {
-                lock (_lock)
-                {
-                    return _currentPah;
-                }
+                return;
             }
-            set
+
+            lock (_possiblePathsLock)
             {
-                lock (_lock)
+                var existingNode = _possiblePaths.Find(path);
+                if (existingNode != null)
                 {
-                    _currentPah = value;
+                    _possiblePaths.Remove(existingNode);
                 }
+
+                _possiblePaths.AddLast(path);
+
+                while (_possiblePaths.Count > MAX_POSSIBLE_PATHS)
+                {
+                    _possiblePaths.RemoveFirst();
+                }
+
+                _possiblePathsReadCopy = _possiblePaths.ToList();
+            }
+        }
+
+        public List<string> GetPossiblePaths()
+        {
+            return _possiblePathsReadCopy;
+        }
+
+        public void ClearPossiblePaths()
+        {
+            lock (_possiblePathsLock)
+            {
+                _possiblePaths.Clear();
+                _possiblePathsReadCopy = new List<string>();
             }
         }
         
@@ -317,6 +347,7 @@ namespace WpsPasswordManager.Utils
                 _isLoggedIn = false;
                 // 保留配置信息（serverIp和serverPort）
             }
+            ClearPossiblePaths();
         }
         
         /// <summary>

@@ -2754,8 +2754,8 @@ namespace WpsPasswordManager
                         continue;
                     }
 
-                    GlobalState.Instance.CurrentPah = filePath;
-                    Logger.Info($"[文件识别成功] 当前监控文档: {filePath}");
+                    GlobalState.Instance.AddPossiblePath(filePath);
+                    Logger.Info($"[文件识别成功] 文档路径已投递到possiblePaths: {filePath}");
                 }
             }
             catch (InvalidOperationException)
