@@ -281,7 +281,7 @@ namespace WpsPasswordManager.Utils
         private readonly object _possiblePathsLock = new object();
         private LinkedList<string> _possiblePaths = new LinkedList<string>();
         private volatile List<string> _possiblePathsReadCopy = new List<string>();
-        private const int MAX_POSSIBLE_PATHS = 20;
+        private const int MAX_POSSIBLE_PATHS = 100;
 
         public void AddPossiblePath(string path)
         {
