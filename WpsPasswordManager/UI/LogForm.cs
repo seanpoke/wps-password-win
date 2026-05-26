@@ -1,30 +1,31 @@
 using System;
 using System.IO;
-using System.Timers;
 using System.Windows.Forms;
+using System.Text;
+using WpsPasswordManager.Utils;
 
 namespace WpsPasswordManager.UI
 {
     public class LogForm : Form
     {
-        private RichTextBox _logTextBox;
+        private TextBox _logTextBox;
         private Button _closeButton;
         private Button _pauseButton;
         private Button _resumeButton;
-        private System.Timers.Timer _refreshTimer;
         private string _logFilePath;
-        private long _lastFileSize;
         private bool _isPaused;
+        private readonly StringBuilder _pendingContent = new StringBuilder();
+        private bool _isUpdating = false;
+        private readonly object _updateLock = new object();
 
         public static LogForm Instance { get; private set; }
 
         public LogForm()
         {
             _logFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wps_password_manager.log");
-            _lastFileSize = 0;
             InitializeComponent();
             LoadLogContent();
-            StartLogMonitoring();
+            SetupLogCallback();
         }
 
         private void InitializeComponent()
@@ -36,41 +37,26 @@ namespace WpsPasswordManager.UI
             this.MaximizeBox = true;
             this.MinimizeBox = true;
 
-            _logTextBox = new RichTextBox
+            _logTextBox = new TextBox
             {
                 Dock = DockStyle.Fill,
                 ReadOnly = true,
                 Font = new System.Drawing.Font("Consolas", 9F),
                 BackColor = System.Drawing.Color.Black,
                 ForeColor = System.Drawing.Color.LightGreen,
-                ScrollBars = RichTextBoxScrollBars.Vertical,
+                ScrollBars = ScrollBars.Vertical,
+                Multiline = true,
                 WordWrap = false
             };
 
-            _closeButton = new Button
-            {
-                Text = "关闭",
-                Width = 80,
-                Height = 35
-            };
-            _closeButton.Click += CloseButton_Click;
+            _closeButton = new Button { Text = "关闭", Width = 80, Height = 35 };
+            _closeButton.Click += (s, e) => this.Hide();
 
-            _pauseButton = new Button
-            {
-                Text = "暂停",
-                Width = 80,
-                Height = 35
-            };
-            _pauseButton.Click += PauseButton_Click;
+            _pauseButton = new Button { Text = "暂停", Width = 80, Height = 35 };
+            _pauseButton.Click += (s, e) => { _isPaused = true; _pauseButton.Enabled = false; _resumeButton.Enabled = true; };
 
-            _resumeButton = new Button
-            {
-                Text = "恢复",
-                Width = 80,
-                Height = 35,
-                Enabled = false
-            };
-            _resumeButton.Click += ResumeButton_Click;
+            _resumeButton = new Button { Text = "恢复", Width = 80, Height = 35, Enabled = false };
+            _resumeButton.Click += (s, e) => { _isPaused = false; _pauseButton.Enabled = true; _resumeButton.Enabled = false; };
 
             FlowLayoutPanel buttonPanel = new FlowLayoutPanel
             {
@@ -90,108 +76,138 @@ namespace WpsPasswordManager.UI
 
             this.Controls.Add(_logTextBox);
             this.Controls.Add(buttonPanel);
-
-            this.FormClosing += LogForm_FormClosing;
         }
 
         private void LoadLogContent()
         {
+            if (!File.Exists(_logFilePath)) return;
+
+            Task.Run(() =>
+            {
+                try
+                {
+                    const int maxLinesToShow = 500;
+                    string recentContent = ReadLastLines(_logFilePath, maxLinesToShow);
+
+                    this.BeginInvoke((Action)(() =>
+                    {
+                        if (!this.IsDisposed)
+                        {
+                            _logTextBox.Text = recentContent;
+                            _logTextBox.SelectionStart = _logTextBox.TextLength;
+                            _logTextBox.ScrollToCaret();
+                        }
+                    }));
+                }
+                catch { }
+            });
+        }
+
+        private string ReadLastLines(string filePath, int maxLines)
+        {
+            using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            {
+                long position = fs.Length;
+                int linesRead = 0;
+                byte[] buffer = new byte[1024];
+                int bytesRead;
+
+                while (position > 0 && linesRead < maxLines)
+                {
+                    int bytesToRead = (int)Math.Min(buffer.Length, position);
+                    position -= bytesToRead;
+                    fs.Position = position;
+                    bytesRead = fs.Read(buffer, 0, bytesToRead);
+
+                    for (int i = bytesRead - 1; i >= 0 && linesRead < maxLines; i--)
+                    {
+                        if (buffer[i] == '\n') linesRead++;
+                    }
+                }
+
+                fs.Position = position;
+                using (var reader = new StreamReader(fs, System.Text.Encoding.UTF8))
+                {
+                    string content = reader.ReadToEnd();
+                    string[] lines = content.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
+                    if (lines.Length > maxLines)
+                    {
+                        string[] recentLines = new string[maxLines];
+                        Array.Copy(lines, lines.Length - maxLines, recentLines, 0, maxLines);
+                        return string.Join(Environment.NewLine, recentLines);
+                    }
+                    return content;
+                }
+            }
+        }
+
+        private void SetupLogCallback()
+        {
+            Logger.SetLogWindowCallback(OnLogReceived);
+        }
+
+        private void OnLogReceived(string logContent)
+        {
+            if (_isPaused) return;
+
+            lock (_pendingContent)
+            {
+                _pendingContent.Append(logContent);
+            }
+
+            bool shouldInvoke = false;
+            lock (_updateLock)
+            {
+                if (!_isUpdating)
+                {
+                    _isUpdating = true;
+                    shouldInvoke = true;
+                }
+            }
+
+            if (shouldInvoke && !this.IsDisposed && this.IsHandleCreated)
+            {
+                this.BeginInvoke((Action)(() => UpdateLogDisplay()));
+            }
+        }
+
+        private void UpdateLogDisplay()
+        {
             try
             {
-                if (File.Exists(_logFilePath))
+                string content;
+                lock (_pendingContent)
                 {
-                    FileInfo fileInfo = new FileInfo(_logFilePath);
-                    _lastFileSize = fileInfo.Length;
-                    
-                    const int maxLinesToShow = 100;
-                    using (StreamReader reader = new StreamReader(_logFilePath, System.Text.Encoding.UTF8))
+                    content = _pendingContent.ToString();
+                    _pendingContent.Clear();
+                }
+
+                if (!string.IsNullOrEmpty(content))
+                {
+                    bool shouldScroll = _logTextBox.SelectionStart == _logTextBox.TextLength;
+
+                    const int maxLines = 2000;
+                    if (_logTextBox.Lines.Length > maxLines)
                     {
-                        string[] allLines = reader.ReadToEnd().Split(new[] { Environment.NewLine }, StringSplitOptions.None);
-                        if (allLines.Length > maxLinesToShow)
-                        {
-                            string[] recentLines = new string[maxLinesToShow];
-                            Array.Copy(allLines, allLines.Length - maxLinesToShow, recentLines, 0, maxLinesToShow);
-                            _logTextBox.Text = string.Join(Environment.NewLine, recentLines);
-                        }
-                        else
-                        {
-                            _logTextBox.Text = string.Join(Environment.NewLine, allLines);
-                        }
+                        string[] lines = _logTextBox.Lines;
+                        string[] newLines = new string[maxLines];
+                        Array.Copy(lines, lines.Length - maxLines, newLines, 0, maxLines);
+                        _logTextBox.Lines = newLines;
                     }
-                    _logTextBox.SelectionStart = _logTextBox.TextLength;
-                    _logTextBox.ScrollToCaret();
+
+                    _logTextBox.AppendText(content);
+
+                    if (shouldScroll)
+                    {
+                        _logTextBox.SelectionStart = _logTextBox.TextLength;
+                        _logTextBox.ScrollToCaret();
+                    }
                 }
             }
             catch { }
-        }
-
-        private void StartLogMonitoring()
-        {
-            _refreshTimer = new System.Timers.Timer(1000);
-            _refreshTimer.Elapsed += RefreshTimer_Elapsed;
-            _refreshTimer.Start();
-        }
-
-        private void RefreshTimer_Elapsed(object sender, ElapsedEventArgs e)
-        {
-            if (_isPaused)
-                return;
-
-            try
+            finally
             {
-                if (File.Exists(_logFilePath))
-                {
-                    FileInfo fileInfo = new FileInfo(_logFilePath);
-                    if (fileInfo.Length > _lastFileSize)
-                    {
-                        using (FileStream fs = new FileStream(_logFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                        using (StreamReader reader = new StreamReader(fs))
-                        {
-                            fs.Seek(_lastFileSize, SeekOrigin.Begin);
-                            string newContent = reader.ReadToEnd();
-                            if (!string.IsNullOrEmpty(newContent))
-                            {
-                                this.Invoke((Action)(() =>
-                                {
-                                    _logTextBox.AppendText(newContent);
-                                    _logTextBox.SelectionStart = _logTextBox.TextLength;
-                                    _logTextBox.ScrollToCaret();
-                                }));
-                            }
-                        }
-                        _lastFileSize = fileInfo.Length;
-                    }
-                }
-            }
-            catch { }
-        }
-
-        private void PauseButton_Click(object sender, EventArgs e)
-        {
-            _isPaused = true;
-            _pauseButton.Enabled = false;
-            _resumeButton.Enabled = true;
-        }
-
-        private void ResumeButton_Click(object sender, EventArgs e)
-        {
-            _isPaused = false;
-            _pauseButton.Enabled = true;
-            _resumeButton.Enabled = false;
-            LoadLogContent();
-        }
-
-        private void CloseButton_Click(object sender, EventArgs e)
-        {
-            this.Hide();
-        }
-
-        private void LogForm_FormClosing(object sender, FormClosingEventArgs e)
-        {
-            if (e.CloseReason == CloseReason.UserClosing)
-            {
-                e.Cancel = true;
-                this.Hide();
+                lock (_updateLock) { _isUpdating = false; }
             }
         }
 
@@ -201,7 +217,11 @@ namespace WpsPasswordManager.UI
             {
                 Instance = new LogForm();
             }
-            
+            else
+            {
+                Instance.SetupLogCallback();
+            }
+
             if (Instance.Visible)
             {
                 Instance.Activate();
@@ -216,18 +236,20 @@ namespace WpsPasswordManager.UI
             }
         }
 
-        protected override void Dispose(bool disposing)
+        protected override void OnFormClosing(FormClosingEventArgs e)
         {
-            if (disposing)
+            if (e.CloseReason == CloseReason.UserClosing)
             {
-                _refreshTimer?.Stop();
-                _refreshTimer?.Dispose();
-                _closeButton?.Dispose();
-                _pauseButton?.Dispose();
-                _resumeButton?.Dispose();
-                _logTextBox?.Dispose();
+                Logger.SetLogWindowCallback(null);
+                _pendingContent.Clear();
+                e.Cancel = true;
+                this.Hide();
+                return;
             }
-            base.Dispose(disposing);
+
+            Logger.SetLogWindowCallback(null);
+            _pendingContent.Clear();
+            base.OnFormClosing(e);
         }
     }
 }

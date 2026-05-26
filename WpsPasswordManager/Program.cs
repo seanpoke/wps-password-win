@@ -97,6 +97,7 @@ namespace WpsPasswordManager
         private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
         private const int SW_HIDE = 0;
+        private const int SW_SHOW = 5;
 
         private static readonly BlockingCollection<string> _filePathQueue = new BlockingCollection<string>();
         private static Thread _filePathConsumerThread;
@@ -1147,6 +1148,22 @@ namespace WpsPasswordManager
             catch (Exception ex)
             {
                 // 如果隐藏控制台失败，不影响程序运行
+            }
+        }
+
+        private static void ShowConsoleWindow()
+        {
+            try
+            {
+                IntPtr consoleWindow = GetConsoleWindow();
+                if (consoleWindow != IntPtr.Zero)
+                {
+                    ShowWindow(consoleWindow, SW_SHOW);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"显示控制台窗口失败: {ex.Message}");
             }
         }
 
