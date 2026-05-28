@@ -12,6 +12,7 @@ namespace WpsPasswordManager.UI
         private Button _closeButton;
         private Button _pauseButton;
         private Button _resumeButton;
+        private Button _clearButton;
         private string _logFilePath;
         private bool _isPaused;
         private readonly StringBuilder _pendingContent = new StringBuilder();
@@ -69,6 +70,15 @@ namespace WpsPasswordManager.UI
             };
             _pauseButton.Click += (s, e) => { _isPaused = true; _pauseButton.Enabled = false; _resumeButton.Enabled = true; };
 
+            _clearButton = new Button 
+            { 
+                Text = "清理", 
+                Width = DpiHelper.ScaleValue(80), 
+                Height = DpiHelper.ScaleValue(35),
+                Font = DpiHelper.ScaleFont(new System.Drawing.Font("微软雅黑", 9F))
+            };
+            _clearButton.Click += (s, e) => { _logTextBox.Clear(); };
+
             _resumeButton = new Button 
             { 
                 Text = "恢复", 
@@ -90,10 +100,12 @@ namespace WpsPasswordManager.UI
             };
             _closeButton.Margin = new Padding(DpiHelper.ScaleValue(10), 0, 0, 0);
             _resumeButton.Margin = new Padding(DpiHelper.ScaleValue(10), 0, 0, 0);
-            _pauseButton.Margin = new Padding(0);
+            _pauseButton.Margin = new Padding(DpiHelper.ScaleValue(10), 0, 0, 0);
+            _clearButton.Margin = new Padding(0);
             buttonPanel.Controls.Add(_closeButton);
             buttonPanel.Controls.Add(_resumeButton);
             buttonPanel.Controls.Add(_pauseButton);
+            buttonPanel.Controls.Add(_clearButton);
 
             this.Controls.Add(_logTextBox);
             this.Controls.Add(buttonPanel);
