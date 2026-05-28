@@ -24,13 +24,13 @@ jobs:
         include-prerelease: false
 
     - name: Restore dependencies
-      run: dotnet restore WpsPasswordManager/WpsPasswordManager.csproj
+      run: dotnet restore PasswordManager/PasswordManager.csproj
       working-directory: ${{ github.workspace }}
       continue-on-error: false
       id: restore
 
     - name: Publish the project
-      run: dotnet publish WpsPasswordManager/WpsPasswordManager.csproj --configuration Release --no-restore --self-contained true --runtime win-x64 --property:OutputPath=bin/Release/net6.0-windows/win-x64/publish
+      run: dotnet publish PasswordManager/PasswordManager.csproj --configuration Release --no-restore --self-contained true --runtime win-x64 --property:OutputPath=bin/Release/net6.0-windows/win-x64/publish
       working-directory: ${{ github.workspace }}
       continue-on-error: false
       id: publish
@@ -38,7 +38,7 @@ jobs:
         DOTNET_CLI_TELEMETRY_OPTOUT: true
 
     - name: List publish output
-      run: Get-ChildItem -Path "WpsPasswordManager/bin/Release/net6.0-windows/win-x64/publish" -Recurse -Name
+      run: Get-ChildItem -Path "PasswordManager/bin/Release/net6.0-windows/win-x64/publish" -Recurse -Name
       working-directory: ${{ github.workspace }}
       id: list-output
 
@@ -47,7 +47,7 @@ jobs:
         $version = "1.0.0"
         $timestamp = Get-Date -Format "yyyyMMddHHmm"
         $archiveName = "文档密码管理_${version}_${timestamp}"
-        $publishDir = "WpsPasswordManager/bin/Release/net6.0-windows/win-x64/publish"
+        $publishDir = "PasswordManager/bin/Release/net6.0-windows/win-x64/publish"
         Compress-Archive -Path "$publishDir/*" -DestinationPath "${archiveName}.zip" -Force
         Write-Output "::set-output name=archiveName::$archiveName"
         Write-Output "Archive created: ${archiveName}.zip"
