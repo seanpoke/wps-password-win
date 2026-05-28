@@ -31,9 +31,9 @@ Thumbs.db
 .vscode/
 
 # 构建输出文件
-WpsPasswordManager/build_output.txt
-WpsPasswordManager/build_errors.txt
-WpsPasswordManager/build_log.txt
+PasswordManager/build_output.txt
+PasswordManager/build_errors.txt
+PasswordManager/build_log.txt
 
 # Trae AI 配置文件
 .trae/

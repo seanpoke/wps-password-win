@@ -33,7 +33,7 @@ namespace PasswordManager.UI
         {
             float dpiScale = DpiHelper.GetDpiScale();
             
-            this.Text = "WPS密码管理 - 日志";
+            this.Text = "密码管理 - 日志";
             this.Size = DpiHelper.ScaleSize(new System.Drawing.Size(800, 600));
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.Sizable;

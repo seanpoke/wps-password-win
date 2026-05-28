@@ -194,7 +194,7 @@ namespace PasswordManager
                 {
                     // 已存在实例，显示提示信息
                     System.Windows.Forms.MessageBox.Show(
-                        "WPS 密码自动填充插件已在运行中",
+                        "密码管理插件已在运行中",
                         "提示",
                         System.Windows.Forms.MessageBoxButtons.OK,
                         System.Windows.Forms.MessageBoxIcon.Information);
@@ -204,7 +204,7 @@ namespace PasswordManager
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
 
-                Logger.Info("WPS 密码自动填充插件启动");
+                Logger.Info("密码管理插件启动");
 
                 // 先初始化系统托盘图标
                 TrayIcon trayIcon = new TrayIcon();
@@ -872,7 +872,7 @@ namespace PasswordManager
 
                 // 显示启动提示
                 Logger.Info("插件已启动，正在监控WPS进程");
-                trayIcon.ShowBalloonTip("WPS 密码自动填充插件", "插件已启动，正在监控WPS进程...");
+                trayIcon.ShowBalloonTip("密码管理插件", "插件已启动，正在监控WPS进程...");
 
                 // 启动文档关闭监控线程
                 documentCloseMonitorThread = new Thread(() =>

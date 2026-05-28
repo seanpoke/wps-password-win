@@ -398,8 +398,8 @@ namespace PasswordManager.UI
         
         public void UpdateUIState()
         {
-            // 固定窗口标题为【WPS密码管理】
-            this.Text = "WPS密码管理";
+            // 固定窗口标题为【密码管理】
+            this.Text = "密码管理";
             
             Logger.Info($"UpdateUIState被调用，当前IsLoggedIn状态: {GlobalState.Instance.IsLoggedIn}");
             

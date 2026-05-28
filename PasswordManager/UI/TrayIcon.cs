@@ -21,7 +21,7 @@ namespace PasswordManager.UI
                 _notifyIcon = new NotifyIcon
                 {
                     Icon = GetAppIcon(),
-                    Text = "WPS 密码自动填充插件",
+                    Text = "密码管理插件",
                     Visible = true
                 };
                 System.Diagnostics.Debug.WriteLine("托盘图标初始化成功");
