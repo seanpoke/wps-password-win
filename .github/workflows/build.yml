@@ -45,7 +45,7 @@ jobs:
     - name: Create archive with version and timestamp
       run: |
         $version = "1.0.0"
-        $timestamp = Get-Date -Format "yyyyMMddHHmm"
+        $timestamp = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId((Get-Date), "China Standard Time") | Get-Date -Format "yyyyMMddHHmm"
         $archiveName = "文档密码管理_${version}_${timestamp}"
         $publishDir = "PasswordManager/bin/Release/net6.0-windows/win-x64/publish"
         Compress-Archive -Path "$publishDir/*" -DestinationPath "${archiveName}.zip" -Force
