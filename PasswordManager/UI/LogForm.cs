@@ -240,7 +240,18 @@ namespace PasswordManager.UI
             catch { }
             finally
             {
+                bool hasPendingContent = false;
+                lock (_pendingContent)
+                {
+                    hasPendingContent = _pendingContent.Length > 0;
+                }
+                
                 lock (_updateLock) { _isUpdating = false; }
+                
+                if (hasPendingContent && !this.IsDisposed && this.IsHandleCreated)
+                {
+                    this.BeginInvoke((Action)(() => UpdateLogDisplay()));
+                }
             }
         }
 
