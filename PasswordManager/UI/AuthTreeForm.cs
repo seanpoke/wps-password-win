@@ -956,7 +956,6 @@ namespace PasswordManager.UI
                 _authTreeView.Nodes.Add(treeNode);
             }
 
-            _authTreeView.ExpandAll();
             UpdateSelectedListBoxes();
         }
 
