@@ -581,13 +581,14 @@ namespace PasswordManager
                                     string documentPath = monitor.GetDocumentPath(IntPtr.Zero);
                                     if (!string.IsNullOrEmpty(documentPath))
                                     {
-                                        // 尝试初始化文件元数据（不依赖文档是否打开）
-                                        TryInitializeFileMeta(documentPath);
-                                        
-                                        // 只有文档真正打开后才启动文件监控
+                                        // 只有文档真正打开后才初始化元数据和启动文件监控
                                         if (IsDocumentOpen(documentPath))
                                         {
                                             Logger.Info($"获取到文档路径: {documentPath}");
+                                            
+                                            // 在文档真正打开后才初始化文件元数据
+                                            TryInitializeFileMeta(documentPath);
+                                            
                                             FileMonitor.StartWatchingFile(documentPath);
                                         }
                                     }
