@@ -648,7 +648,6 @@ namespace WpsPasswordManager
                                             // 记录窗口信息，无论是否找到密码输入框
                                             lastPasswordEncryptDialog = encryptDialog;
                                             lastDialogTitle = title;
-                                            Logger.Info($"记录密码加密窗口: {encryptDialog}");
 
                                             // 尝试获取文档路径并获取UID
                                             string documentPath = monitor.GetDocumentPath(IntPtr.Zero);
@@ -889,7 +888,7 @@ namespace WpsPasswordManager
                                 foreach (string documentPath in watchedFiles)
                                 {
                                     // 1. 判断文件是否已关闭
-                                    if (!IsDocumentOpen(documentPath))
+                                    if (!IsDocumentOpen(documentPath, enableLogging: true))
                                     {
                                         // 2. 已关闭则清理AutoFillAttemptManager中的记录
                                         AutoFillAttemptManager.Instance.OnDocumentClosed(documentPath);
@@ -1132,10 +1131,14 @@ namespace WpsPasswordManager
         
 
         // 检查文档是否打开
-        private static bool IsDocumentOpen(string documentPath)
+        private static bool IsDocumentOpen(string documentPath, bool enableLogging = false)
         {
             if (string.IsNullOrEmpty(documentPath) || !System.IO.File.Exists(documentPath))
             {
+                if (enableLogging)
+                {
+                    Logger.Info($"检测文档关闭触发: 文档路径不存在 {documentPath}");
+                }
                 return false;
             }
 
@@ -1145,6 +1148,10 @@ namespace WpsPasswordManager
                 using (System.IO.FileStream fs = System.IO.File.Open(documentPath, System.IO.FileMode.Open, System.IO.FileAccess.ReadWrite, System.IO.FileShare.None))
                 {
                     // 文件可以打开，说明没有被其他进程锁定
+                    if (enableLogging)
+                    {
+                        Logger.Info($"检测文档关闭触发: {documentPath} 未被其他进程锁定");
+                    }
                     return false;
                 }
             }
@@ -1153,8 +1160,12 @@ namespace WpsPasswordManager
                 // 文件被锁定，说明仍然打开
                 return true;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                if (enableLogging)
+                {
+                    Logger.Error($"检测文档关闭触发: {documentPath} 错误信息: {ex.Message}，异常类型: {ex.GetType().Name}");
+                }
                 // 其他错误，返回false
                 return false;
             }
@@ -1385,7 +1396,6 @@ namespace WpsPasswordManager
                 string password = GetPasswordUsingUIAutomation(dialogHandle);
                 if (!string.IsNullOrEmpty(password))
                 {
-                    Logger.Info($"[GetPasswordFromDialog] 通过UI Automation成功获取到密码: {password}");
                     return password;
                 }
 
@@ -1570,7 +1580,6 @@ namespace WpsPasswordManager
                     return string.Empty;
                 }
                 int count = (int)countProperty.GetValue(editElements);
-                Logger.Info($"找到 {count} 个编辑控件");
 
                 // 如果找到编辑控件，获取第一个的文本
                 if (count > 0)
@@ -1621,7 +1630,6 @@ namespace WpsPasswordManager
                                             // 特别处理Qt密码输入框
                                             if (className.Contains("KDPwdLineEditReveal"))
                                             {
-                                                Logger.Info($"发现Qt密码输入框: {className}");
 
                                                 // 尝试使用ValuePattern获取密码（针对Qt密码输入框）
                                                 try

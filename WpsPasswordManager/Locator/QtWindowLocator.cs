@@ -50,7 +50,6 @@ namespace WpsPasswordManager.Locator
             IntPtr handle = FindByDirectSearch();
             if (handle != IntPtr.Zero)
             {
-                Logger.Info($"通过直接搜索找到密码对话框: {handle}");
                 return handle;
             }
 

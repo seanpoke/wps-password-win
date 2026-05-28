@@ -34,6 +34,9 @@ namespace WpsPasswordManager.Monitor
         private static extern IntPtr GetParent(IntPtr hWnd);
 
         [DllImport("user32.dll")]
+        private static extern IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
+
+        [DllImport("user32.dll")]
         private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
 
         [DllImport("shcore.dll")]
@@ -161,25 +164,164 @@ namespace WpsPasswordManager.Monitor
                     string title = windowTitle.ToString();
 
                     bool isEncryptDialog = title.Contains("文档已加密") || title.Contains("密码加密");
+                    bool isPasswordEncryptDialog = title.Contains("密码加密");
+                    bool isDocEncryptDialog = title.Contains("文档已加密");
 
                     if (isEncryptDialog)
-                    {
-                        IntPtr parentWindow = GetParent(activeWindow);
-                        if (parentWindow != IntPtr.Zero)
                         {
-                            StringBuilder parentTitle = new StringBuilder(256);
-                            GetWindowText(parentWindow, parentTitle, parentTitle.Capacity);
-                            string parentWindowTitle = parentTitle.ToString();
-
-                            if (!string.IsNullOrEmpty(parentWindowTitle) && parentWindowTitle.Contains(" - WPS Office"))
+                            uint processId;
+                            GetWindowThreadProcessId(activeWindow, out processId);
+                            
+                            List<IntPtr> wpsMainWindows = new List<IntPtr>();
+                            List<string> allWpsWindowsInfo = new List<string>();
+                            
+                            EnumWindows((IntPtr hWnd, IntPtr lParam) =>
                             {
-                                docName = parentWindowTitle.Replace(" - WPS Office", "");
+                                uint pid;
+                                GetWindowThreadProcessId(hWnd, out pid);
+                                StringBuilder windowTitle = new StringBuilder(256);
+                                GetWindowText(hWnd, windowTitle, windowTitle.Capacity);
+                                string title = windowTitle.ToString();
+                                
+                                StringBuilder className = new StringBuilder(256);
+                                GetClassName(hWnd, className, className.Capacity);
+                                string classStr = className.ToString();
+                                
+                                bool isWpsWindow = false;
+                                bool isMainWindow = false;
+                                bool isSameProcess = (pid == processId);
+                                
+                                if (!string.IsNullOrEmpty(title))
+                                {
+                                    if (title.EndsWith(" - WPS Office") && title != "WPS Office")
+                                    {
+                                        isWpsWindow = true;
+                                        isMainWindow = true;
+                                    }
+                                    else if (title.Contains(" - WPS"))
+                                    {
+                                        isWpsWindow = true;
+                                    }
+                                    else if (title.Contains(".docx") || title.Contains(".xlsx") || title.Contains(".pptx"))
+                                    {
+                                        isWpsWindow = true;
+                                        isMainWindow = true;
+                                    }
+                                }
+                                    
+                                if (!isWpsWindow && !string.IsNullOrEmpty(classStr))
+                                {
+                                    if (classStr.Contains("WPS") || classStr.Contains("Kingsoft") || classStr.Contains("kwps"))
+                                    {
+                                        isWpsWindow = true;
+                                    }
+                                }
+                                    
+                                if (isWpsWindow)
+                                {
+                                    string windowInfo = $"进程ID: {pid}, 句柄: {hWnd}, 标题: '{title}', 类名: '{classStr}', 是否同进程: {isSameProcess}, 是否主窗口: {isMainWindow}";
+                                    allWpsWindowsInfo.Add(windowInfo);
+                                    
+                                    if (isSameProcess)
+                                        {
+                                            wpsMainWindows.Add(hWnd);
+                                        }
+                                }
+                                return true;
+                            }, IntPtr.Zero);
+                            
+                            if (wpsMainWindows.Count > 0)
+                            {
+                                IntPtr mainWindowHandle = wpsMainWindows[0];
+                                StringBuilder mainTitle = new StringBuilder(256);
+                                GetWindowText(mainWindowHandle, mainTitle, mainTitle.Capacity);
+                                string mainWindowTitle = mainTitle.ToString();
+                                
+                                if (mainWindowTitle.EndsWith(" - WPS Office"))
+                                {
+                                    docName = mainWindowTitle.Replace(" - WPS Office", "");
+                                }
+                                else if (mainWindowTitle.Contains(" - WPS"))
+                                {
+                                    docName = mainWindowTitle.Substring(0, mainWindowTitle.IndexOf(" - WPS"));
+                                }
+                                else
+                                {
+                                    docName = mainWindowTitle;
+                                }
+                            }
+                            else
+                            {
+                                string crossProcessDocName = string.Empty;
+                                foreach (string info in allWpsWindowsInfo)
+                                {
+                                    
+                                    int titleStartIdx = info.IndexOf("标题: '") + 5;
+                                    if (titleStartIdx > 3)
+                                    {
+                                        int titleEndIdx = info.IndexOf("', 类名:", titleStartIdx);
+                                        if (titleEndIdx > titleStartIdx)
+                                        {
+                                            string crossWindowTitle = info.Substring(titleStartIdx, titleEndIdx - titleStartIdx);
+                                            if (crossWindowTitle.EndsWith(" - WPS Office"))
+                                            {
+                                                crossProcessDocName = crossWindowTitle.Replace(" - WPS Office", "");
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                if (!string.IsNullOrEmpty(crossProcessDocName))
+                                {
+                                    docName = crossProcessDocName;
+                                    
+                                    if (docName.StartsWith("[只读]"))
+                                    {
+                                        string candidateName = docName.Substring(4);
+                                        string matchedName = TryMatchDocumentName(candidateName);
+                                        if (!string.IsNullOrEmpty(matchedName))
+                                        {
+                                            docName = matchedName;
+                                        }
+                                    }
+                                }
                             }
                         }
-                    }
                     else if (!string.IsNullOrEmpty(title) && title.Contains(" - WPS Office"))
                     {
                         docName = title.Replace(" - WPS Office", "");
+                        
+                        if (docName.StartsWith("[只读]"))
+                        {
+                            string candidateName = docName.Substring(4);
+                            string matchedName = TryMatchDocumentName(candidateName);
+                            if (!string.IsNullOrEmpty(matchedName))
+                            {
+                                docName = matchedName;
+                            }
+                        }
+                    }
+                    else if (!string.IsNullOrEmpty(title) && title.StartsWith("[只读]"))
+                    {
+                        string candidateName = title.Substring(4);
+                        string matchedName = TryMatchDocumentName(candidateName);
+                        if (!string.IsNullOrEmpty(matchedName))
+                        {
+                            docName = matchedName;
+                        }
+                        else
+                        {
+                            docName = title;
+                        }
+                    }
+                    else if (!string.IsNullOrEmpty(title))
+                    {
+                        string matchedName = TryMatchDocumentName(title);
+                        if (!string.IsNullOrEmpty(matchedName))
+                        {
+                            docName = matchedName;
+                        }
                     }
                 }
 
@@ -197,6 +339,19 @@ namespace WpsPasswordManager.Monitor
                         {
                             wpsWindowTitles.Add(title);
                         }
+                        else if (!string.IsNullOrEmpty(title) && title.StartsWith("[只读]"))
+                    {
+                        string candidateName = title.Substring(4);
+                        string matchedName = TryMatchDocumentName(candidateName);
+                        if (!string.IsNullOrEmpty(matchedName))
+                        {
+                            wpsWindowTitles.Add(matchedName + " - WPS Office");
+                        }
+                        else
+                        {
+                            wpsWindowTitles.Add(title);
+                        }
+                    }
 
                         return true;
                     }, IntPtr.Zero);
@@ -215,6 +370,45 @@ namespace WpsPasswordManager.Monitor
                 Logger.Error($"获取文档名称时出错: {ex.Message}");
                 return string.Empty;
             }
+        }
+
+        private string TryMatchDocumentName(string candidateName)
+        {
+            if (string.IsNullOrEmpty(candidateName))
+            {
+                return string.Empty;
+            }
+
+            List<string> possiblePaths = GlobalState.Instance.GetPossiblePaths();
+            
+            if (possiblePaths.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            List<string> matchedFiles = new List<string>();
+
+            foreach (string path in possiblePaths)
+            {
+                if (string.IsNullOrEmpty(path))
+                {
+                    continue;
+                }
+
+                string fileName = Path.GetFileName(path);
+                
+                if (string.Equals(fileName, candidateName, StringComparison.OrdinalIgnoreCase))
+                {
+                    matchedFiles.Add(fileName);
+                }
+            }
+            
+            if (matchedFiles.Count == 1)
+            {
+                return matchedFiles[0];
+            }
+
+            return string.Empty;
         }
 
         private static readonly object _pathMatchCacheLock = new object();
@@ -239,10 +433,23 @@ namespace WpsPasswordManager.Monitor
                         {
                             if (File.Exists(cachedPath))
                             {
-                                Logger.Info($"[路径匹配] 从缓存中找到文档路径: {cachedPath}");
+                                // Logger.Info($"[路径匹配] 从缓存中找到文档路径: {cachedPath}");
                                 return cachedPath;
                             }
                             _pathMatchCache.Remove(docName);
+                        }
+                        else if (docName.StartsWith("[只读]"))
+                        {
+                            string candidateName = docName.Substring(4);
+                            if (_pathMatchCache.TryGetValue(candidateName, out cachedPath))
+                            {
+                                if (File.Exists(cachedPath))
+                                {
+                                    // Logger.Info($"[路径匹配] 去掉[只读]前缀后从缓存中找到文档路径: {cachedPath}");
+                                    return cachedPath;
+                                }
+                                _pathMatchCache.Remove(candidateName);
+                            }
                         }
                     }
 
@@ -271,8 +478,29 @@ namespace WpsPasswordManager.Monitor
                             }
                         }
                     }
+                }
+                else
+                {
+                    lock (_pathMatchCacheLock)
+                    {
+                        if (_pathMatchCache.Count == 1)
+                        {
+                            string cachedPath = _pathMatchCache.Values.First();
+                            if (File.Exists(cachedPath))
+                            {
+                                return cachedPath;
+                            }
+                        }
+                    }
 
-
+                    List<string> possiblePaths = GlobalState.Instance.GetPossiblePaths();
+                    foreach (string path in possiblePaths)
+                    {
+                        if (!string.IsNullOrEmpty(path) && File.Exists(path))
+                        {
+                            return path;
+                        }
+                    }
                 }
             }
             catch (Exception ex)
