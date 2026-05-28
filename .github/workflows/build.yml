@@ -48,7 +48,9 @@ jobs:
         $timestamp = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId((Get-Date), "China Standard Time") | Get-Date -Format "yyyyMMddHHmm"
         $archiveName = "文档密码管理_${version}_${timestamp}"
         $publishDir = "PasswordManager/bin/Release/net6.0-windows/win-x64/publish"
-        Compress-Archive -Path "$publishDir/*" -DestinationPath "${archiveName}.zip" -Force
+        Push-Location $publishDir
+        Compress-Archive -Path .\* -DestinationPath "${env:GITHUB_WORKSPACE}\${archiveName}.zip" -Force
+        Pop-Location
         Write-Output "::set-output name=archiveName::$archiveName"
         Write-Output "Archive created: ${archiveName}.zip"
       working-directory: ${{ github.workspace }}
