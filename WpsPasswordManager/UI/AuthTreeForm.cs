@@ -70,9 +70,11 @@ namespace WpsPasswordManager.UI
 
         private void InitializeComponent()
         {
+            float dpiScale = DpiHelper.GetDpiScale();
+            
             this.Text = "文档权限";
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
-            this.Size = new Size(700, 550);
+            this.Size = DpiHelper.ScaleSize(new Size(700, 550));
             this.StartPosition = FormStartPosition.CenterScreen;
             this.BackColor = Color.White;
             this.MaximizeBox = false;
@@ -80,9 +82,13 @@ namespace WpsPasswordManager.UI
             this.ShowIcon = false;
             this.TopMost = true;
 
+            Font regularFont = DpiHelper.ScaleFont(new Font("微软雅黑", 9F));
+            Font boldFont9 = DpiHelper.ScaleFont(new Font("微软雅黑", 9F, FontStyle.Bold));
+            Font boldFont10 = DpiHelper.ScaleFont(new Font("微软雅黑", 10F, FontStyle.Bold));
+
             _topPanel = new Panel
             {
-                Size = new Size(700, 40),
+                Size = DpiHelper.ScaleSize(new Size(700, 40)),
                 Location = new Point(0, 0),
                 BackColor = Color.FromArgb(245, 245, 245),
                 BorderStyle = BorderStyle.FixedSingle
@@ -90,9 +96,9 @@ namespace WpsPasswordManager.UI
 
             _searchTextBox = new TextBox
             {
-                Size = new Size(200, 28),
-                Location = new Point(10, 6),
-                Font = new Font("微软雅黑", 9F),
+                Size = DpiHelper.ScaleSize(new Size(200, 28)),
+                Location = DpiHelper.ScalePoint(new Point(10, 6)),
+                Font = regularFont,
                 PlaceholderText = "搜索部门或人员..."
             };
             _searchTextBox.KeyDown += SearchTextBox_KeyDown;
@@ -100,11 +106,11 @@ namespace WpsPasswordManager.UI
             _searchButton = new Button
             {
                 Text = "搜索",
-                Font = new Font("微软雅黑", 9F, FontStyle.Bold),
+                Font = boldFont9,
                 ForeColor = Color.White,
                 BackColor = Color.FromArgb(0, 120, 212),
-                Size = new Size(60, 28),
-                Location = new Point(215, 6),
+                Size = DpiHelper.ScaleSize(new Size(60, 28)),
+                Location = DpiHelper.ScalePoint(new Point(215, 6)),
                 FlatStyle = FlatStyle.Flat,
                 Cursor = Cursors.Hand,
                 TabStop = false
@@ -117,11 +123,11 @@ namespace WpsPasswordManager.UI
             _searchUpButton = new Button
             {
                 Text = "◀",
-                Font = new Font("微软雅黑", 10F, FontStyle.Bold),
+                Font = boldFont10,
                 ForeColor = Color.Black,
                 BackColor = Color.White,
-                Size = new Size(28, 28),
-                Location = new Point(280, 6),
+                Size = DpiHelper.ScaleSize(new Size(28, 28)),
+                Location = DpiHelper.ScalePoint(new Point(280, 6)),
                 FlatStyle = FlatStyle.Flat,
                 Cursor = Cursors.Hand,
                 TabStop = false,
@@ -133,11 +139,11 @@ namespace WpsPasswordManager.UI
             _searchDownButton = new Button
             {
                 Text = "▶",
-                Font = new Font("微软雅黑", 10F, FontStyle.Bold),
+                Font = boldFont10,
                 ForeColor = Color.Black,
                 BackColor = Color.White,
-                Size = new Size(28, 28),
-                Location = new Point(310, 6),
+                Size = DpiHelper.ScaleSize(new Size(28, 28)),
+                Location = DpiHelper.ScalePoint(new Point(310, 6)),
                 FlatStyle = FlatStyle.Flat,
                 Cursor = Cursors.Hand,
                 TabStop = false,
@@ -149,21 +155,21 @@ namespace WpsPasswordManager.UI
             _searchCountLabel = new Label
             {
                 Text = "",
-                Font = new Font("微软雅黑", 9F),
+                Font = regularFont,
                 ForeColor = Color.Gray,
-                Size = new Size(50, 28),
-                Location = new Point(342, 6),
+                Size = DpiHelper.ScaleSize(new Size(50, 28)),
+                Location = DpiHelper.ScalePoint(new Point(342, 6)),
                 TextAlign = ContentAlignment.MiddleLeft
             };
 
             _saveButton = new Button
             {
                 Text = "保存",
-                Font = new Font("微软雅黑", 10F, FontStyle.Bold),
+                Font = boldFont10,
                 ForeColor = Color.White,
                 BackColor = Color.FromArgb(156, 39, 176),
-                Size = new Size(65, 28),
-                Location = new Point(555, 6),
+                Size = DpiHelper.ScaleSize(new Size(65, 28)),
+                Location = DpiHelper.ScalePoint(new Point(555, 6)),
                 FlatStyle = FlatStyle.Flat,
                 Cursor = Cursors.Hand,
                 TabStop = false
@@ -176,11 +182,11 @@ namespace WpsPasswordManager.UI
             _resetButton = new Button
             {
                 Text = "重置",
-                Font = new Font("微软雅黑", 10F, FontStyle.Bold),
+                Font = boldFont10,
                 ForeColor = Color.White,
                 BackColor = Color.FromArgb(156, 39, 176),
-                Size = new Size(65, 28),
-                Location = new Point(475, 6),
+                Size = DpiHelper.ScaleSize(new Size(65, 28)),
+                Location = DpiHelper.ScalePoint(new Point(475, 6)),
                 FlatStyle = FlatStyle.Flat,
                 Cursor = Cursors.Hand,
                 TabStop = false
@@ -200,31 +206,31 @@ namespace WpsPasswordManager.UI
 
             _leftPanel = new Panel
             {
-                Size = new Size(340, 460),
-                Location = new Point(10, 45),
+                Size = DpiHelper.ScaleSize(new Size(340, 460)),
+                Location = DpiHelper.ScalePoint(new Point(10, 45)),
                 BorderStyle = BorderStyle.FixedSingle
             };
 
             _leftTitleLabel = new Label
             {
                 Text = "选择部门或人员",
-                Font = new Font("微软雅黑", 9F, FontStyle.Bold),
+                Font = boldFont9,
                 ForeColor = Color.Black,
-                Size = new Size(340, 25),
+                Size = DpiHelper.ScaleSize(new Size(340, 25)),
                 Location = new Point(0, 0),
                 TextAlign = ContentAlignment.MiddleLeft,
-                Padding = new Padding(5, 0, 0, 0)
+                Padding = new Padding(DpiHelper.ScaleValue(5), 0, 0, 0)
             };
             _leftPanel.Controls.Add(_leftTitleLabel);
 
             _authTreeView = new AuthTreeView
             {
-                Size = new Size(340, 435),
-                Location = new Point(0, 25),
+                Size = DpiHelper.ScaleSize(new Size(340, 435)),
+                Location = new Point(0, DpiHelper.ScaleValue(25)),
                 ShowLines = true,
                 ShowPlusMinus = true,
                 ShowRootLines = true,
-                Font = new Font("微软雅黑", 9F),
+                Font = regularFont,
                 LineColor = Color.LightGray,
                 CheckBoxes = true
             };
@@ -234,41 +240,41 @@ namespace WpsPasswordManager.UI
 
             _rightPanel = new Panel
             {
-                Size = new Size(320, 460),
-                Location = new Point(355, 45),
+                Size = DpiHelper.ScaleSize(new Size(320, 460)),
+                Location = DpiHelper.ScalePoint(new Point(355, 45)),
                 BorderStyle = BorderStyle.FixedSingle
             };
 
             _deptTitleLabel = new Label
             {
                 Text = "已选择的部门",
-                Font = new Font("微软雅黑", 9F, FontStyle.Bold),
+                Font = boldFont9,
                 ForeColor = Color.Black,
-                Size = new Size(280, 25),
+                Size = DpiHelper.ScaleSize(new Size(280, 25)),
                 Location = new Point(0, 0),
                 TextAlign = ContentAlignment.MiddleLeft,
-                Padding = new Padding(5, 0, 0, 0)
+                Padding = new Padding(DpiHelper.ScaleValue(5), 0, 0, 0)
             };
 
             _deptCountLabel = new Label
             {
                 Text = "",
-                Font = new Font("微软雅黑", 9F),
+                Font = regularFont,
                 ForeColor = Color.Gray,
-                Size = new Size(40, 25),
-                Location = new Point(280, 0),
+                Size = DpiHelper.ScaleSize(new Size(40, 25)),
+                Location = DpiHelper.ScalePoint(new Point(280, 0)),
                 TextAlign = ContentAlignment.MiddleRight,
-                Padding = new Padding(0, 0, 5, 0)
+                Padding = new Padding(0, 0, DpiHelper.ScaleValue(5), 0)
             };
 
             _selectedDeptListBox = new ListBox
             {
-                Size = new Size(320, 210),
-                Location = new Point(0, 25),
-                Font = new Font("微软雅黑", 9F),
+                Size = DpiHelper.ScaleSize(new Size(320, 210)),
+                Location = new Point(0, DpiHelper.ScaleValue(25)),
+                Font = regularFont,
                 BorderStyle = BorderStyle.None,
                 DrawMode = DrawMode.OwnerDrawFixed,
-                ItemHeight = 24
+                ItemHeight = DpiHelper.ScaleValue(24)
             };
             _selectedDeptListBox.DrawItem += SelectedDeptListBox_DrawItem;
             _selectedDeptListBox.MouseClick += SelectedListBox_MouseClick;
@@ -276,33 +282,33 @@ namespace WpsPasswordManager.UI
             _empTitleLabel = new Label
             {
                 Text = "已选择的员工",
-                Font = new Font("微软雅黑", 9F, FontStyle.Bold),
+                Font = boldFont9,
                 ForeColor = Color.Black,
-                Size = new Size(280, 25),
-                Location = new Point(0, 240),
+                Size = DpiHelper.ScaleSize(new Size(280, 25)),
+                Location = DpiHelper.ScalePoint(new Point(0, 240)),
                 TextAlign = ContentAlignment.MiddleLeft,
-                Padding = new Padding(5, 0, 0, 0)
+                Padding = new Padding(DpiHelper.ScaleValue(5), 0, 0, 0)
             };
 
             _empCountLabel = new Label
             {
                 Text = "",
-                Font = new Font("微软雅黑", 9F),
+                Font = regularFont,
                 ForeColor = Color.Gray,
-                Size = new Size(40, 25),
-                Location = new Point(280, 240),
+                Size = DpiHelper.ScaleSize(new Size(40, 25)),
+                Location = DpiHelper.ScalePoint(new Point(280, 240)),
                 TextAlign = ContentAlignment.MiddleRight,
-                Padding = new Padding(0, 0, 5, 0)
+                Padding = new Padding(0, 0, DpiHelper.ScaleValue(5), 0)
             };
 
             _selectedEmpListBox = new ListBox
             {
-                Size = new Size(320, 195),
-                Location = new Point(0, 265),
-                Font = new Font("微软雅黑", 9F),
+                Size = DpiHelper.ScaleSize(new Size(320, 195)),
+                Location = DpiHelper.ScalePoint(new Point(0, 265)),
+                Font = regularFont,
                 BorderStyle = BorderStyle.None,
                 DrawMode = DrawMode.OwnerDrawFixed,
-                ItemHeight = 24
+                ItemHeight = DpiHelper.ScaleValue(24)
             };
             _selectedEmpListBox.DrawItem += SelectedEmpListBox_DrawItem;
             _selectedEmpListBox.MouseClick += SelectedListBox_MouseClick;
@@ -317,11 +323,11 @@ namespace WpsPasswordManager.UI
             _confirmButton = new Button
             {
                 Text = "确定",
-                Font = new Font("微软雅黑", 9F, FontStyle.Bold),
+                Font = boldFont9,
                 ForeColor = Color.White,
                 BackColor = Color.FromArgb(0, 120, 212),
-                Size = new Size(100, 32),
-                Location = new Point(470, 515),
+                Size = DpiHelper.ScaleSize(new Size(100, 32)),
+                Location = DpiHelper.ScalePoint(new Point(470, 515)),
                 FlatStyle = FlatStyle.Flat,
                 Cursor = Cursors.Hand
             };
@@ -331,11 +337,11 @@ namespace WpsPasswordManager.UI
             _cancelButton = new Button
             {
                 Text = "取消",
-                Font = new Font("微软雅黑", 9F, FontStyle.Bold),
+                Font = boldFont9,
                 ForeColor = Color.Black,
                 BackColor = Color.FromArgb(238, 238, 238),
-                Size = new Size(100, 32),
-                Location = new Point(585, 515),
+                Size = DpiHelper.ScaleSize(new Size(100, 32)),
+                Location = DpiHelper.ScalePoint(new Point(585, 515)),
                 FlatStyle = FlatStyle.Flat,
                 Cursor = Cursors.Hand
             };
@@ -344,18 +350,18 @@ namespace WpsPasswordManager.UI
 
             _loadingPanel = new Panel
             {
-                Size = new Size(700, 510),
-                Location = new Point(0, 40),
+                Size = DpiHelper.ScaleSize(new Size(700, 510)),
+                Location = new Point(0, DpiHelper.ScaleValue(40)),
                 BackColor = Color.White
             };
 
             _loadingLabel = new Label
             {
                 Text = "正在加载权限树...",
-                Font = new Font("微软雅黑", 10F),
+                Font = DpiHelper.ScaleFont(new Font("微软雅黑", 10F)),
                 ForeColor = Color.Gray,
-                Size = new Size(700, 20),
-                Location = new Point(0, 245),
+                Size = DpiHelper.ScaleSize(new Size(700, 20)),
+                Location = new Point(0, DpiHelper.ScaleValue(245)),
                 TextAlign = ContentAlignment.MiddleCenter
             };
             _loadingPanel.Controls.Add(_loadingLabel);
@@ -363,10 +369,10 @@ namespace WpsPasswordManager.UI
             _errorLabel = new Label
             {
                 Text = "",
-                Font = new Font("微软雅黑", 10F),
+                Font = DpiHelper.ScaleFont(new Font("微软雅黑", 10F)),
                 ForeColor = Color.Red,
-                Size = new Size(700, 40),
-                Location = new Point(0, 235),
+                Size = DpiHelper.ScaleSize(new Size(700, 40)),
+                Location = new Point(0, DpiHelper.ScaleValue(235)),
                 TextAlign = ContentAlignment.MiddleCenter,
                 Visible = false
             };
@@ -684,15 +690,19 @@ namespace WpsPasswordManager.UI
 
             e.DrawBackground();
 
+            int paddingLeft = DpiHelper.ScaleValue(5);
+            int paddingTop = DpiHelper.ScaleValue(2);
+            int xOffset = DpiHelper.ScaleValue(18);
+
             using (Brush textBrush = new SolidBrush(Color.Black))
             {
-                e.Graphics.DrawString(displayText, e.Font, textBrush, e.Bounds.X + 5, e.Bounds.Y + 2);
+                e.Graphics.DrawString(displayText, e.Font, textBrush, e.Bounds.X + paddingLeft, e.Bounds.Y + paddingTop);
             }
 
             using (Brush xBrush = new SolidBrush(Color.Gray))
             {
-                Font xFont = new Font("微软雅黑", 10F, FontStyle.Bold);
-                e.Graphics.DrawString("×", xFont, xBrush, e.Bounds.Right - 18, e.Bounds.Y + 1);
+                Font xFont = DpiHelper.ScaleFont(new Font("微软雅黑", 10F, FontStyle.Bold));
+                e.Graphics.DrawString("×", xFont, xBrush, e.Bounds.Right - xOffset, e.Bounds.Y + paddingTop);
             }
 
             e.DrawFocusRectangle();
@@ -707,15 +717,19 @@ namespace WpsPasswordManager.UI
 
             e.DrawBackground();
 
+            int paddingLeft = DpiHelper.ScaleValue(5);
+            int paddingTop = DpiHelper.ScaleValue(2);
+            int xOffset = DpiHelper.ScaleValue(18);
+
             using (Brush textBrush = new SolidBrush(Color.Black))
             {
-                e.Graphics.DrawString(displayText, e.Font, textBrush, e.Bounds.X + 5, e.Bounds.Y + 2);
+                e.Graphics.DrawString(displayText, e.Font, textBrush, e.Bounds.X + paddingLeft, e.Bounds.Y + paddingTop);
             }
 
             using (Brush xBrush = new SolidBrush(Color.Gray))
             {
-                Font xFont = new Font("微软雅黑", 10F, FontStyle.Bold);
-                e.Graphics.DrawString("×", xFont, xBrush, e.Bounds.Right - 18, e.Bounds.Y + 1);
+                Font xFont = DpiHelper.ScaleFont(new Font("微软雅黑", 10F, FontStyle.Bold));
+                e.Graphics.DrawString("×", xFont, xBrush, e.Bounds.Right - xOffset, e.Bounds.Y + paddingTop);
             }
 
             e.DrawFocusRectangle();
@@ -733,7 +747,8 @@ namespace WpsPasswordManager.UI
             if (item == null) return;
 
             int itemWidth = listBox.GetItemRectangle(index).Width;
-            if (e.X > itemWidth - 20)
+            int deleteButtonWidth = DpiHelper.ScaleValue(20);
+            if (e.X > itemWidth - deleteButtonWidth)
             {
                 LdapNodeDTO node = item.Node;
                 bool isDept = item.IsDept;

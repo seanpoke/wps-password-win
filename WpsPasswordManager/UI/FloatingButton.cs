@@ -4,6 +4,7 @@ using System.Windows.Forms;
 using WpsPasswordManager.Monitor;
 using WpsPasswordManager.Utils;
 using WpsPasswordManager.Business;
+using System.Drawing;
 
 namespace WpsPasswordManager.UI
 {
@@ -55,79 +56,82 @@ namespace WpsPasswordManager.UI
 
         private void InitializeComponent()
         {
-            // 配置表单
+            float dpiScale = DpiHelper.GetDpiScale();
+            
             this.FormBorderStyle = FormBorderStyle.None;
             this.TopMost = false;
             this.ShowInTaskbar = false;
-            this.TransparencyKey = System.Drawing.Color.Magenta;
-            this.BackColor = System.Drawing.Color.Magenta;
+            this.TransparencyKey = Color.Magenta;
+            this.BackColor = Color.Magenta;
             this.StartPosition = FormStartPosition.Manual;
 
-            // 创建生成密码按钮
+            int buttonWidth = DpiHelper.ScaleValue(90);
+            int buttonHeight = DpiHelper.ScaleValue(32);
+            int buttonSpacing = DpiHelper.ScaleValue(4);
+            Font buttonFont = DpiHelper.ScaleFont(new Font("微软雅黑", 9F, FontStyle.Bold));
+
             _generateButton = new Button
             {
                 Text = "生成密码",
                 FlatStyle = FlatStyle.Flat,
-                BackColor = System.Drawing.Color.FromArgb(0, 120, 212),
-                ForeColor = System.Drawing.Color.White,
-                Font = new System.Drawing.Font("微软雅黑", 9F, System.Drawing.FontStyle.Bold),
-                Size = new System.Drawing.Size(90, 32),
-                Location = new System.Drawing.Point(0, 0),
-                Cursor = System.Windows.Forms.Cursors.Hand,
+                BackColor = Color.FromArgb(0, 120, 212),
+                ForeColor = Color.White,
+                Font = buttonFont,
+                Size = new Size(buttonWidth, buttonHeight),
+                Location = new Point(0, 0),
+                Cursor = Cursors.Hand,
                 UseVisualStyleBackColor = false,
                 FlatAppearance = { BorderSize = 0 }
             };
             _generateButton.Click += (sender, e) => GeneratePasswordClicked?.Invoke(this, EventArgs.Empty);
-            _generateButton.MouseEnter += (sender, e) => _generateButton.BackColor = System.Drawing.Color.FromArgb(26, 115, 232);
-            _generateButton.MouseLeave += (sender, e) => _generateButton.BackColor = System.Drawing.Color.FromArgb(0, 120, 212);
-            _generateButton.MouseDown += (sender, e) => _generateButton.BackColor = System.Drawing.Color.FromArgb(0, 90, 170);
-            _generateButton.MouseUp += (sender, e) => _generateButton.BackColor = System.Drawing.Color.FromArgb(26, 115, 232);
+            _generateButton.MouseEnter += (sender, e) => _generateButton.BackColor = Color.FromArgb(26, 115, 232);
+            _generateButton.MouseLeave += (sender, e) => _generateButton.BackColor = Color.FromArgb(0, 120, 212);
+            _generateButton.MouseDown += (sender, e) => _generateButton.BackColor = Color.FromArgb(0, 90, 170);
+            _generateButton.MouseUp += (sender, e) => _generateButton.BackColor = Color.FromArgb(26, 115, 232);
 
-            // 创建提取密码按钮
             _extractPasswordButton = new Button
             {
                 Text = "提取密码",
                 FlatStyle = FlatStyle.Flat,
-                BackColor = System.Drawing.Color.FromArgb(0, 150, 136),
-                ForeColor = System.Drawing.Color.White,
-                Font = new System.Drawing.Font("微软雅黑", 9F, System.Drawing.FontStyle.Bold),
-                Size = new System.Drawing.Size(90, 32),
-                Location = new System.Drawing.Point(0, 36),
-                Cursor = System.Windows.Forms.Cursors.Hand,
+                BackColor = Color.FromArgb(0, 150, 136),
+                ForeColor = Color.White,
+                Font = buttonFont,
+                Size = new Size(buttonWidth, buttonHeight),
+                Location = new Point(0, buttonHeight + buttonSpacing),
+                Cursor = Cursors.Hand,
                 UseVisualStyleBackColor = false,
                 FlatAppearance = { BorderSize = 0 }
             };
             _extractPasswordButton.Click += ExtractPasswordButton_Click;
-            _extractPasswordButton.MouseEnter += (sender, e) => _extractPasswordButton.BackColor = System.Drawing.Color.FromArgb(0, 170, 156);
-            _extractPasswordButton.MouseLeave += (sender, e) => _extractPasswordButton.BackColor = System.Drawing.Color.FromArgb(0, 150, 136);
-            _extractPasswordButton.MouseDown += (sender, e) => _extractPasswordButton.BackColor = System.Drawing.Color.FromArgb(0, 120, 110);
-            _extractPasswordButton.MouseUp += (sender, e) => _extractPasswordButton.BackColor = System.Drawing.Color.FromArgb(0, 170, 156);
+            _extractPasswordButton.MouseEnter += (sender, e) => _extractPasswordButton.BackColor = Color.FromArgb(0, 170, 156);
+            _extractPasswordButton.MouseLeave += (sender, e) => _extractPasswordButton.BackColor = Color.FromArgb(0, 150, 136);
+            _extractPasswordButton.MouseDown += (sender, e) => _extractPasswordButton.BackColor = Color.FromArgb(0, 120, 110);
+            _extractPasswordButton.MouseUp += (sender, e) => _extractPasswordButton.BackColor = Color.FromArgb(0, 170, 156);
 
-            // 创建文档权限按钮
             _authButton = new Button
             {
                 Text = "文档权限",
                 FlatStyle = FlatStyle.Flat,
-                BackColor = System.Drawing.Color.FromArgb(156, 39, 176),
-                ForeColor = System.Drawing.Color.White,
-                Font = new System.Drawing.Font("微软雅黑", 9F, System.Drawing.FontStyle.Bold),
-                Size = new System.Drawing.Size(90, 32),
-                Location = new System.Drawing.Point(0, 72),
-                Cursor = System.Windows.Forms.Cursors.Hand,
+                BackColor = Color.FromArgb(156, 39, 176),
+                ForeColor = Color.White,
+                Font = buttonFont,
+                Size = new Size(buttonWidth, buttonHeight),
+                Location = new Point(0, (buttonHeight + buttonSpacing) * 2),
+                Cursor = Cursors.Hand,
                 Visible = false,
                 UseVisualStyleBackColor = false,
                 FlatAppearance = { BorderSize = 0 }
             };
             _authButton.Click += AuthButton_Click;
-            _authButton.MouseEnter += (sender, e) => _authButton.BackColor = System.Drawing.Color.FromArgb(176, 59, 196);
-            _authButton.MouseLeave += (sender, e) => _authButton.BackColor = System.Drawing.Color.FromArgb(156, 39, 176);
-            _authButton.MouseDown += (sender, e) => _authButton.BackColor = System.Drawing.Color.FromArgb(126, 29, 146);
-            _authButton.MouseUp += (sender, e) => _authButton.BackColor = System.Drawing.Color.FromArgb(176, 59, 196);
+            _authButton.MouseEnter += (sender, e) => _authButton.BackColor = Color.FromArgb(176, 59, 196);
+            _authButton.MouseLeave += (sender, e) => _authButton.BackColor = Color.FromArgb(156, 39, 176);
+            _authButton.MouseDown += (sender, e) => _authButton.BackColor = Color.FromArgb(126, 29, 146);
+            _authButton.MouseUp += (sender, e) => _authButton.BackColor = Color.FromArgb(176, 59, 196);
 
             this.Controls.Add(_generateButton);
             this.Controls.Add(_extractPasswordButton);
             this.Controls.Add(_authButton);
-            this.Size = new System.Drawing.Size(90, 104);
+            this.Size = new Size(buttonWidth, (buttonHeight + buttonSpacing) * 3 - buttonSpacing);
         }
 
         private void AuthButton_Click(object sender, EventArgs e)
@@ -160,13 +164,17 @@ namespace WpsPasswordManager.UI
                 bool shouldShow = _currentFileMeta != null && _currentFileMeta.WriteAuth;
                 _authButton.Visible = shouldShow;
                 
+                int buttonWidth = DpiHelper.ScaleValue(90);
+                int buttonHeight = DpiHelper.ScaleValue(32);
+                int buttonSpacing = DpiHelper.ScaleValue(4);
+                
                 if (shouldShow)
                 {
-                    this.Size = new System.Drawing.Size(90, 104);
+                    this.Size = new Size(buttonWidth, (buttonHeight + buttonSpacing) * 3 - buttonSpacing);
                 }
                 else
                 {
-                    this.Size = new System.Drawing.Size(90, 68);
+                    this.Size = new Size(buttonWidth, (buttonHeight + buttonSpacing) * 2 - buttonSpacing);
                 }
                 
                 Logger.Debug($"文档权限按钮显示状态更新: {shouldShow}");

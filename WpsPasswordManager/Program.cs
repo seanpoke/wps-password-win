@@ -127,6 +127,8 @@ namespace WpsPasswordManager
         [STAThread]
         static void Main()
         {
+            DpiHelper.InitializeDpiAwareness();
+
             if (!IsRunningAsAdmin())
             {
                 RestartAsAdmin();
@@ -887,8 +889,8 @@ namespace WpsPasswordManager
 
                                 foreach (string documentPath in watchedFiles)
                                 {
-                                    // 1. 判断文件是否已关闭
-                                    if (!IsDocumentOpen(documentPath, enableLogging: true))
+                                    // 1. 判断文件是否已关闭（使用新的检测逻辑）
+                                    if (IsDocumentClosed(documentPath, enableLogging: true))
                                     {
                                         // 2. 已关闭则清理AutoFillAttemptManager中的记录
                                         AutoFillAttemptManager.Instance.OnDocumentClosed(documentPath);
@@ -1130,8 +1132,45 @@ namespace WpsPasswordManager
         // 隐藏控制台窗口
         
 
-        // 检查文档是否打开
+        // 检查文档是否打开（保留原有逻辑，简单的文件锁定检测）
         private static bool IsDocumentOpen(string documentPath, bool enableLogging = false)
+        {
+            if (string.IsNullOrEmpty(documentPath) || !System.IO.File.Exists(documentPath))
+            {
+                if (enableLogging)
+                {
+                    Logger.Info($"检测文档打开: 文档路径不存在 {documentPath}");
+                }
+                return false;
+            }
+
+            try
+            {
+                using (System.IO.FileStream fs = System.IO.File.Open(documentPath, System.IO.FileMode.Open, System.IO.FileAccess.ReadWrite, System.IO.FileShare.None))
+                {
+                    if (enableLogging)
+                    {
+                        Logger.Info($"检测文档打开: {documentPath} 未被其他进程锁定");
+                    }
+                    return false;
+                }
+            }
+            catch (System.IO.IOException)
+            {
+                return true;
+            }
+            catch (Exception ex)
+            {
+                if (enableLogging)
+                {
+                    Logger.Error($"检测文档打开: {documentPath} 错误信息: {ex.Message}，异常类型: {ex.GetType().Name}");
+                }
+                return false;
+            }
+        }
+
+        // 检查文档是否已关闭（新的检测逻辑，包含多重验证）
+        private static bool IsDocumentClosed(string documentPath, bool enableLogging = false)
         {
             if (string.IsNullOrEmpty(documentPath) || !System.IO.File.Exists(documentPath))
             {
@@ -1139,36 +1178,113 @@ namespace WpsPasswordManager
                 {
                     Logger.Info($"检测文档关闭触发: 文档路径不存在 {documentPath}");
                 }
+                return true;
+            }
+
+            if (HasWpsTempFile(documentPath, enableLogging))
+            {
                 return false;
             }
 
-            try
-            {
-                // 尝试以独占方式打开文件
-                using (System.IO.FileStream fs = System.IO.File.Open(documentPath, System.IO.FileMode.Open, System.IO.FileAccess.ReadWrite, System.IO.FileShare.None))
-                {
-                    // 文件可以打开，说明没有被其他进程锁定
-                    if (enableLogging)
-                    {
-                        Logger.Info($"检测文档关闭触发: {documentPath} 未被其他进程锁定");
-                    }
-                    return false;
-                }
-            }
-            catch (System.IO.IOException)
-            {
-                // 文件被锁定，说明仍然打开
-                return true;
-            }
-            catch (Exception ex)
+            if (!IsWpsProcessRunning())
             {
                 if (enableLogging)
                 {
-                    Logger.Error($"检测文档关闭触发: {documentPath} 错误信息: {ex.Message}，异常类型: {ex.GetType().Name}");
+                    Logger.Info($"检测文档关闭触发: {documentPath} WPS进程已退出");
                 }
-                // 其他错误，返回false
-                return false;
+                return true;
             }
+
+            const int checkCount = 3;
+            const int checkIntervalMs = 200;
+
+            int unlockedCount = 0;
+
+            for (int i = 0; i < checkCount; i++)
+            {
+                try
+                {
+                    using (System.IO.FileStream fs = System.IO.File.Open(documentPath, System.IO.FileMode.Open, System.IO.FileAccess.ReadWrite, System.IO.FileShare.None))
+                    {
+                        unlockedCount++;
+                        if (enableLogging)
+                        {
+                            Logger.Info($"检测文档关闭触发: {documentPath} 第{i + 1}次检测未被锁定");
+                        }
+                    }
+                }
+                catch (System.IO.IOException)
+                {
+                    if (enableLogging)
+                    {
+                        Logger.Info($"检测文档关闭触发: {documentPath} 第{i + 1}次检测被锁定");
+                    }
+                    return false;
+                }
+                catch (Exception ex)
+                {
+                    if (enableLogging)
+                    {
+                        Logger.Error($"检测文档关闭触发: {documentPath} 第{i + 1}次检测错误: {ex.Message}");
+                    }
+                    return true;
+                }
+
+                if (i < checkCount - 1)
+                {
+                    System.Threading.Thread.Sleep(checkIntervalMs);
+                }
+            }
+
+            if (enableLogging)
+            {
+                Logger.Info($"检测文档关闭触发: {documentPath} 连续{checkCount}次检测未被锁定，且无临时文件，判定为已关闭");
+            }
+
+            return true;
+        }
+
+        // 检查是否存在WPS临时文件（仅检测 ~$ 开头的临时文件）
+        private static bool HasWpsTempFile(string documentPath, bool enableLogging = false)
+        {
+            string directory = System.IO.Path.GetDirectoryName(documentPath);
+            string fileName = System.IO.Path.GetFileName(documentPath);
+
+            // 临时文件命名模式：最多去掉两个字符
+            // 例如：原文件 123456789.docx，临时文件可能是 ~$123456789.docx、~$23456789.docx、~$3456789.docx
+            string[] tempFilePatterns = new string[]
+            {
+                // 模式1: ~$ + 完整文件名（标准WPS临时文件）
+                "~$" + fileName,
+                // 模式2: ~$ + 文件名去掉第一个字符
+                fileName.Length > 1 ? "~$" + fileName.Substring(1) : null,
+                // 模式3: ~$ + 文件名去掉前两个字符
+                fileName.Length > 2 ? "~$" + fileName.Substring(2) : null
+            };
+
+            foreach (string pattern in tempFilePatterns)
+            {
+                if (string.IsNullOrEmpty(pattern))
+                {
+                    continue;
+                }
+
+                string tempFilePath = System.IO.Path.Combine(directory, pattern);
+                if (System.IO.File.Exists(tempFilePath))
+                {
+                    if (enableLogging)
+                    {
+                        Logger.Info($"检测文档关闭触发: {documentPath} 存在临时文件 {tempFilePath}");
+                    }
+                    return true;
+                }
+            }
+
+            if (enableLogging)
+            {
+                Logger.Info($"检测文档关闭触发: {documentPath} 未找到匹配的临时文件");
+            }
+            return false;
         }
 
         // 模拟鼠标点击

@@ -30,8 +30,10 @@ namespace WpsPasswordManager.UI
 
         private void InitializeComponent()
         {
+            float dpiScale = DpiHelper.GetDpiScale();
+            
             this.Text = "WPS密码管理 - 日志";
-            this.Size = new System.Drawing.Size(800, 600);
+            this.Size = DpiHelper.ScaleSize(new System.Drawing.Size(800, 600));
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.Sizable;
             this.MaximizeBox = true;
@@ -41,7 +43,7 @@ namespace WpsPasswordManager.UI
             {
                 Dock = DockStyle.Fill,
                 ReadOnly = true,
-                Font = new System.Drawing.Font("Consolas", 9F),
+                Font = DpiHelper.ScaleFont(new System.Drawing.Font("Consolas", 9F)),
                 BackColor = System.Drawing.Color.Black,
                 ForeColor = System.Drawing.Color.LightGreen,
                 ScrollBars = ScrollBars.Vertical,
@@ -49,26 +51,45 @@ namespace WpsPasswordManager.UI
                 WordWrap = false
             };
 
-            _closeButton = new Button { Text = "关闭", Width = 80, Height = 35 };
+            _closeButton = new Button 
+            { 
+                Text = "关闭", 
+                Width = DpiHelper.ScaleValue(80), 
+                Height = DpiHelper.ScaleValue(35),
+                Font = DpiHelper.ScaleFont(new System.Drawing.Font("微软雅黑", 9F))
+            };
             _closeButton.Click += (s, e) => this.Hide();
 
-            _pauseButton = new Button { Text = "暂停", Width = 80, Height = 35 };
+            _pauseButton = new Button 
+            { 
+                Text = "暂停", 
+                Width = DpiHelper.ScaleValue(80), 
+                Height = DpiHelper.ScaleValue(35),
+                Font = DpiHelper.ScaleFont(new System.Drawing.Font("微软雅黑", 9F))
+            };
             _pauseButton.Click += (s, e) => { _isPaused = true; _pauseButton.Enabled = false; _resumeButton.Enabled = true; };
 
-            _resumeButton = new Button { Text = "恢复", Width = 80, Height = 35, Enabled = false };
+            _resumeButton = new Button 
+            { 
+                Text = "恢复", 
+                Width = DpiHelper.ScaleValue(80), 
+                Height = DpiHelper.ScaleValue(35), 
+                Enabled = false,
+                Font = DpiHelper.ScaleFont(new System.Drawing.Font("微软雅黑", 9F))
+            };
             _resumeButton.Click += (s, e) => { _isPaused = false; _pauseButton.Enabled = true; _resumeButton.Enabled = false; };
 
             FlowLayoutPanel buttonPanel = new FlowLayoutPanel
             {
                 Dock = DockStyle.Bottom,
-                Height = 45,
+                Height = DpiHelper.ScaleValue(45),
                 FlowDirection = FlowDirection.RightToLeft,
-                Padding = new Padding(10, 5, 10, 5),
+                Padding = new Padding(DpiHelper.ScaleValue(10), DpiHelper.ScaleValue(5), DpiHelper.ScaleValue(10), DpiHelper.ScaleValue(5)),
                 Margin = new Padding(0),
                 AutoSize = false
             };
-            _closeButton.Margin = new Padding(10, 0, 0, 0);
-            _resumeButton.Margin = new Padding(10, 0, 0, 0);
+            _closeButton.Margin = new Padding(DpiHelper.ScaleValue(10), 0, 0, 0);
+            _resumeButton.Margin = new Padding(DpiHelper.ScaleValue(10), 0, 0, 0);
             _pauseButton.Margin = new Padding(0);
             buttonPanel.Controls.Add(_closeButton);
             buttonPanel.Controls.Add(_resumeButton);
