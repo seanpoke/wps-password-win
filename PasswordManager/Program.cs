@@ -1177,7 +1177,7 @@ namespace PasswordManager
             {
                 if (enableLogging)
                 {
-                    Logger.Info($"检测文档关闭触发: 文档路径不存在 {documentPath}");
+                    Logger.Info($"[检测文档关闭]: 文档路径不存在 {documentPath}");
                 }
                 return true;
             }
@@ -1191,7 +1191,7 @@ namespace PasswordManager
             {
                 if (enableLogging)
                 {
-                    Logger.Info($"检测文档关闭触发: {documentPath} WPS进程已退出");
+                    Logger.Info($"[检测文档关闭]: {documentPath} WPS进程已退出");
                 }
                 return true;
             }
@@ -1210,7 +1210,7 @@ namespace PasswordManager
                         unlockedCount++;
                         if (enableLogging)
                         {
-                            Logger.Info($"检测文档关闭触发: {documentPath} 第{i + 1}次检测未被锁定");
+                            Logger.Info($"[检测文档关闭]: {documentPath} 第{i + 1}次检测未被锁定");
                         }
                     }
                 }
@@ -1218,7 +1218,7 @@ namespace PasswordManager
                 {
                     if (enableLogging)
                     {
-                        Logger.Info($"检测文档关闭触发: {documentPath} 第{i + 1}次检测被锁定");
+                        Logger.Info($"[检测文档关闭]: {documentPath} 第{i + 1}次检测被锁定");
                     }
                     return false;
                 }
@@ -1226,7 +1226,7 @@ namespace PasswordManager
                 {
                     if (enableLogging)
                     {
-                        Logger.Error($"检测文档关闭触发: {documentPath} 第{i + 1}次检测错误: {ex.Message}");
+                        Logger.Error($"[检测文档关闭]: {documentPath} 第{i + 1}次检测错误: {ex.Message}");
                     }
                     return true;
                 }
@@ -1239,7 +1239,7 @@ namespace PasswordManager
 
             if (enableLogging)
             {
-                Logger.Info($"检测文档关闭触发: {documentPath} 连续{checkCount}次检测未被锁定，且无临时文件，判定为已关闭");
+                Logger.Info($"[检测文档关闭]: {documentPath} 连续{checkCount}次检测未被锁定，且无临时文件，判定为已关闭");
             }
 
             return true;
@@ -1275,7 +1275,7 @@ namespace PasswordManager
                 {
                     if (enableLogging)
                     {
-                        Logger.Info($"检测文档关闭触发: {documentPath} 存在临时文件 {tempFilePath}");
+                        Logger.Info($"[检测文档关闭]: {documentPath} 存在临时文件 {tempFilePath}");
                     }
                     return true;
                 }
@@ -1283,7 +1283,7 @@ namespace PasswordManager
 
             if (enableLogging)
             {
-                Logger.Info($"检测文档关闭触发: {documentPath} 未找到匹配的临时文件");
+                Logger.Info($"[检测文档关闭]: {documentPath} 未找到匹配的临时文件");
             }
             return false;
         }
@@ -2809,7 +2809,7 @@ namespace PasswordManager
                                                 _lastPostedFilePath = normalPath;
                                                 Console.WriteLine($"[打开文件] {normalPath}");
                                                 _filePathQueue.Add(normalPath);
-                                                Logger.Info($"[文件识别] WPS打开文档: {normalPath}");
+                                                Logger.Info($"[内核识别] WPS操作文档: {normalPath}");
                                             }
                                         }
                                     }
@@ -2872,15 +2872,18 @@ namespace PasswordManager
                         continue;
                     }
 
-                    string ext = Path.GetExtension(filePath).ToLower();
+                    string fileName = Path.GetFileName(filePath);
+                    ReadOnlySpan<char> fileNameSpan = fileName;
 
-                    if (ext != ".docx" && ext != ".xlsx" && ext != ".pptx")
+                    if (fileNameSpan.Length >= 5 &&
+                        !(fileNameSpan[0] == '~' && fileNameSpan[1] == '$') &&
+                        (fileNameSpan.EndsWith(".docx", StringComparison.OrdinalIgnoreCase) ||
+                         fileNameSpan.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) ||
+                         fileNameSpan.EndsWith(".pptx", StringComparison.OrdinalIgnoreCase)))
                     {
-                        continue;
+                        GlobalState.Instance.AddPossiblePath(filePath);
+                        Logger.Info($"[文件路径投递成功]: {filePath}");
                     }
-
-                    GlobalState.Instance.AddPossiblePath(filePath);
-                    Logger.Info($"[文件识别成功] 文档路径已投递到possiblePaths: {filePath}");
                 }
             }
             catch (InvalidOperationException)
