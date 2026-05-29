@@ -1,5 +1,6 @@
 using System;
 using System.Windows.Forms;
+using PasswordManager.Utils;
 
 namespace PasswordManager.UI
 {
@@ -15,19 +16,21 @@ namespace PasswordManager.UI
 
         private void InitializeComponent()
         {
+            float dpiScale = DpiHelper.GetDpiScale();
+            
             // 配置表单
             this.FormBorderStyle = FormBorderStyle.None;
             this.TopMost = true;
             this.ShowInTaskbar = false;
             this.BackColor = System.Drawing.Color.FromArgb(240, 240, 240);
-            this.Size = new System.Drawing.Size(300, 100);
+            this.Size = DpiHelper.ScaleSize(new System.Drawing.Size(300, 100));
             this.StartPosition = FormStartPosition.Manual;
 
             // 创建消息标签
             _messageLabel = new Label
             {
                 Text = "提示信息",
-                Font = new System.Drawing.Font("微软雅黑", 10F),
+                Font = DpiHelper.ScaleFont(new System.Drawing.Font("微软雅黑", 10F)),
                 ForeColor = System.Drawing.Color.Black,
                 TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
                 Dock = DockStyle.Fill,

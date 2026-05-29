@@ -59,160 +59,180 @@ namespace PasswordManager.UI
         
         private void InitializeComponent()
         {
-            // 配置表单
-            this.Text = "WPS密码管理";
+            this.Text = "密码管理";
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
             this.MinimizeBox = true;
             this.StartPosition = FormStartPosition.CenterScreen;
-            this.Size = new System.Drawing.Size(300, 300);
+            this.Size = new System.Drawing.Size(340, 360);
+            this.BackColor = System.Drawing.Color.White;
             
-            // 处理最小化事件
             this.Resize += LoginForm_Resize;
             
-            // 用户信息标签
+            Font labelFont = new System.Drawing.Font("微软雅黑", 9F);
+            Font inputFont = new System.Drawing.Font("微软雅黑", 9F);
+            
             _userInfoLabel = new Label
             {
                 Text = "",
                 ForeColor = System.Drawing.Color.Green,
-                Location = new System.Drawing.Point(20, 10),
-                Size = new System.Drawing.Size(240, 20),
+                Location = new System.Drawing.Point(180, 15),
+                Size = new System.Drawing.Size(130, 20),
                 TextAlign = System.Drawing.ContentAlignment.MiddleRight,
-                Visible = false
+                Visible = false,
+                Font = new System.Drawing.Font("微软雅黑", 10F, System.Drawing.FontStyle.Bold)
             };
+            this.Controls.Add(_userInfoLabel);
             
-            // 用户名标签
             _usernameLabel = new Label
             {
                 Text = "用户名:",
-                Location = new System.Drawing.Point(20, 30),
-                Size = new System.Drawing.Size(60, 20)
+                Location = new System.Drawing.Point(25, 50),
+                Size = new System.Drawing.Size(60, 20),
+                TextAlign = System.Drawing.ContentAlignment.MiddleLeft,
+                Font = labelFont,
+                ForeColor = System.Drawing.Color.FromArgb(60, 60, 60)
             };
+            this.Controls.Add(_usernameLabel);
             
-            // 用户名输入框
             _usernameTextBox = new TextBox
             {
-                Location = new System.Drawing.Point(80, 28),
-                Size = new System.Drawing.Size(180, 20)
+                Location = new System.Drawing.Point(90, 48),
+                Size = new System.Drawing.Size(160, 24),
+                Font = inputFont,
+                BorderStyle = BorderStyle.FixedSingle
             };
+            this.Controls.Add(_usernameTextBox);
             
-            // 密码标签
             _passwordLabel = new Label
             {
                 Text = "密码:",
-                Location = new System.Drawing.Point(20, 60),
-                Size = new System.Drawing.Size(60, 20)
+                Location = new System.Drawing.Point(25, 85),
+                Size = new System.Drawing.Size(60, 20),
+                TextAlign = System.Drawing.ContentAlignment.MiddleLeft,
+                Font = labelFont,
+                ForeColor = System.Drawing.Color.FromArgb(60, 60, 60)
             };
+            this.Controls.Add(_passwordLabel);
             
-            // 密码输入框
             _passwordTextBox = new TextBox
             {
-                Location = new System.Drawing.Point(80, 58),
-                Size = new System.Drawing.Size(180, 20),
-                PasswordChar = '*'
+                Location = new System.Drawing.Point(90, 83),
+                Size = new System.Drawing.Size(160, 24),
+                PasswordChar = '*',
+                Font = inputFont,
+                BorderStyle = BorderStyle.FixedSingle
             };
+            this.Controls.Add(_passwordTextBox);
             
-            // 域名标签
             _domainLabel = new Label
             {
                 Text = "域名:",
-                Location = new System.Drawing.Point(20, 90),
-                Size = new System.Drawing.Size(60, 20)
+                Location = new System.Drawing.Point(25, 120),
+                Size = new System.Drawing.Size(60, 20),
+                TextAlign = System.Drawing.ContentAlignment.MiddleLeft,
+                Font = labelFont,
+                ForeColor = System.Drawing.Color.FromArgb(60, 60, 60)
             };
+            this.Controls.Add(_domainLabel);
             
-            // 域名输入框
             _domainTextBox = new TextBox
             {
-                Location = new System.Drawing.Point(80, 88),
-                Size = new System.Drawing.Size(180, 20),
-                Text = "localhost"
+                Location = new System.Drawing.Point(90, 118),
+                Size = new System.Drawing.Size(160, 24),
+                Text = "localhost",
+                Font = inputFont,
+                BorderStyle = BorderStyle.FixedSingle
             };
+            this.Controls.Add(_domainTextBox);
             
-            // 端口标签
             _portLabel = new Label
             {
                 Text = "端口:",
-                Location = new System.Drawing.Point(20, 120),
-                Size = new System.Drawing.Size(60, 20)
+                Location = new System.Drawing.Point(25, 155),
+                Size = new System.Drawing.Size(60, 20),
+                TextAlign = System.Drawing.ContentAlignment.MiddleLeft,
+                Font = labelFont,
+                ForeColor = System.Drawing.Color.FromArgb(60, 60, 60)
             };
+            this.Controls.Add(_portLabel);
             
-            // 端口输入框
             _portTextBox = new TextBox
             {
-                Location = new System.Drawing.Point(80, 118),
-                Size = new System.Drawing.Size(180, 20),
-                Text = "8081"
+                Location = new System.Drawing.Point(90, 153),
+                Size = new System.Drawing.Size(100, 24),
+                Text = "8081",
+                Font = inputFont,
+                BorderStyle = BorderStyle.FixedSingle
             };
+            this.Controls.Add(_portTextBox);
             
-            // 错误提示标签
             _errorLabel = new Label
             {
                 Text = "",
                 ForeColor = System.Drawing.Color.Red,
-                Location = new System.Drawing.Point(20, 140),
-                Size = new System.Drawing.Size(240, 40),
+                Location = new System.Drawing.Point(25, 190),
+                Size = new System.Drawing.Size(280, 40),
                 AutoSize = false,
-                MaximumSize = new System.Drawing.Size(240, 60),
-                TextAlign = System.Drawing.ContentAlignment.TopLeft
+                TextAlign = System.Drawing.ContentAlignment.TopLeft,
+                Font = new System.Drawing.Font("微软雅黑", 9F)
             };
+            this.Controls.Add(_errorLabel);
             
-            // 加载状态标签
             _loadingLabel = new Label
             {
                 Text = "正在验证身份...",
                 ForeColor = System.Drawing.Color.Blue,
-                Location = new System.Drawing.Point(20, 140),
-                Size = new System.Drawing.Size(240, 40),
+                Location = new System.Drawing.Point(25, 190),
+                Size = new System.Drawing.Size(280, 40),
+                AutoSize = false,
                 TextAlign = System.Drawing.ContentAlignment.TopLeft,
-                Visible = false
+                Visible = false,
+                Font = new System.Drawing.Font("微软雅黑", 9F)
             };
+            this.Controls.Add(_loadingLabel);
             
-            // 加载遮罩
+            _loginButton = new Button
+            {
+                Text = "登录",
+                Location = new System.Drawing.Point(230, 290),
+                Size = new System.Drawing.Size(80, 28),
+                Font = new System.Drawing.Font("微软雅黑", 9F, System.Drawing.FontStyle.Bold),
+                BackColor = System.Drawing.Color.FromArgb(0, 120, 212),
+                ForeColor = System.Drawing.Color.White,
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand
+            };
+            _loginButton.Click += LoginButton_Click;
+            _loginButton.FlatAppearance.BorderSize = 0;
+            _loginButton.MouseEnter += (sender, e) => _loginButton.BackColor = System.Drawing.Color.FromArgb(26, 115, 232);
+            _loginButton.MouseLeave += (sender, e) => _loginButton.BackColor = System.Drawing.Color.FromArgb(0, 120, 212);
+            _loginButton.MouseDown += (sender, e) => _loginButton.BackColor = System.Drawing.Color.FromArgb(0, 90, 170);
+            _loginButton.MouseUp += (sender, e) => _loginButton.BackColor = System.Drawing.Color.FromArgb(26, 115, 232);
+            this.Controls.Add(_loginButton);
+            
             _loadingOverlay = new Panel
             {
                 BackColor = System.Drawing.Color.FromArgb(128, 0, 0, 0),
-                Dock = System.Windows.Forms.DockStyle.Fill,
+                Size = this.Size,
+                Location = new System.Drawing.Point(0, 0),
                 Visible = false
             };
             
-            // 遮罩上的加载信息
             Label overlayLoadingLabel = new Label
             {
                 Text = "正在登录",
                 ForeColor = System.Drawing.Color.White,
-                AutoSize = true
+                AutoSize = true,
+                Font = new System.Drawing.Font("微软雅黑", 12F)
             };
-            overlayLoadingLabel.Location = new System.Drawing.Point(
-                (_loadingOverlay.Width - overlayLoadingLabel.Width) / 2,
-                (_loadingOverlay.Height - overlayLoadingLabel.Height) / 2
-            );
             _loadingOverlay.Controls.Add(overlayLoadingLabel);
-            
-            // 登录按钮
-            _loginButton = new Button
-            {
-                Text = "登录",
-                Location = new System.Drawing.Point(210, 190),
-                Size = new System.Drawing.Size(50, 25)
-            };
-            _loginButton.Click += LoginButton_Click;
-            
-            // 添加控件
-            this.Controls.Add(_userInfoLabel);
-            this.Controls.Add(_usernameLabel);
-            this.Controls.Add(_usernameTextBox);
-            this.Controls.Add(_passwordLabel);
-            this.Controls.Add(_passwordTextBox);
-            this.Controls.Add(_domainLabel);
-            this.Controls.Add(_domainTextBox);
-            this.Controls.Add(_portLabel);
-            this.Controls.Add(_portTextBox);
-            this.Controls.Add(_errorLabel);
-            this.Controls.Add(_loadingLabel);
-            this.Controls.Add(_loginButton);
+            overlayLoadingLabel.Location = new System.Drawing.Point(
+                (this.ClientSize.Width - overlayLoadingLabel.Width) / 2,
+                (this.ClientSize.Height - overlayLoadingLabel.Height) / 2
+            );
             this.Controls.Add(_loadingOverlay);
             
-            // 检查登录状态，更新界面
             UpdateUIState();
         }
         

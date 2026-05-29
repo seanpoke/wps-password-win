@@ -31,14 +31,14 @@ namespace PasswordManager.UI
 
         private void InitializeComponent()
         {
-            float dpiScale = DpiHelper.GetDpiScale();
-            
             this.Text = "密码管理 - 日志";
             this.Size = DpiHelper.ScaleSize(new System.Drawing.Size(800, 600));
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.Sizable;
             this.MaximizeBox = true;
             this.MinimizeBox = true;
+
+            float dpiScale = DpiHelper.GetDpiScale();
 
             _logTextBox = new TextBox
             {
@@ -109,6 +109,13 @@ namespace PasswordManager.UI
 
             this.Controls.Add(_logTextBox);
             this.Controls.Add(buttonPanel);
+        }
+
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+            float dpiScale = DpiHelper.GetDpiScaleForWindow(this.Handle);
+            DpiHelper.ApplyDpiScale(this);
         }
 
         private void LoadLogContent()

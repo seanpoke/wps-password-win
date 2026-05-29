@@ -575,11 +575,12 @@ namespace PasswordManager.UI
 
             // 获取密码框位置
             WpsMonitor.RECT rect = _monitor.GetWindowRect(passwordEditHandle);
-            float dpiScale = _monitor.GetDpiScale();
+            // 使用密码框所在显示器的DPI
+            float dpiScale = DpiHelper.GetDpiScaleForWindow(passwordEditHandle);
 
             // 计算按钮位置（密码框右侧5px）
             int x = (int)(rect.Right + 5 * dpiScale);
-            int y = (int)(rect.Top * dpiScale);
+            int y = (int)(rect.Top + (rect.Bottom - rect.Top - this.Height) / 2);
 
             // 只有在位置发生变化时才更新位置
             if (this.Location.X != x || this.Location.Y != y)
@@ -601,11 +602,12 @@ namespace PasswordManager.UI
 
             // 获取对话框位置（相对于屏幕）
             WpsMonitor.RECT rect = _monitor.GetWindowRect(dialogHandle);
-            float dpiScale = _monitor.GetDpiScale();
+            // 使用对话框所在显示器的DPI
+            float dpiScale = DpiHelper.GetDpiScaleForWindow(dialogHandle);
 
             // 计算按钮位置（对话框右侧，距离右边框5px，垂直居中）
             int x = (int)(rect.Right + 5 * dpiScale);
-            int y = (int)(rect.Top + (rect.Bottom - rect.Top - this.Height) / 2 * dpiScale);
+            int y = (int)(rect.Top + (rect.Bottom - rect.Top - this.Height) / 2);
 
             // 只有在位置发生变化时才更新位置
             if (this.Location.X != x || this.Location.Y != y)

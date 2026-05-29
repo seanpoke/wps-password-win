@@ -21,11 +21,24 @@ namespace PasswordManager.Utils
         [DllImport("gdi32.dll")]
         private static extern int GetDeviceCaps(IntPtr hdc, int nIndex);
 
+        [DllImport("user32.dll")]
+        private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+
+        [DllImport("shcore.dll")]
+        private static extern int GetDpiForMonitor(IntPtr hmonitor, MonitorDpiType dpiType, out uint dpiX, out uint dpiY);
+
         private const int LOGPIXELSX = 88;
         private const int PROCESS_PER_MONITOR_DPI_AWARE = 2;
 
         private static float _dpiScale = 1.0f;
         private static bool _isInitialized = false;
+
+        public enum MonitorDpiType
+        {
+            MDT_EFFECTIVE_DPI = 0,
+            MDT_ANGULAR_DPI = 1,
+            MDT_RAW_DPI = 2
+        }
 
         public static void InitializeDpiAwareness()
         {
@@ -75,6 +88,29 @@ namespace PasswordManager.Utils
                 InitializeDpiAwareness();
             }
             return _dpiScale;
+        }
+
+        public static float GetDpiScaleForWindow(IntPtr hWnd)
+        {
+            if (hWnd == IntPtr.Zero)
+            {
+                return GetDpiScale();
+            }
+
+            try
+            {
+                IntPtr hMonitor = MonitorFromWindow(hWnd, 0);
+                uint dpiX, dpiY;
+                if (GetDpiForMonitor(hMonitor, MonitorDpiType.MDT_EFFECTIVE_DPI, out dpiX, out dpiY) == 0)
+                {
+                    return dpiX / 96.0f;
+                }
+            }
+            catch
+            {
+            }
+
+            return GetDpiScale();
         }
 
         public static int ScaleValue(int value)
