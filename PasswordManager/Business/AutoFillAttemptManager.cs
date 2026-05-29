@@ -66,7 +66,7 @@ namespace PasswordManager.Business
 
         public void OnDocumentClosed(string filePath)
         {
-            Logger.Info($"文档关闭事件触发，尝试清理自动填充记录: {filePath}");
+            Logger.Info($"文档关闭行为触发，尝试清理自动填充记录: {filePath}");
             ResetAttempt(filePath);
         }
 

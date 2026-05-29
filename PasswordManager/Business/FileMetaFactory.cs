@@ -207,6 +207,11 @@ namespace PasswordManager.Business
             initWaitEvents.Clear();
         }
 
+        public List<string> GetAllFilePaths()
+        {
+            return fileMetaMap.Keys.ToList();
+        }
+
         /// <summary>
         /// 等待文件元数据初始化完成
         /// </summary>

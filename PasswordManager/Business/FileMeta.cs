@@ -13,12 +13,6 @@ namespace PasswordManager.Business
         public string OwnerName { get; set; }          // 文档所属名称
         public bool ReadAuth { get; set; }             // 读权限
         public bool WriteAuth { get; set; }            // 写权限
-        private volatile bool _isModify;              // 元数据是否已被修改（volatile保证线程可见性）
-        public bool IsModify 
-        { 
-            get => _isModify; 
-            set => _isModify = value; 
-        }
         
         public string CurrentKeyVersion { get; set; }  // 当前密钥版本，默认值为"default"
         

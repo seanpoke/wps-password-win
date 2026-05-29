@@ -121,7 +121,7 @@ namespace PasswordManager
             public int Bottom;
         }
 
-        // 监控文档关闭事件的线程
+        // 监控文档关闭行为的线程
         private static Thread documentCloseMonitorThread;
 
         [STAThread]
@@ -581,7 +581,7 @@ namespace PasswordManager
                                     string documentPath = monitor.GetDocumentPath(IntPtr.Zero);
                                     if (!string.IsNullOrEmpty(documentPath))
                                     {
-                                        // 只有文档真正打开后才初始化元数据和启动文件监控
+                                        // 只有文档真正打开后才初始化元数据和注册文件特征
                                         if (IsDocumentOpen(documentPath))
                                         {
                                             Logger.Info($"获取到文档路径: {documentPath}");
@@ -589,7 +589,8 @@ namespace PasswordManager
                                             // 在文档真正打开后才初始化文件元数据
                                             TryInitializeFileMeta(documentPath);
                                             
-                                            FileMonitor.StartWatchingFile(documentPath);
+                                            // 注册文件特征（修改时间和哈希值）
+                                            FileStateManager.RegisterFile(documentPath);
                                         }
                                     }
                                     else
@@ -720,7 +721,7 @@ namespace PasswordManager
                                                     if (FileMetaFactory.Instance.HasFileMeta(documentPath))
                                                     {
                                                         FileMetaFactory.Instance.UpdatePendingPassword(documentPath, lastPassword);
-                                                        Logger.Info($"密码加密窗口关闭，已将密码存储到文件元数据: {documentPath}");
+                                                        Logger.Info($"密码加密窗口关闭，已将密码存储到文件元数据对象中: {documentPath}");
                                                     }
                                                     else
                                                     {
@@ -882,13 +883,11 @@ namespace PasswordManager
                     {
                         try
                         {
-                            List<string> watchedFiles = FileMonitor.GetWatchedFiles();
+                            List<string> registeredFiles = FileMetaFactory.Instance.GetAllFilePaths();
                             
-                            if (watchedFiles.Count > 0)
+                            if (registeredFiles.Count > 0)
                             {
-                                List<string> docsToStopWatching = new List<string>();
-
-                                foreach (string documentPath in watchedFiles)
+                                foreach (string documentPath in registeredFiles)
                                 {
                                     // 1. 判断文件是否已关闭（使用新的检测逻辑）
                                     if (IsDocumentClosed(documentPath, enableLogging: true))
@@ -912,15 +911,16 @@ namespace PasswordManager
                                             bool needWriteMetadata = false;
                                             bool isUidOnlyWrite = false;
 
-                                            // 触发条件1：元数据已修改
-                                            if (fileMeta.IsModify)
+                                            // 触发条件1：检测文件是否被修改（通过对比修改时间和哈希值）
+                                            bool isFileModified = CheckFileModified(documentPath);
+                                            if (isFileModified)
                                             {
                                                 needWriteMetadata = true;
-                                                Logger.Info($"文档 {documentPath} 的元数据已修改，需要执行元数据写入");
+                                                Logger.Info($"文档 {documentPath} 的文件内容已修改，需要执行元数据写入");
                                             }
                                             else
                                             {
-                                                // 触发条件2：元数据未修改，但检测文档尾部是否存在UID元数据
+                                                // 触发条件2：文件未修改，但检测文档尾部是否存在UID元数据
                                                 FileMetaManager checkManager = new FileMetaManager();
                                                 bool hasUidMeta = checkManager.HasUidMetadata(documentPath);
                                                 
@@ -928,11 +928,11 @@ namespace PasswordManager
                                                 {
                                                     needWriteMetadata = true;
                                                     isUidOnlyWrite = true;
-                                                    Logger.Info($"文档 {documentPath} 的元数据未修改，但文档尾部不存在UID元数据，需要执行UID写入");
+                                                    Logger.Info($"文档 {documentPath} 的文件内容未修改，但文档尾部不存在UID元数据，需要执行UID写入");
                                                 }
                                                 else
                                                 {
-                                                    Logger.Info($"文档 {documentPath} 的元数据未修改且已存在UID元数据，无需执行写入");
+                                                    Logger.Info($"文档 {documentPath} 的文件内容未修改且已存在UID元数据，无需执行写入");
                                                 }
                                             }
 
@@ -1022,15 +1022,10 @@ namespace PasswordManager
                                         // 清理元数据
                                         FileMetaFactory.Instance.CleanupFileMeta(documentPath);
                                         Logger.Info($"已从FileMetaFactory中移除文档: {documentPath}");
-                                        // 标记需要停止监听
-                                        docsToStopWatching.Add(documentPath);
+                                        // 注销文件特征
+                                        FileStateManager.UnregisterFile(documentPath);
+                                        Logger.Info($"已从FileStateManager中注销文件: {documentPath}");
                                     }
-                                }
-
-                                // 停止监听已关闭的文件
-                                foreach (string documentPath in docsToStopWatching)
-                                {
-                                    FileMonitor.StopWatchingFile(documentPath);
                                 }
                             }
 
@@ -1243,6 +1238,27 @@ namespace PasswordManager
             }
 
             return true;
+        }
+
+        private static bool CheckFileModified(string documentPath)
+        {
+            if (string.IsNullOrEmpty(documentPath) || !System.IO.File.Exists(documentPath))
+            {
+                Logger.Warning($"[文件修改检测] 文件路径无效或不存在: {documentPath}");
+                return false;
+            }
+
+            bool hasPendingPasswords = false;
+            FileMeta fileMeta = FileMetaFactory.Instance.GetFileMeta(documentPath);
+            if (fileMeta != null && fileMeta.HasPendingPasswords())
+            {
+                hasPendingPasswords = true;
+                Logger.Info($"[文件修改检测] 文件 {documentPath} 存在待定密码");
+            }
+
+            bool isFileChanged = FileStateManager.HasFileChanged(documentPath);
+
+            return hasPendingPasswords || isFileChanged;
         }
 
         // 检查是否存在WPS临时文件（仅检测 ~$ 开头的临时文件）

@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using PasswordManager.Business;
-using PasswordManager.Monitor;
 
 namespace PasswordManager.Utils
 {
@@ -408,8 +407,8 @@ namespace PasswordManager.Utils
         {
             lock (_lock)
             {
-                FileMonitor.StopAllWatching();
                 FileMetaFactory.Instance.CleanupAllFileMeta();
+                FileStateManager.ClearAll();
                 Logger.Info("所有资源已清理完成");
             }
         }
