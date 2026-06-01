@@ -1320,62 +1320,550 @@ namespace PasswordManager
         // 尝试显示密码（点击小眼睛按钮）
         private static bool TryRevealPassword(object passwordEdit, Type automationElementType)
         {
+            Logger.Debug("=== 开始尝试显示密码 ===");
+
+            // 优先尝试UI Automation方案（无鼠标干扰）
+            Logger.Debug("方案1: 尝试通过UI Automation定位并点击小眼睛按钮");
+            if (TryRevealPasswordByUIAutomation(passwordEdit, automationElementType))
+            {
+                Logger.Info("UI Automation方案成功");
+                return true;
+            }
+
+            // 回退到改进的鼠标模拟方案
+            Logger.Debug("方案1失败，尝试方案2: 改进的鼠标模拟方案");
+            if (TryRevealPasswordWithEnhancedMouse(passwordEdit, automationElementType))
+            {
+                Logger.Info("鼠标模拟方案成功");
+                return true;
+            }
+
+            Logger.Warning("所有方案均失败，无法显示密码");
+            return false;
+        }
+
+        // 通过UI Automation定位并点击小眼睛按钮（推荐方案）
+        private static bool TryRevealPasswordByUIAutomation(object passwordEdit, Type automationElementType)
+        {
             try
             {
-                Logger.Debug("尝试找到并点击小眼睛按钮");
-
-                try
+                Logger.Debug("[UI Automation] 检查passwordEdit类型: " + passwordEdit.GetType().FullName);
+                System.Reflection.PropertyInfo currentProperty = passwordEdit.GetType().GetProperty("Current");
+                if (currentProperty == null)
                 {
-                    System.Reflection.PropertyInfo currentProperty = passwordEdit.GetType().GetProperty("Current");
-                    if (currentProperty == null)
-                        return false;
-
-                    object current = currentProperty.GetValue(passwordEdit);
-                    if (current == null)
-                        return false;
-
-                    System.Reflection.PropertyInfo boundingRectangleProperty = current.GetType().GetProperty("BoundingRectangle");
-                    if (boundingRectangleProperty == null)
-                        return false;
-
-                    object boundingRectangle = boundingRectangleProperty.GetValue(current);
-                    if (boundingRectangle == null)
-                        return false;
-
-                    System.Reflection.PropertyInfo leftProperty = boundingRectangle.GetType().GetProperty("Left");
-                    System.Reflection.PropertyInfo topProperty = boundingRectangle.GetType().GetProperty("Top");
-                    System.Reflection.PropertyInfo rightProperty = boundingRectangle.GetType().GetProperty("Right");
-                    System.Reflection.PropertyInfo bottomProperty = boundingRectangle.GetType().GetProperty("Bottom");
-
-                    if (leftProperty == null || topProperty == null || rightProperty == null || bottomProperty == null)
-                        return false;
-
-                    int left = Convert.ToInt32(leftProperty.GetValue(boundingRectangle));
-                    int top = Convert.ToInt32(topProperty.GetValue(boundingRectangle));
-                    int right = Convert.ToInt32(rightProperty.GetValue(boundingRectangle));
-                    int bottom = Convert.ToInt32(bottomProperty.GetValue(boundingRectangle));
-
-                    int eyeButtonX = right - 25;
-                    int eyeButtonY = (top + bottom) / 2;
-
-                    Logger.Debug($"计算小眼睛按钮位置: ({eyeButtonX}, {eyeButtonY})");
-
-                    POINT point = new POINT { X = eyeButtonX, Y = eyeButtonY };
-                    SimulateMouseClick(point);
-                    Logger.Info("通过位置估算点击小眼睛按钮区域");
-
-                    Thread.Sleep(100);
-                    return true;
-                }
-                catch (Exception ex)
-                {
-                    Logger.Error($"尝试点击小眼睛按钮时出错: {ex.Message}");
+                    Logger.Warning("[UI Automation] 无法获取Current属性");
                     return false;
                 }
+
+                object current = currentProperty.GetValue(passwordEdit);
+                if (current == null)
+                {
+                    Logger.Warning("[UI Automation] Current属性值为空");
+                    return false;
+                }
+                object elementToSearch = passwordEdit;
+                if (current.GetType().Name.Contains("AutomationElementInformation"))
+                {
+                    elementToSearch = passwordEdit;
+                }
+                else
+                {
+                    elementToSearch = current;
+                }
+
+                System.Reflection.Assembly uiaClient = null;
+                try
+                {
+                    uiaClient = System.Reflection.Assembly.Load("UIAutomationClient, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35");
+                }
+                catch
+                {
+                    uiaClient = System.Reflection.Assembly.Load("UIAutomationClient");
+                }
+                if (uiaClient == null)
+                {
+                    Logger.Warning("[UI Automation] 无法加载UIAutomationClient程序集");
+                    return false;
+                }
+
+                System.Reflection.Assembly uiaTypes = null;
+                try
+                {
+                    uiaTypes = System.Reflection.Assembly.Load("UIAutomationTypes, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35");
+                }
+                catch
+                {
+                    uiaTypes = System.Reflection.Assembly.Load("UIAutomationTypes");
+                }
+                if (uiaTypes == null)
+                {
+                    Logger.Warning("[UI Automation] 无法加载UIAutomationTypes程序集");
+                    return false;
+                }
+
+                Type elementType = uiaClient.GetType("System.Windows.Automation.AutomationElement");
+                if (elementType == null)
+                {
+                    Logger.Warning("[UI Automation] 无法获取AutomationElement类型");
+                    return false;
+                }
+
+                System.Reflection.MethodInfo findAllMethod = elementType.GetMethod("FindAll");
+                if (findAllMethod == null)
+                {
+                    Logger.Warning("[UI Automation] 无法获取FindAll方法");
+                    return false;
+                }
+
+                Type treeScopeType = uiaTypes.GetType("System.Windows.Automation.TreeScope");
+                if (treeScopeType == null)
+                {
+                    Logger.Warning("[UI Automation] 无法获取TreeScope类型");
+                    return false;
+                }
+                object treeScopeDescendants = Enum.Parse(treeScopeType, "Descendants");
+
+                Type conditionType = uiaClient.GetType("System.Windows.Automation.PropertyCondition");
+                if (conditionType == null)
+                {
+                    conditionType = uiaTypes.GetType("System.Windows.Automation.PropertyCondition");
+                    if (conditionType == null)
+                    {
+                        Logger.Warning("[UI Automation] 无法获取PropertyCondition类型");
+                        return false;
+                    }
+                }
+
+                object controlTypeProperty = null;
+                System.Reflection.PropertyInfo controlTypePropertyInfo = elementType.GetProperty("ControlTypeProperty");
+                if (controlTypePropertyInfo != null)
+                {
+                    controlTypeProperty = controlTypePropertyInfo.GetValue(null);
+                }
+                else
+                {
+                    System.Reflection.FieldInfo controlTypePropertyField = elementType.GetField("ControlTypeProperty", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                    if (controlTypePropertyField != null)
+                    {
+                        controlTypeProperty = controlTypePropertyField.GetValue(null);
+                    }
+                    else
+                    {
+                        Logger.Warning("[UI Automation] 无法获取ControlTypeProperty");
+                        return false;
+                    }
+                }
+
+                Type controlTypeType = uiaTypes.GetType("System.Windows.Automation.ControlType");
+                if (controlTypeType == null)
+                {
+                    Logger.Warning("[UI Automation] 无法获取ControlType类型");
+                    return false;
+                }
+
+                object buttonControlType = null;
+                System.Reflection.PropertyInfo buttonProperty = controlTypeType.GetProperty("Button");
+                if (buttonProperty != null)
+                {
+                    buttonControlType = buttonProperty.GetValue(null);
+                }
+                else
+                {
+                    System.Reflection.FieldInfo buttonField = controlTypeType.GetField("Button", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                    if (buttonField != null)
+                    {
+                        buttonControlType = buttonField.GetValue(null);
+                    }
+                }
+                if (buttonControlType == null)
+                {
+                    Logger.Warning("[UI Automation] 无法获取Button控件类型");
+                    return false;
+                }
+
+                object buttonCondition = null;
+                try
+                {
+                    buttonCondition = Activator.CreateInstance(conditionType, new object[] { controlTypeProperty, buttonControlType });
+                }
+                catch
+                {
+                    System.Reflection.MethodInfo createPropertyConditionMethod = conditionType.GetMethod("CreatePropertyCondition");
+                    if (createPropertyConditionMethod != null)
+                    {
+                        buttonCondition = createPropertyConditionMethod.Invoke(null, new[] { controlTypeProperty, buttonControlType });
+                    }
+                    else
+                    {
+                        Logger.Warning("[UI Automation] 无法创建PropertyCondition");
+                        return false;
+                    }
+                }
+                if (buttonCondition == null)
+                {
+                    Logger.Warning("[UI Automation] PropertyCondition创建失败");
+                    return false;
+                }
+
+                object foundElements = findAllMethod.Invoke(elementToSearch, new[] { treeScopeDescendants, buttonCondition });
+
+                System.Reflection.PropertyInfo countProperty = foundElements.GetType().GetProperty("Count");
+                if (countProperty == null)
+                {
+                    Logger.Warning("[UI Automation] 无法获取元素集合的Count属性");
+                    return false;
+                }
+
+                int count = (int)countProperty.GetValue(foundElements);
+                if (count == 0)
+                {
+                    Logger.Warning("[UI Automation] 未找到子按钮");
+                    return false;
+                }
+
+                System.Reflection.MethodInfo getMethod = foundElements.GetType().GetMethod("Get");
+                if (getMethod == null)
+                {
+                    getMethod = foundElements.GetType().GetMethod("get_Item");
+                }
+                if (getMethod == null)
+                {
+                    getMethod = foundElements.GetType().GetMethod("get_Item", new[] { typeof(int) });
+                }
+
+                if (getMethod == null)
+                {
+                    System.Collections.IEnumerable enumerable = foundElements as System.Collections.IEnumerable;
+                    if (enumerable != null)
+                    {
+                        foreach (object element in enumerable)
+                        {
+                            if (TryInvokeButton(element))
+                            {
+                                Logger.Info("[UI Automation] 成功点击小眼睛按钮");
+                                Thread.Sleep(150);
+                                return true;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        Logger.Warning("[UI Automation] 集合不支持枚举");
+                    }
+                    return false;
+                }
+
+                for (int i = 0; i < count; i++)
+                {
+                    object element = getMethod.Invoke(foundElements, new object[] { i });
+                    if (element != null && TryInvokeButton(element))
+                    {
+                        Logger.Info("[UI Automation] 成功点击小眼睛按钮");
+                        Thread.Sleep(150);
+                        return true;
+                    }
+                }
+
+                Logger.Warning("[UI Automation] 遍历所有按钮均未能成功点击");
+                return false;
             }
             catch (Exception ex)
             {
-                Logger.Error($"尝试显示密码时出错: {ex.Message}");
+                Logger.Error($"[UI Automation] 点击小眼睛按钮时发生异常: {ex.Message}");
+                return false;
+            }
+        }
+
+        // 尝试通过InvokePattern调用按钮
+        private static bool TryInvokeButton(object element)
+        {
+            try
+            {
+                System.Reflection.Assembly uiaClient = null;
+                try
+                {
+                    uiaClient = System.Reflection.Assembly.Load("UIAutomationClient, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35");
+                }
+                catch
+                {
+                    uiaClient = System.Reflection.Assembly.Load("UIAutomationClient");
+                }
+                if (uiaClient == null)
+                {
+                    return false;
+                }
+
+                Type invokePatternType = uiaClient.GetType("System.Windows.Automation.InvokePattern");
+                if (invokePatternType == null)
+                {
+                    return false;
+                }
+
+                object pattern = null;
+                System.Reflection.PropertyInfo patternProperty = invokePatternType.GetProperty("Pattern");
+                if (patternProperty != null)
+                {
+                    pattern = patternProperty.GetValue(null);
+                }
+                else
+                {
+                    System.Reflection.FieldInfo patternField = invokePatternType.GetField("Pattern", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                    if (patternField != null)
+                    {
+                        pattern = patternField.GetValue(null);
+                    }
+                }
+                if (pattern == null)
+                {
+                    return false;
+                }
+
+                System.Reflection.MethodInfo tryGetCurrentPatternMethod = element.GetType().GetMethod("TryGetCurrentPattern");
+                if (tryGetCurrentPatternMethod == null)
+                {
+                    return false;
+                }
+
+                object[] patternParams = new object[2];
+                patternParams[0] = pattern;
+                patternParams[1] = null;
+
+                bool gotPattern = (bool)tryGetCurrentPatternMethod.Invoke(element, patternParams);
+                if (!gotPattern || patternParams[1] == null)
+                {
+                    return false;
+                }
+
+                System.Reflection.MethodInfo invokeMethod = patternParams[1].GetType().GetMethod("Invoke");
+                if (invokeMethod == null)
+                {
+                    return false;
+                }
+
+                invokeMethod.Invoke(patternParams[1], null);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        // 改进的鼠标模拟方案（作为备用）
+        private static bool TryRevealPasswordWithEnhancedMouse(object passwordEdit, Type automationElementType)
+        {
+            try
+            {
+                System.Reflection.PropertyInfo currentProperty = passwordEdit.GetType().GetProperty("Current");
+                if (currentProperty == null)
+                {
+                    Logger.Warning("[MouseSim] 无法获取Current属性");
+                    return false;
+                }
+
+                object current = currentProperty.GetValue(passwordEdit);
+                if (current == null)
+                {
+                    Logger.Warning("[MouseSim] Current属性值为空");
+                    return false;
+                }
+
+                System.Reflection.PropertyInfo boundingRectangleProperty = current.GetType().GetProperty("BoundingRectangle");
+                if (boundingRectangleProperty == null)
+                {
+                    Logger.Warning("[MouseSim] 无法获取BoundingRectangle属性");
+                    return false;
+                }
+
+                object boundingRectangle = boundingRectangleProperty.GetValue(current);
+                if (boundingRectangle == null)
+                {
+                    Logger.Warning("[MouseSim] BoundingRectangle属性值为空");
+                    return false;
+                }
+
+                System.Reflection.PropertyInfo leftProperty = boundingRectangle.GetType().GetProperty("Left");
+                System.Reflection.PropertyInfo topProperty = boundingRectangle.GetType().GetProperty("Top");
+                System.Reflection.PropertyInfo rightProperty = boundingRectangle.GetType().GetProperty("Right");
+                System.Reflection.PropertyInfo bottomProperty = boundingRectangle.GetType().GetProperty("Bottom");
+
+                if (leftProperty == null || topProperty == null || rightProperty == null || bottomProperty == null)
+                {
+                    Logger.Warning("[MouseSim] 无法获取矩形边界属性");
+                    return false;
+                }
+
+                int left = Convert.ToInt32(leftProperty.GetValue(boundingRectangle));
+                int top = Convert.ToInt32(topProperty.GetValue(boundingRectangle));
+                int right = Convert.ToInt32(rightProperty.GetValue(boundingRectangle));
+                int bottom = Convert.ToInt32(bottomProperty.GetValue(boundingRectangle));
+
+                int dpiScale = GetDpiScale();
+                int eyeOffset = 25 * dpiScale / 96;
+
+                var possiblePositions = new List<POINT>
+                {
+                    new POINT { X = right - eyeOffset, Y = (top + bottom) / 2 },
+                    new POINT { X = right - eyeOffset - 8, Y = (top + bottom) / 2 },
+                    new POINT { X = right - eyeOffset + 8, Y = (top + bottom) / 2 },
+                    new POINT { X = right - eyeOffset, Y = (top + bottom) / 2 - 5 },
+                    new POINT { X = right - eyeOffset, Y = (top + bottom) / 2 + 5 },
+                    new POINT { X = right - eyeOffset - 4, Y = (top + bottom) / 2 - 4 },
+                    new POINT { X = right - eyeOffset + 4, Y = (top + bottom) / 2 + 4 }
+                };
+
+                POINT originalPos = new POINT();
+                GetCursorPos(out originalPos);
+
+                try
+                {
+                    foreach (POINT pos in possiblePositions)
+                    {
+                        if (!IsPointOnScreen(pos))
+                        {
+                            continue;
+                        }
+
+                        SimulateMouseClick(pos);
+                        Thread.Sleep(80);
+
+                        if (IsPasswordRevealed(passwordEdit))
+                        {
+                            Logger.Info("[MouseSim] 点击成功，密码已显示");
+                            return true;
+                        }
+                    }
+                }
+                finally
+                {
+                    SetCursorPos(originalPos.X, originalPos.Y);
+                }
+
+                Logger.Warning("[MouseSim] 所有位置尝试均失败");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"[MouseSim] 鼠标模拟点击时发生异常: {ex.Message}");
+                return false;
+            }
+        }
+
+        // 检查点是否在屏幕范围内
+        private static bool IsPointOnScreen(POINT point)
+        {
+            try
+            {
+                int screenWidth = System.Windows.Forms.Screen.PrimaryScreen.Bounds.Width;
+                int screenHeight = System.Windows.Forms.Screen.PrimaryScreen.Bounds.Height;
+                bool isOnScreen = point.X >= 0 && point.X < screenWidth && point.Y >= 0 && point.Y < screenHeight;
+                return isOnScreen;
+            }
+            catch
+            {
+                return true;
+            }
+        }
+
+        // 获取DPI缩放比例
+        private static int GetDpiScale()
+        {
+            try
+            {
+                using (var graphics = System.Drawing.Graphics.FromHwnd(IntPtr.Zero))
+                {
+                    return (int)graphics.DpiX;
+                }
+            }
+            catch
+            {
+                return 96;
+            }
+        }
+
+        // 验证密码是否已显示（非掩码状态）
+        private static bool IsPasswordRevealed(object passwordEdit)
+        {
+            try
+            {
+                System.Reflection.MethodInfo tryGetCurrentPatternMethod = passwordEdit.GetType().GetMethod("TryGetCurrentPattern");
+                if (tryGetCurrentPatternMethod == null)
+                {
+                    return false;
+                }
+
+                System.Reflection.Assembly uiaClient = null;
+                try
+                {
+                    uiaClient = System.Reflection.Assembly.Load("UIAutomationClient, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35");
+                }
+                catch
+                {
+                    uiaClient = System.Reflection.Assembly.Load("UIAutomationClient");
+                }
+                if (uiaClient == null)
+                {
+                    return false;
+                }
+
+                Type valuePatternType = uiaClient.GetType("System.Windows.Automation.ValuePattern");
+                if (valuePatternType == null)
+                {
+                    return false;
+                }
+
+                object valuePatternProperty = null;
+                System.Reflection.PropertyInfo patternProperty = valuePatternType.GetProperty("Pattern");
+                if (patternProperty != null)
+                {
+                    valuePatternProperty = patternProperty.GetValue(null);
+                }
+                else
+                {
+                    System.Reflection.FieldInfo patternField = valuePatternType.GetField("Pattern", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                    if (patternField != null)
+                    {
+                        valuePatternProperty = patternField.GetValue(null);
+                    }
+                }
+                if (valuePatternProperty == null)
+                {
+                    return false;
+                }
+
+                object[] patternParams = new object[2];
+                patternParams[0] = valuePatternProperty;
+                patternParams[1] = null;
+
+                bool gotPattern = (bool)tryGetCurrentPatternMethod.Invoke(passwordEdit, patternParams);
+                if (!gotPattern || patternParams[1] == null)
+                {
+                    return false;
+                }
+
+                System.Reflection.PropertyInfo currentProp = patternParams[1].GetType().GetProperty("Current");
+                if (currentProp == null)
+                {
+                    return false;
+                }
+
+                object currentObj = currentProp.GetValue(patternParams[1]);
+                if (currentObj == null)
+                {
+                    return false;
+                }
+
+                System.Reflection.PropertyInfo valueProperty = currentObj.GetType().GetProperty("Value");
+                if (valueProperty == null)
+                {
+                    return false;
+                }
+
+                string password = (string)valueProperty.GetValue(currentObj);
+                return !string.IsNullOrEmpty(password) && !password.All(c => c == '*');
+            }
+            catch
+            {
                 return false;
             }
         }
