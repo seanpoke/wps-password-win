@@ -691,7 +691,7 @@ namespace PasswordManager.UI
             _selectedEmpListBox.Items.Clear();
             foreach (var emp in _selectedEmps)
             {
-                string displayText = $"{emp.name} ({emp.account ?? ""})";
+                string displayText = emp.name;
                 _selectedEmpListBox.Items.Add(new { Dn = emp.dn, DisplayText = displayText, Node = emp, IsDept = false });
             }
             UpdateSelectedCount();
@@ -1026,7 +1026,7 @@ namespace PasswordManager.UI
         {
             string nodeText = node.type == 0
                 ? $"[{node.name}]"
-                : $"{node.name} ({node.account ?? ""})";
+                : node.name;
 
             var treeNode = new TreeNode(nodeText)
             {
@@ -1142,14 +1142,10 @@ namespace PasswordManager.UI
                         node.ForeColor = isAutoChecked ? Color.Gray : Color.Black;
                     }
                     
+                    node.EnsureVisible();
                     if (isMatch && !firstMatchFound)
                     {
-                        node.EnsureVisible();
                         firstMatchFound = true;
-                    }
-                    else if (!isMatch)
-                    {
-                        node.EnsureVisible();
                     }
                 }
                 else
@@ -1199,6 +1195,7 @@ namespace PasswordManager.UI
                 if (_currentMatchIndex < 0)
                 {
                     _currentMatchIndex = 0;
+                    NavigateToMatch();
                 }
                 _searchCountLabel.Text = $"{_currentMatchIndex + 1}/{_matchedNodes.Count}";
                 _searchUpButton.Enabled = _matchedNodes.Count > 1;
