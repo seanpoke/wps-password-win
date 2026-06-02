@@ -56,18 +56,19 @@ namespace PasswordManager.UI
 
         private void InitializeComponent()
         {
-            float dpiScale = DpiHelper.GetDpiScale();
-            
             this.FormBorderStyle = FormBorderStyle.None;
             this.TopMost = false;
             this.ShowInTaskbar = false;
             this.TransparencyKey = Color.Magenta;
             this.BackColor = Color.Magenta;
             this.StartPosition = FormStartPosition.Manual;
+            this.AutoScaleMode = AutoScaleMode.Dpi;
+            this.AutoScaleDimensions = new System.Drawing.SizeF(96F, 96F);
 
-            int buttonWidth = DpiHelper.ScaleValue(90);
-            int buttonHeight = DpiHelper.ScaleValue(32);
-            int buttonSpacing = DpiHelper.ScaleValue(4);
+            float dpiScale = DpiHelper.GetDpiScale();
+            
+            int buttonHeight = (int)(36 * dpiScale);
+            int buttonSpacing = (int)(6 * dpiScale);
             Font buttonFont = DpiHelper.ScaleFont(new Font("微软雅黑", 9F, FontStyle.Bold));
 
             _generateButton = new Button
@@ -77,11 +78,13 @@ namespace PasswordManager.UI
                 BackColor = Color.FromArgb(0, 120, 212),
                 ForeColor = Color.White,
                 Font = buttonFont,
-                Size = new Size(buttonWidth, buttonHeight),
+                Height = buttonHeight,
                 Location = new Point(0, 0),
                 Cursor = Cursors.Hand,
                 UseVisualStyleBackColor = false,
-                FlatAppearance = { BorderSize = 0 }
+                FlatAppearance = { BorderSize = 0 },
+                AutoSize = true,
+                Padding = new Padding((int)(12 * dpiScale), 0, (int)(12 * dpiScale), 0)
             };
             _generateButton.Click += (sender, e) => GeneratePasswordClicked?.Invoke(this, EventArgs.Empty);
             _generateButton.MouseEnter += (sender, e) => _generateButton.BackColor = Color.FromArgb(26, 115, 232);
@@ -96,11 +99,13 @@ namespace PasswordManager.UI
                 BackColor = Color.FromArgb(0, 150, 136),
                 ForeColor = Color.White,
                 Font = buttonFont,
-                Size = new Size(buttonWidth, buttonHeight),
+                Height = buttonHeight,
                 Location = new Point(0, buttonHeight + buttonSpacing),
                 Cursor = Cursors.Hand,
                 UseVisualStyleBackColor = false,
-                FlatAppearance = { BorderSize = 0 }
+                FlatAppearance = { BorderSize = 0 },
+                AutoSize = true,
+                Padding = new Padding((int)(12 * dpiScale), 0, (int)(12 * dpiScale), 0)
             };
             _extractPasswordButton.Click += ExtractPasswordButton_Click;
             _extractPasswordButton.MouseEnter += (sender, e) => _extractPasswordButton.BackColor = Color.FromArgb(0, 170, 156);
@@ -115,12 +120,14 @@ namespace PasswordManager.UI
                 BackColor = Color.FromArgb(156, 39, 176),
                 ForeColor = Color.White,
                 Font = buttonFont,
-                Size = new Size(buttonWidth, buttonHeight),
+                Height = buttonHeight,
                 Location = new Point(0, (buttonHeight + buttonSpacing) * 2),
                 Cursor = Cursors.Hand,
                 Visible = false,
                 UseVisualStyleBackColor = false,
-                FlatAppearance = { BorderSize = 0 }
+                FlatAppearance = { BorderSize = 0 },
+                AutoSize = true,
+                Padding = new Padding((int)(12 * dpiScale), 0, (int)(12 * dpiScale), 0)
             };
             _authButton.Click += AuthButton_Click;
             _authButton.MouseEnter += (sender, e) => _authButton.BackColor = Color.FromArgb(176, 59, 196);
@@ -131,7 +138,9 @@ namespace PasswordManager.UI
             this.Controls.Add(_generateButton);
             this.Controls.Add(_extractPasswordButton);
             this.Controls.Add(_authButton);
-            this.Size = new Size(buttonWidth, (buttonHeight + buttonSpacing) * 3 - buttonSpacing);
+            
+            int maxButtonWidth = Math.Max(Math.Max(_generateButton.Width, _extractPasswordButton.Width), _authButton.Width);
+            this.Size = new Size(maxButtonWidth, (buttonHeight + buttonSpacing) * 3 - buttonSpacing);
         }
 
         private void AuthButton_Click(object sender, EventArgs e)
@@ -164,19 +173,24 @@ namespace PasswordManager.UI
                 bool shouldShow = _currentFileMeta != null && _currentFileMeta.WriteAuth;
                 _authButton.Visible = shouldShow;
                 
-                int buttonWidth = DpiHelper.ScaleValue(90);
-                int buttonHeight = DpiHelper.ScaleValue(32);
-                int buttonSpacing = DpiHelper.ScaleValue(4);
+                float dpiScale = DpiHelper.GetDpiScale();
+                int buttonHeight = (int)(36 * dpiScale);
+                int buttonSpacing = (int)(6 * dpiScale);
                 
+                int maxButtonWidth = Math.Max(Math.Max(_generateButton.Width, _extractPasswordButton.Width), 
+                    shouldShow ? _authButton.Width : _generateButton.Width);
+                
+                Size targetSize;
                 if (shouldShow)
                 {
-                    this.Size = new Size(buttonWidth, (buttonHeight + buttonSpacing) * 3 - buttonSpacing);
+                    targetSize = new Size(maxButtonWidth, (buttonHeight + buttonSpacing) * 3 - buttonSpacing);
                 }
                 else
                 {
-                    this.Size = new Size(buttonWidth, (buttonHeight + buttonSpacing) * 2 - buttonSpacing);
+                    targetSize = new Size(maxButtonWidth, (buttonHeight + buttonSpacing) * 2 - buttonSpacing);
                 }
                 
+                this.Size = targetSize;
                 Logger.Debug($"文档权限按钮显示状态更新: {shouldShow}");
             }
         }
@@ -552,6 +566,11 @@ namespace PasswordManager.UI
             // 创建并显示临时通知表单
             NotificationForm notificationForm = new NotificationForm();
             notificationForm.ShowNotification(message);
+        }
+
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
         }
 
         public new void Show()

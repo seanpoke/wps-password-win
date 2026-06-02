@@ -58,6 +58,11 @@ namespace PasswordManager.UI
             };
         }
 
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+        }
+
         public void ShowNotification(string message)
         {
             _messageLabel.Text = message;

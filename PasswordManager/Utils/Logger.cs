@@ -42,7 +42,7 @@ namespace PasswordManager.Utils
                 }
             }
 #if DEBUG
-            return LogLevel.Info;
+            return LogLevel.Debug;
 #else
             return LogLevel.Info;
 #endif

@@ -62,6 +62,11 @@ namespace PasswordManager.UI
             LoadAuthTreeAsync();
         }
 
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+        }
+
         protected override void OnClosed(EventArgs e)
         {
             base.OnClosed(e);
@@ -72,23 +77,32 @@ namespace PasswordManager.UI
         {
             float dpiScale = DpiHelper.GetDpiScale();
             
+            int windowWidth = (int)(700 * dpiScale);
+            int windowHeight = (int)(580 * dpiScale);
+            
+            int buttonWidth = (int)(80 * dpiScale);
+            int buttonHeight = (int)(30 * dpiScale);
+            int buttonSpacing = (int)(10 * dpiScale);
+            int bottomMargin = (int)(20 * dpiScale);
+            
             this.Text = "文档权限";
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
-            this.Size = DpiHelper.ScaleSize(new Size(700, 550));
+            this.ClientSize = new Size(windowWidth, windowHeight);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.BackColor = Color.White;
             this.MaximizeBox = false;
             this.MinimizeBox = false;
             this.ShowIcon = false;
             this.TopMost = true;
+            this.AutoScaleMode = AutoScaleMode.None;
 
-            Font regularFont = DpiHelper.ScaleFont(new Font("微软雅黑", 9F));
-            Font boldFont9 = DpiHelper.ScaleFont(new Font("微软雅黑", 9F, FontStyle.Bold));
-            Font boldFont10 = DpiHelper.ScaleFont(new Font("微软雅黑", 10F, FontStyle.Bold));
+            Font regularFont = new Font("微软雅黑", 9F);
+            Font boldFont9 = new Font("微软雅黑", 9F, FontStyle.Bold);
+            Font boldFont10 = new Font("微软雅黑", 10F, FontStyle.Bold);
 
             _topPanel = new Panel
             {
-                Size = DpiHelper.ScaleSize(new Size(700, 40)),
+                Size = new Size(windowWidth, (int)(40 * dpiScale)),
                 Location = new Point(0, 0),
                 BackColor = Color.FromArgb(245, 245, 245),
                 BorderStyle = BorderStyle.FixedSingle
@@ -96,8 +110,8 @@ namespace PasswordManager.UI
 
             _searchTextBox = new TextBox
             {
-                Size = DpiHelper.ScaleSize(new Size(200, 28)),
-                Location = DpiHelper.ScalePoint(new Point(10, 6)),
+                Size = new Size((int)(180 * dpiScale), (int)(28 * dpiScale)),
+                Location = new Point((int)(10 * dpiScale), (int)(6 * dpiScale)),
                 Font = regularFont,
                 PlaceholderText = "搜索部门或人员..."
             };
@@ -109,8 +123,8 @@ namespace PasswordManager.UI
                 Font = boldFont9,
                 ForeColor = Color.White,
                 BackColor = Color.FromArgb(0, 120, 212),
-                Size = DpiHelper.ScaleSize(new Size(60, 28)),
-                Location = DpiHelper.ScalePoint(new Point(215, 6)),
+                Size = new Size((int)(60 * dpiScale), (int)(28 * dpiScale)),
+                Location = new Point((int)(195 * dpiScale), (int)(6 * dpiScale)),
                 FlatStyle = FlatStyle.Flat,
                 Cursor = Cursors.Hand,
                 TabStop = false
@@ -126,8 +140,8 @@ namespace PasswordManager.UI
                 Font = boldFont10,
                 ForeColor = Color.Black,
                 BackColor = Color.White,
-                Size = DpiHelper.ScaleSize(new Size(28, 28)),
-                Location = DpiHelper.ScalePoint(new Point(280, 6)),
+                Size = new Size((int)(28 * dpiScale), (int)(28 * dpiScale)),
+                Location = new Point((int)(260 * dpiScale), (int)(6 * dpiScale)),
                 FlatStyle = FlatStyle.Flat,
                 Cursor = Cursors.Hand,
                 TabStop = false,
@@ -142,8 +156,8 @@ namespace PasswordManager.UI
                 Font = boldFont10,
                 ForeColor = Color.Black,
                 BackColor = Color.White,
-                Size = DpiHelper.ScaleSize(new Size(28, 28)),
-                Location = DpiHelper.ScalePoint(new Point(310, 6)),
+                Size = new Size((int)(28 * dpiScale), (int)(28 * dpiScale)),
+                Location = new Point((int)(290 * dpiScale), (int)(6 * dpiScale)),
                 FlatStyle = FlatStyle.Flat,
                 Cursor = Cursors.Hand,
                 TabStop = false,
@@ -157,8 +171,8 @@ namespace PasswordManager.UI
                 Text = "",
                 Font = regularFont,
                 ForeColor = Color.Gray,
-                Size = DpiHelper.ScaleSize(new Size(50, 28)),
-                Location = DpiHelper.ScalePoint(new Point(342, 6)),
+                Size = new Size((int)(50 * dpiScale), (int)(28 * dpiScale)),
+                Location = new Point((int)(322 * dpiScale), (int)(6 * dpiScale)),
                 TextAlign = ContentAlignment.MiddleLeft
             };
 
@@ -168,8 +182,8 @@ namespace PasswordManager.UI
                 Font = boldFont10,
                 ForeColor = Color.White,
                 BackColor = Color.FromArgb(156, 39, 176),
-                Size = DpiHelper.ScaleSize(new Size(65, 28)),
-                Location = DpiHelper.ScalePoint(new Point(555, 6)),
+                Size = new Size((int)(65 * dpiScale), (int)(28 * dpiScale)),
+                Location = new Point(windowWidth - (int)(70 * dpiScale) - (int)(75 * dpiScale) - (int)(15 * dpiScale), (int)(6 * dpiScale)),
                 FlatStyle = FlatStyle.Flat,
                 Cursor = Cursors.Hand,
                 TabStop = false
@@ -185,8 +199,8 @@ namespace PasswordManager.UI
                 Font = boldFont10,
                 ForeColor = Color.White,
                 BackColor = Color.FromArgb(156, 39, 176),
-                Size = DpiHelper.ScaleSize(new Size(65, 28)),
-                Location = DpiHelper.ScalePoint(new Point(475, 6)),
+                Size = new Size((int)(65 * dpiScale), (int)(28 * dpiScale)),
+                Location = new Point(windowWidth - (int)(70 * dpiScale) - (int)(75 * dpiScale) - (int)(85 * dpiScale) - (int)(15 * dpiScale), (int)(6 * dpiScale)),
                 FlatStyle = FlatStyle.Flat,
                 Cursor = Cursors.Hand,
                 TabStop = false
@@ -204,10 +218,15 @@ namespace PasswordManager.UI
             _topPanel.Controls.Add(_resetButton);
             _topPanel.Controls.Add(_saveButton);
 
+            int leftPanelWidth = (int)(330 * dpiScale);
+            int rightPanelWidth = (int)(330 * dpiScale);
+            int panelHeight = windowHeight - (int)(50 * dpiScale) - buttonHeight - bottomMargin - (int)(5 * dpiScale);
+            int panelTop = (int)(45 * dpiScale);
+            
             _leftPanel = new Panel
             {
-                Size = DpiHelper.ScaleSize(new Size(340, 460)),
-                Location = DpiHelper.ScalePoint(new Point(10, 45)),
+                Size = new Size(leftPanelWidth, panelHeight),
+                Location = new Point((int)(10 * dpiScale), panelTop),
                 BorderStyle = BorderStyle.FixedSingle
             };
 
@@ -216,17 +235,17 @@ namespace PasswordManager.UI
                 Text = "选择部门或人员",
                 Font = boldFont9,
                 ForeColor = Color.Black,
-                Size = DpiHelper.ScaleSize(new Size(340, 25)),
+                Size = new Size(leftPanelWidth, (int)(25 * dpiScale)),
                 Location = new Point(0, 0),
                 TextAlign = ContentAlignment.MiddleLeft,
-                Padding = new Padding(DpiHelper.ScaleValue(5), 0, 0, 0)
+                Padding = new Padding((int)(5 * dpiScale), 0, 0, 0)
             };
             _leftPanel.Controls.Add(_leftTitleLabel);
 
             _authTreeView = new AuthTreeView
             {
-                Size = DpiHelper.ScaleSize(new Size(340, 435)),
-                Location = new Point(0, DpiHelper.ScaleValue(25)),
+                Size = new Size(leftPanelWidth - 4, panelHeight - (int)(30 * dpiScale)),
+                Location = new Point(2, (int)(25 * dpiScale)),
                 ShowLines = true,
                 ShowPlusMinus = true,
                 ShowRootLines = true,
@@ -240,8 +259,8 @@ namespace PasswordManager.UI
 
             _rightPanel = new Panel
             {
-                Size = DpiHelper.ScaleSize(new Size(320, 460)),
-                Location = DpiHelper.ScalePoint(new Point(355, 45)),
+                Size = new Size(rightPanelWidth, panelHeight),
+                Location = new Point((int)(10 * dpiScale) + leftPanelWidth + (int)(10 * dpiScale), panelTop),
                 BorderStyle = BorderStyle.FixedSingle
             };
 
@@ -250,10 +269,10 @@ namespace PasswordManager.UI
                 Text = "已选择的部门",
                 Font = boldFont9,
                 ForeColor = Color.Black,
-                Size = DpiHelper.ScaleSize(new Size(280, 25)),
+                Size = new Size(rightPanelWidth - (int)(50 * dpiScale), (int)(25 * dpiScale)),
                 Location = new Point(0, 0),
                 TextAlign = ContentAlignment.MiddleLeft,
-                Padding = new Padding(DpiHelper.ScaleValue(5), 0, 0, 0)
+                Padding = new Padding((int)(5 * dpiScale), 0, 0, 0)
             };
 
             _deptCountLabel = new Label
@@ -261,20 +280,20 @@ namespace PasswordManager.UI
                 Text = "",
                 Font = regularFont,
                 ForeColor = Color.Gray,
-                Size = DpiHelper.ScaleSize(new Size(40, 25)),
-                Location = DpiHelper.ScalePoint(new Point(280, 0)),
+                Size = new Size((int)(50 * dpiScale), (int)(25 * dpiScale)),
+                Location = new Point(rightPanelWidth - (int)(55 * dpiScale), 0),
                 TextAlign = ContentAlignment.MiddleRight,
-                Padding = new Padding(0, 0, DpiHelper.ScaleValue(5), 0)
+                Padding = new Padding(0, 0, (int)(5 * dpiScale), 0)
             };
 
             _selectedDeptListBox = new ListBox
             {
-                Size = DpiHelper.ScaleSize(new Size(320, 210)),
-                Location = new Point(0, DpiHelper.ScaleValue(25)),
+                Size = new Size(rightPanelWidth - (int)(25 * dpiScale), (int)(160 * dpiScale)),
+                Location = new Point(2, (int)(25 * dpiScale)),
                 Font = regularFont,
                 BorderStyle = BorderStyle.None,
                 DrawMode = DrawMode.OwnerDrawFixed,
-                ItemHeight = DpiHelper.ScaleValue(24)
+                ItemHeight = (int)(22 * dpiScale)
             };
             _selectedDeptListBox.DrawItem += SelectedDeptListBox_DrawItem;
             _selectedDeptListBox.MouseClick += SelectedListBox_MouseClick;
@@ -284,10 +303,10 @@ namespace PasswordManager.UI
                 Text = "已选择的员工",
                 Font = boldFont9,
                 ForeColor = Color.Black,
-                Size = DpiHelper.ScaleSize(new Size(280, 25)),
-                Location = DpiHelper.ScalePoint(new Point(0, 240)),
+                Size = new Size(rightPanelWidth - (int)(50 * dpiScale), (int)(25 * dpiScale)),
+                Location = new Point(0, (int)(190 * dpiScale)),
                 TextAlign = ContentAlignment.MiddleLeft,
-                Padding = new Padding(DpiHelper.ScaleValue(5), 0, 0, 0)
+                Padding = new Padding((int)(5 * dpiScale), 0, 0, 0)
             };
 
             _empCountLabel = new Label
@@ -295,20 +314,23 @@ namespace PasswordManager.UI
                 Text = "",
                 Font = regularFont,
                 ForeColor = Color.Gray,
-                Size = DpiHelper.ScaleSize(new Size(40, 25)),
-                Location = DpiHelper.ScalePoint(new Point(280, 240)),
+                Size = new Size((int)(50 * dpiScale), (int)(25 * dpiScale)),
+                Location = new Point(rightPanelWidth - (int)(55 * dpiScale), (int)(190 * dpiScale)),
                 TextAlign = ContentAlignment.MiddleRight,
-                Padding = new Padding(0, 0, DpiHelper.ScaleValue(5), 0)
+                Padding = new Padding(0, 0, (int)(5 * dpiScale), 0)
             };
 
+            int deptSectionHeight = (int)(190 * dpiScale);
+            int empListTop = (int)(215 * dpiScale);
+            
             _selectedEmpListBox = new ListBox
             {
-                Size = DpiHelper.ScaleSize(new Size(320, 195)),
-                Location = DpiHelper.ScalePoint(new Point(0, 265)),
+                Size = new Size(rightPanelWidth - (int)(25 * dpiScale), panelHeight - empListTop),
+                Location = new Point(2, empListTop),
                 Font = regularFont,
                 BorderStyle = BorderStyle.None,
                 DrawMode = DrawMode.OwnerDrawFixed,
-                ItemHeight = DpiHelper.ScaleValue(24)
+                ItemHeight = (int)(22 * dpiScale)
             };
             _selectedEmpListBox.DrawItem += SelectedEmpListBox_DrawItem;
             _selectedEmpListBox.MouseClick += SelectedListBox_MouseClick;
@@ -326,8 +348,8 @@ namespace PasswordManager.UI
                 Font = boldFont9,
                 ForeColor = Color.White,
                 BackColor = Color.FromArgb(0, 120, 212),
-                Size = DpiHelper.ScaleSize(new Size(100, 32)),
-                Location = DpiHelper.ScalePoint(new Point(470, 515)),
+                Size = new Size(buttonWidth, buttonHeight),
+                Location = new Point(windowWidth - buttonWidth * 2 - buttonSpacing - bottomMargin - (int)(10 * dpiScale), windowHeight - buttonHeight - bottomMargin),
                 FlatStyle = FlatStyle.Flat,
                 Cursor = Cursors.Hand
             };
@@ -340,8 +362,8 @@ namespace PasswordManager.UI
                 Font = boldFont9,
                 ForeColor = Color.Black,
                 BackColor = Color.FromArgb(238, 238, 238),
-                Size = DpiHelper.ScaleSize(new Size(100, 32)),
-                Location = DpiHelper.ScalePoint(new Point(585, 515)),
+                Size = new Size(buttonWidth, buttonHeight),
+                Location = new Point(windowWidth - buttonWidth - bottomMargin - (int)(10 * dpiScale), windowHeight - buttonHeight - bottomMargin),
                 FlatStyle = FlatStyle.Flat,
                 Cursor = Cursors.Hand
             };
@@ -350,18 +372,18 @@ namespace PasswordManager.UI
 
             _loadingPanel = new Panel
             {
-                Size = DpiHelper.ScaleSize(new Size(700, 510)),
-                Location = new Point(0, DpiHelper.ScaleValue(40)),
+                Size = new Size(windowWidth, panelHeight + (int)(5 * dpiScale)),
+                Location = new Point(0, panelTop),
                 BackColor = Color.White
             };
 
             _loadingLabel = new Label
             {
                 Text = "正在加载权限树...",
-                Font = DpiHelper.ScaleFont(new Font("微软雅黑", 10F)),
+                Font = new Font("微软雅黑", 10F * dpiScale),
                 ForeColor = Color.Gray,
-                Size = DpiHelper.ScaleSize(new Size(700, 20)),
-                Location = new Point(0, DpiHelper.ScaleValue(245)),
+                Size = new Size(windowWidth, (int)(20 * dpiScale)),
+                Location = new Point(0, (panelHeight - (int)(20 * dpiScale)) / 2),
                 TextAlign = ContentAlignment.MiddleCenter
             };
             _loadingPanel.Controls.Add(_loadingLabel);
@@ -369,10 +391,10 @@ namespace PasswordManager.UI
             _errorLabel = new Label
             {
                 Text = "",
-                Font = DpiHelper.ScaleFont(new Font("微软雅黑", 10F)),
+                Font = new Font("微软雅黑", 10F * dpiScale),
                 ForeColor = Color.Red,
-                Size = DpiHelper.ScaleSize(new Size(700, 40)),
-                Location = new Point(0, DpiHelper.ScaleValue(235)),
+                Size = new Size(windowWidth, (int)(40 * dpiScale)),
+                Location = new Point(0, (panelHeight - (int)(40 * dpiScale)) / 2),
                 TextAlign = ContentAlignment.MiddleCenter,
                 Visible = false
             };
@@ -690,9 +712,9 @@ namespace PasswordManager.UI
 
             e.DrawBackground();
 
-            int paddingLeft = DpiHelper.ScaleValue(5);
-            int paddingTop = DpiHelper.ScaleValue(2);
-            int xOffset = DpiHelper.ScaleValue(18);
+            int paddingLeft = 5;
+            int paddingTop = 2;
+            int xOffset = 18;
 
             using (Brush textBrush = new SolidBrush(Color.Black))
             {
@@ -701,7 +723,7 @@ namespace PasswordManager.UI
 
             using (Brush xBrush = new SolidBrush(Color.Gray))
             {
-                Font xFont = DpiHelper.ScaleFont(new Font("微软雅黑", 10F, FontStyle.Bold));
+                Font xFont = new Font("微软雅黑", 10F, FontStyle.Bold);
                 e.Graphics.DrawString("×", xFont, xBrush, e.Bounds.Right - xOffset, e.Bounds.Y + paddingTop);
             }
 
@@ -717,9 +739,9 @@ namespace PasswordManager.UI
 
             e.DrawBackground();
 
-            int paddingLeft = DpiHelper.ScaleValue(5);
-            int paddingTop = DpiHelper.ScaleValue(2);
-            int xOffset = DpiHelper.ScaleValue(18);
+            int paddingLeft = 5;
+            int paddingTop = 2;
+            int xOffset = 18;
 
             using (Brush textBrush = new SolidBrush(Color.Black))
             {
@@ -728,7 +750,7 @@ namespace PasswordManager.UI
 
             using (Brush xBrush = new SolidBrush(Color.Gray))
             {
-                Font xFont = DpiHelper.ScaleFont(new Font("微软雅黑", 10F, FontStyle.Bold));
+                Font xFont = new Font("微软雅黑", 10F, FontStyle.Bold);
                 e.Graphics.DrawString("×", xFont, xBrush, e.Bounds.Right - xOffset, e.Bounds.Y + paddingTop);
             }
 
@@ -747,7 +769,7 @@ namespace PasswordManager.UI
             if (item == null) return;
 
             int itemWidth = listBox.GetItemRectangle(index).Width;
-            int deleteButtonWidth = DpiHelper.ScaleValue(20);
+            int deleteButtonWidth = 20;
             if (e.X > itemWidth - deleteButtonWidth)
             {
                 LdapNodeDTO node = item.Node;
@@ -799,10 +821,51 @@ namespace PasswordManager.UI
             return null;
         }
 
-        private void ConfirmButton_Click(object sender, EventArgs e)
+        private async void ConfirmButton_Click(object sender, EventArgs e)
         {
-            Logger.Info($"确认选择了 {_selectedDepts.Count} 个部门和 {_selectedEmps.Count} 个员工");
-            this.Close();
+            try
+            {
+                _confirmButton.Enabled = false;
+                
+                var accountDnList = _selectedEmps.Select(emp => emp.dn).ToList();
+                var deptDnList = _selectedDepts.Select(dept => dept.dn).ToList();
+
+                Logger.Info($"准备保存权限，部门数: {deptDnList.Count}，员工数: {accountDnList.Count}");
+
+                var requestData = new
+                {
+                    docId = _docId,
+                    accountDnList = accountDnList,
+                    deptDnList = deptDnList
+                };
+
+                var response = await _httpRequestService.PostAsync<object>(
+                    ApiRoutes.DocAuthUpdate,
+                    requestData,
+                    token: GlobalState.Instance.Token
+                );
+
+                if (response != null && response.status == 200)
+                {
+                    Logger.Info("权限更新成功");
+                    ShowNotification("权限保存成功");
+                    this.Close();
+                }
+                else
+                {
+                    Logger.Warning($"权限更新失败: {response?.message ?? "未知错误"}");
+                    ShowNotification($"保存失败: {response?.message ?? "未知错误"}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"保存权限时出错: {ex.Message}");
+                ShowNotification($"保存失败: {ex.Message}");
+            }
+            finally
+            {
+                _confirmButton.Enabled = true;
+            }
         }
 
         private void ResetButton_Click(object sender, EventArgs e)

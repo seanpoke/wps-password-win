@@ -32,19 +32,17 @@ namespace PasswordManager.UI
         private void InitializeComponent()
         {
             this.Text = "密码管理 - 日志";
-            this.Size = DpiHelper.ScaleSize(new System.Drawing.Size(800, 600));
+            this.Size = new System.Drawing.Size(800, 600);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.Sizable;
             this.MaximizeBox = true;
             this.MinimizeBox = true;
 
-            float dpiScale = DpiHelper.GetDpiScale();
-
             _logTextBox = new TextBox
             {
                 Dock = DockStyle.Fill,
                 ReadOnly = true,
-                Font = DpiHelper.ScaleFont(new System.Drawing.Font("Consolas", 9F)),
+                Font = new System.Drawing.Font("Consolas", 9F),
                 BackColor = System.Drawing.Color.Black,
                 ForeColor = System.Drawing.Color.LightGreen,
                 ScrollBars = ScrollBars.Vertical,
@@ -55,52 +53,52 @@ namespace PasswordManager.UI
             _closeButton = new Button 
             { 
                 Text = "关闭", 
-                Width = DpiHelper.ScaleValue(80), 
-                Height = DpiHelper.ScaleValue(35),
-                Font = DpiHelper.ScaleFont(new System.Drawing.Font("微软雅黑", 9F))
+                Width = 80, 
+                Height = 35,
+                Font = new System.Drawing.Font("微软雅黑", 9F)
             };
             _closeButton.Click += (s, e) => this.Hide();
 
             _pauseButton = new Button 
             { 
                 Text = "暂停", 
-                Width = DpiHelper.ScaleValue(80), 
-                Height = DpiHelper.ScaleValue(35),
-                Font = DpiHelper.ScaleFont(new System.Drawing.Font("微软雅黑", 9F))
+                Width = 80, 
+                Height = 35,
+                Font = new System.Drawing.Font("微软雅黑", 9F)
             };
             _pauseButton.Click += (s, e) => { _isPaused = true; _pauseButton.Enabled = false; _resumeButton.Enabled = true; };
 
             _clearButton = new Button 
             { 
                 Text = "清理", 
-                Width = DpiHelper.ScaleValue(80), 
-                Height = DpiHelper.ScaleValue(35),
-                Font = DpiHelper.ScaleFont(new System.Drawing.Font("微软雅黑", 9F))
+                Width = 80, 
+                Height = 35,
+                Font = new System.Drawing.Font("微软雅黑", 9F)
             };
             _clearButton.Click += (s, e) => { _logTextBox.Clear(); };
 
             _resumeButton = new Button 
             { 
                 Text = "恢复", 
-                Width = DpiHelper.ScaleValue(80), 
-                Height = DpiHelper.ScaleValue(35), 
+                Width = 80, 
+                Height = 35, 
                 Enabled = false,
-                Font = DpiHelper.ScaleFont(new System.Drawing.Font("微软雅黑", 9F))
+                Font = new System.Drawing.Font("微软雅黑", 9F)
             };
             _resumeButton.Click += (s, e) => { _isPaused = false; _pauseButton.Enabled = true; _resumeButton.Enabled = false; };
 
             FlowLayoutPanel buttonPanel = new FlowLayoutPanel
             {
                 Dock = DockStyle.Bottom,
-                Height = DpiHelper.ScaleValue(45),
+                Height = 45,
                 FlowDirection = FlowDirection.RightToLeft,
-                Padding = new Padding(DpiHelper.ScaleValue(10), DpiHelper.ScaleValue(5), DpiHelper.ScaleValue(10), DpiHelper.ScaleValue(5)),
+                Padding = new Padding(10, 5, 10, 5),
                 Margin = new Padding(0),
                 AutoSize = false
             };
-            _closeButton.Margin = new Padding(DpiHelper.ScaleValue(10), 0, 0, 0);
-            _resumeButton.Margin = new Padding(DpiHelper.ScaleValue(10), 0, 0, 0);
-            _pauseButton.Margin = new Padding(DpiHelper.ScaleValue(10), 0, 0, 0);
+            _closeButton.Margin = new Padding(10, 0, 0, 0);
+            _resumeButton.Margin = new Padding(10, 0, 0, 0);
+            _pauseButton.Margin = new Padding(10, 0, 0, 0);
             _clearButton.Margin = new Padding(0);
             buttonPanel.Controls.Add(_closeButton);
             buttonPanel.Controls.Add(_resumeButton);
@@ -115,7 +113,8 @@ namespace PasswordManager.UI
         {
             base.OnShown(e);
             float dpiScale = DpiHelper.GetDpiScaleForWindow(this.Handle);
-            DpiHelper.ApplyDpiScale(this);
+            this.Size = DpiHelper.ScaleSize(new System.Drawing.Size(800, 600));
+            Logger.Debug($"LogForm.OnShown: DPI scale = {dpiScale:F2}, size = {this.Size}");
         }
 
         private void LoadLogContent()
