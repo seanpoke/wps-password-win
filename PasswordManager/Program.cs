@@ -233,6 +233,18 @@ namespace PasswordManager
                     PasswordManager.UI.LogForm.ShowLogWindow();
                 };
 
+                PasswordManager.UI.LoginForm.LoginSuccess += (sender, e) =>
+                {
+                    Logger.Info("接收到登录成功事件，更新托盘菜单");
+                    trayIcon.UpdateMenuItems();
+                };
+
+                PasswordManager.UI.LoginForm.LogoutSuccess += (sender, e) =>
+                {
+                    Logger.Info("接收到注销成功事件，更新托盘菜单");
+                    trayIcon.UpdateMenuItems();
+                };
+
                 // 创建登录窗口
                 PasswordManager.UI.LoginForm loginForm = new PasswordManager.UI.LoginForm();
                 
@@ -266,6 +278,8 @@ namespace PasswordManager
                                     loginForm.UpdateUIState();
                                     string username = PasswordManager.UI.LoginForm.GetUsername();
                                     Logger.Info($"用户 {username} 已登录，心跳检测成功");
+                                    Logger.Info($"心跳后用户角色: {GlobalState.Instance.Role}");
+                                    trayIcon.UpdateMenuItems();
                                     // 等待用户查看后关闭窗口
                                     Task.Delay(1000).ContinueWith(_ => {
                                         loginForm.Invoke((Action)(() => {
@@ -285,6 +299,7 @@ namespace PasswordManager
                                     GlobalState.Instance.Reset();
                                     GlobalState.Instance.ClearUserInfo();
                                     Logger.Info("登录状态已重置");
+                                    trayIcon.UpdateMenuItems();
                                     loginForm.SetLoading(false);
                                     loginForm.UpdateUIState();
                                     Logger.Info("UI状态已更新，准备显示登录窗口");
@@ -294,6 +309,7 @@ namespace PasswordManager
                                     {
                                         Logger.Info("用户登录成功");
                                         GlobalState.Instance.IsLoggedIn = true;
+                                        trayIcon.UpdateMenuItems();
                                     }
                                     else
                                     {
@@ -315,6 +331,7 @@ namespace PasswordManager
                                 GlobalState.Instance.Reset();
                                 GlobalState.Instance.ClearUserInfo();
                                 Logger.Info("登录状态已重置");
+                                trayIcon.UpdateMenuItems();
                                 loginForm.SetLoading(false);
                                 loginForm.UpdateUIState();
                                 Logger.Info("UI状态已更新，准备显示登录窗口");
@@ -324,6 +341,7 @@ namespace PasswordManager
                                 {
                                     Logger.Info("用户登录成功");
                                     GlobalState.Instance.IsLoggedIn = true;
+                                    trayIcon.UpdateMenuItems();
                                 }
                                 else
                                 {
@@ -344,6 +362,7 @@ namespace PasswordManager
                                 GlobalState.Instance.Reset();
                                 GlobalState.Instance.ClearUserInfo();
                                 Logger.Info("登录状态已重置");
+                                trayIcon.UpdateMenuItems();
                                 loginForm.SetLoading(false);
                                 loginForm.UpdateUIState();
                                 Logger.Info("UI状态已更新，准备显示登录窗口");
@@ -353,6 +372,7 @@ namespace PasswordManager
                                 {
                                     Logger.Info("用户登录成功");
                                     GlobalState.Instance.IsLoggedIn = true;
+                                    trayIcon.UpdateMenuItems();
                                 }
                                 else
                                 {

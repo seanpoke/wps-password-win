@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Windows.Forms;
+using PasswordManager.Utils;
 
 namespace PasswordManager.UI
 {
@@ -9,6 +10,7 @@ namespace PasswordManager.UI
         private NotifyIcon _notifyIcon;
         private ContextMenuStrip _contextMenu;
         private LoginForm _loginForm;
+        private MetaQueryForm _metaQueryForm;
 
         public event EventHandler ExitClicked;
         public event EventHandler OpenFolderClicked;
@@ -48,6 +50,14 @@ namespace PasswordManager.UI
 
             _contextMenu.Items.Add(homeItem);
             _contextMenu.Items.Add(showLogItem);
+            
+            if (IsAdminUser())
+            {
+                ToolStripMenuItem queryMetaItem = new ToolStripMenuItem("查询元数据");
+                queryMetaItem.Click += (sender, e) => ShowMetaQueryWindow();
+                _contextMenu.Items.Add(queryMetaItem);
+            }
+            
             _contextMenu.Items.Add(new ToolStripSeparator());
             _contextMenu.Items.Add(openFolderItem);
             _contextMenu.Items.Add(new ToolStripSeparator());
@@ -59,6 +69,42 @@ namespace PasswordManager.UI
             {
                 ShowMainWindow();
             };
+        }
+
+        private bool IsAdminUser()
+        {
+            try
+            {
+                string role = PasswordManager.Utils.GlobalState.Instance.Role;
+                return !string.IsNullOrEmpty(role) && role.Equals("admin", StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void ShowMetaQueryWindow()
+        {
+            MetaQueryForm existingForm = Application.OpenForms.OfType<MetaQueryForm>().FirstOrDefault();
+            if (existingForm != null && !existingForm.IsDisposed)
+            {
+                existingForm.Activate();
+                if (existingForm.WindowState == FormWindowState.Minimized)
+                {
+                    existingForm.WindowState = FormWindowState.Normal;
+                }
+            }
+            else
+            {
+                _metaQueryForm = new MetaQueryForm();
+                _metaQueryForm.StartPosition = FormStartPosition.CenterScreen;
+                _metaQueryForm.FormClosed += (sender, e) =>
+                {
+                    _metaQueryForm = null;
+                };
+                _metaQueryForm.Show();
+            }
         }
 
         private System.Drawing.Icon GetAppIcon()
@@ -99,6 +145,44 @@ namespace PasswordManager.UI
         public void ShowBalloonTip(string title, string message, ToolTipIcon icon = ToolTipIcon.Info)
         {
             _notifyIcon.ShowBalloonTip(3000, title, message, icon);
+        }
+
+        public void UpdateMenuItems()
+        {
+            try
+            {
+                Logger.Info("开始更新托盘菜单");
+                
+                ToolStripMenuItem existingMetaItem = _contextMenu.Items.OfType<ToolStripMenuItem>().FirstOrDefault(item => item.Text == "查询元数据");
+                
+                bool isAdmin = IsAdminUser();
+                Logger.Info($"当前用户角色检查结果: IsAdmin={isAdmin}, Role={GlobalState.Instance.Role}");
+                
+                if (isAdmin && existingMetaItem == null)
+                {
+                    Logger.Info("用户是管理员，添加查询元数据菜单");
+                    ToolStripMenuItem queryMetaItem = new ToolStripMenuItem("查询元数据");
+                    queryMetaItem.Click += (sender, e) => ShowMetaQueryWindow();
+                    
+                    int insertIndex = _contextMenu.Items.IndexOf(_contextMenu.Items.OfType<ToolStripMenuItem>().FirstOrDefault(item => item.Text == "显示日志")) + 1;
+                    _contextMenu.Items.Insert(insertIndex, queryMetaItem);
+                    Logger.Info("查询元数据菜单已添加");
+                }
+                else if (!isAdmin && existingMetaItem != null)
+                {
+                    Logger.Info("用户非管理员，移除查询元数据菜单");
+                    _contextMenu.Items.Remove(existingMetaItem);
+                    Logger.Info("查询元数据菜单已移除");
+                }
+                else
+                {
+                    Logger.Info("菜单状态无需变更");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"更新菜单失败: {ex.Message}");
+            }
         }
 
         public void Dispose()

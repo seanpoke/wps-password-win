@@ -80,7 +80,7 @@ namespace PasswordManager.Utils
         /// <summary>
         /// 保存用户信息到本地存储
         /// </summary>
-        public static void SaveUserInfo(string username, string name, string token)
+        public static void SaveUserInfo(string username, string name, string role, string token)
         {
             try
             {
@@ -88,6 +88,7 @@ namespace PasswordManager.Utils
                 {
                     username = username,
                     name = name,
+                    role = role,
                     token = Encrypt(token),
                     lastLoginTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
                 };
@@ -104,7 +105,7 @@ namespace PasswordManager.Utils
         /// <summary>
         /// 从本地存储读取用户信息
         /// </summary>
-        public static (string username, string name, string token) LoadUserInfo()
+        public static (string username, string name, string role, string token) LoadUserInfo()
         {
             try
             {
@@ -115,9 +116,10 @@ namespace PasswordManager.Utils
 
                     string username = userData.GetProperty("username").GetString();
                     string name = userData.GetProperty("name").GetString();
+                    string role = userData.TryGetProperty("role", out var roleElement) ? roleElement.GetString() : null;
                     string token = Decrypt(userData.GetProperty("token").GetString());
 
-                    return (username, name, token);
+                    return (username, name, role, token);
                 }
             }
             catch (Exception ex)
@@ -125,7 +127,7 @@ namespace PasswordManager.Utils
                 Logger.Error($"读取用户信息失败: {ex.Message}");
             }
 
-            return (null, null, null);
+            return (null, null, null, null);
         }
 
         /// <summary>

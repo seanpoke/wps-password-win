@@ -849,7 +849,6 @@ namespace PasswordManager.UI
                 {
                     Logger.Info("权限更新成功");
                     ShowNotification("权限保存成功");
-                    this.Close();
                 }
                 else
                 {

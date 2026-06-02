@@ -301,9 +301,11 @@ namespace PasswordManager.UI
                     string token = response.data.GetProperty("token").GetString();
                     string account = response.data.GetProperty("account").GetString();
                     string name = response.data.GetProperty("name").GetString();
+                    string role = response.data.TryGetProperty("role", out JsonElement roleElement) ? roleElement.GetString() : null;
                     
                     GlobalState.Instance.Username = account;
                     GlobalState.Instance.Name = name;
+                    GlobalState.Instance.Role = role;
                     GlobalState.Instance.Token = token;
                     GlobalState.Instance.IsLoggedIn = true;
                     
@@ -314,7 +316,10 @@ namespace PasswordManager.UI
                     Logger.Info($"登录成功前IsLoggedIn状态: {GlobalState.Instance.IsLoggedIn}");
                     GlobalState.Instance.IsLoggedIn = true;
                     Logger.Info($"登录成功后IsLoggedIn状态: {GlobalState.Instance.IsLoggedIn}");
+                    Logger.Info($"用户角色: {GlobalState.Instance.Role}");
                     Logger.Info("用户登录成功，程序检测机制已开始运行");
+                    
+                    OnLoginSuccess();
                     
                     this.DialogResult = DialogResult.OK;
                     this.Close();
@@ -356,6 +361,7 @@ namespace PasswordManager.UI
                     Logger.Info("程序检测机制已暂停");
                     UpdateUIState();
                     Logger.Info("用户登出成功，资源已清理");
+                    OnLogoutSuccess();
                 }
                 else
                 {
@@ -364,6 +370,7 @@ namespace PasswordManager.UI
                     Logger.Error($"登出失败: {errorText}");
                     Logger.Info("程序检测机制已暂停");
                     UpdateUIState();
+                    OnLogoutSuccess();
                 }
             }
             catch (Exception ex)
@@ -373,6 +380,7 @@ namespace PasswordManager.UI
                 Logger.Error($"登出失败: {errorMessage}");
                 Logger.Info("程序检测机制已暂停");
                 UpdateUIState();
+                OnLogoutSuccess();
             }
         }
         
@@ -574,6 +582,35 @@ namespace PasswordManager.UI
             }
         }
         
+        public static event EventHandler LoginSuccess;
+        public static event EventHandler LogoutSuccess;
+
+        private static void OnLoginSuccess()
+        {
+            try
+            {
+                LoginSuccess?.Invoke(null, EventArgs.Empty);
+                Logger.Info("登录成功事件已触发");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"触发登录成功事件失败: {ex.Message}");
+            }
+        }
+
+        private static void OnLogoutSuccess()
+        {
+            try
+            {
+                LogoutSuccess?.Invoke(null, EventArgs.Empty);
+                Logger.Info("注销成功事件已触发");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"触发注销成功事件失败: {ex.Message}");
+            }
+        }
+
         public static bool IsLoggedIn()
         {
             try
@@ -648,9 +685,11 @@ namespace PasswordManager.UI
                     string token = response.data.GetProperty("token").GetString();
                     string account = response.data.GetProperty("account").GetString();
                     string name = response.data.GetProperty("name").GetString();
+                    string role = response.data.TryGetProperty("role", out JsonElement roleElement) ? roleElement.GetString() : null;
                     
                     GlobalState.Instance.Username = account;
                     GlobalState.Instance.Name = name;
+                    GlobalState.Instance.Role = role;
                     GlobalState.Instance.Token = token;
                     Logger.Info($"Token刷新成功，用户: {account}");
                     return true;
@@ -676,9 +715,11 @@ namespace PasswordManager.UI
                     string token = response.data.GetProperty("token").GetString();
                     string account = response.data.GetProperty("account").GetString();
                     string name = response.data.GetProperty("name").GetString();
+                    string role = response.data.TryGetProperty("role", out JsonElement roleElement) ? roleElement.GetString() : null;
                     
                     GlobalState.Instance.Username = account;
                     GlobalState.Instance.Name = name;
+                    GlobalState.Instance.Role = role;
                     GlobalState.Instance.Token = token;
                     
                     Logger.Info("心跳检测成功");

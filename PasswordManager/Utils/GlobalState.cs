@@ -15,6 +15,7 @@ namespace PasswordManager.Utils
         private int _serverPort;
         private string _username;
         private string _name;
+        private string _role;
         private string _token;
         private volatile bool _isLoggedIn;
         private string _publicKey;
@@ -48,11 +49,12 @@ namespace PasswordManager.Utils
                 }
                 
                 // 加载用户信息
-                var (username, name, token) = StorageManager.LoadUserInfo();
+                var (username, name, role, token) = StorageManager.LoadUserInfo();
                 if (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(token))
                 {
                     _username = username;
                     _name = name;
+                    _role = role;
                     _token = token;
                     _isLoggedIn = true;
                 }
@@ -218,6 +220,25 @@ namespace PasswordManager.Utils
             }
         }
         
+        // Role
+        public string Role
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return _role;
+                }
+            }
+            set
+            {
+                lock (_lock)
+                {
+                    _role = value;
+                }
+            }
+        }
+        
         // PublicKey
         public string PublicKey
         {
@@ -342,6 +363,7 @@ namespace PasswordManager.Utils
             {
                 _username = null;
                 _name = null;
+                _role = null;
                 _token = null;
                 _isLoggedIn = false;
                 // 保留配置信息（serverIp和serverPort）
@@ -358,7 +380,7 @@ namespace PasswordManager.Utils
             {
                 if (_isLoggedIn && !string.IsNullOrEmpty(_username) && !string.IsNullOrEmpty(_token))
                 {
-                    StorageManager.SaveUserInfo(_username, _name, _token);
+                    StorageManager.SaveUserInfo(_username, _name, _role, _token);
                 }
             }
         }
