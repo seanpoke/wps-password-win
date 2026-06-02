@@ -37,3 +37,6 @@ PasswordManager/build_log.txt
 
 # Trae AI 配置文件
 .trae/
+
+# 文档目录
+PasswordManager/doc/
