@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using PasswordManager.Utils;
 
@@ -119,27 +120,53 @@ namespace PasswordManager.UI
             }
         }
 
+        [DllImport("user32.dll")]
+        private static extern bool IsWindow(IntPtr hWnd);
+
         private void ShowMainWindow()
         {
             LoginForm existingForm = Application.OpenForms.OfType<LoginForm>().FirstOrDefault();
-            if (existingForm != null && !existingForm.IsDisposed)
+            
+            bool isFormValid = existingForm != null && !existingForm.IsDisposed && IsWindow(existingForm.Handle);
+            
+            if (isFormValid)
             {
-                existingForm.Activate();
-                if (existingForm.WindowState == FormWindowState.Minimized)
+                try
                 {
-                    existingForm.WindowState = FormWindowState.Normal;
+                    existingForm.Activate();
+                    if (existingForm.WindowState == FormWindowState.Minimized)
+                    {
+                        existingForm.WindowState = FormWindowState.Normal;
+                    }
+                    existingForm.Visible = true;
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"激活现有窗口失败: {ex.Message}");
+                    isFormValid = false;
                 }
             }
-            else
+            
+            if (existingForm != null && !existingForm.IsDisposed)
             {
-                _loginForm = new LoginForm();
-                _loginForm.StartPosition = FormStartPosition.CenterScreen;
-                _loginForm.FormClosed += (sender, e) =>
+                try
                 {
-                    _loginForm = null;
-                };
-                _loginForm.Show();
+                    existingForm.Close();
+                    existingForm.Dispose();
+                }
+                catch
+                {
+                }
             }
+            
+            _loginForm = new LoginForm();
+            _loginForm.StartPosition = FormStartPosition.CenterScreen;
+            _loginForm.FormClosed += (sender, e) =>
+            {
+                _loginForm = null;
+            };
+            _loginForm.Show();
         }
 
         public void ShowBalloonTip(string title, string message, ToolTipIcon icon = ToolTipIcon.Info)
