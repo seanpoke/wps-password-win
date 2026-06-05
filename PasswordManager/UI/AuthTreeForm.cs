@@ -36,8 +36,6 @@ namespace PasswordManager.UI
         private Label _deptCountLabel;
         private Label _empCountLabel;
 
-        private Button _confirmButton;
-        private Button _cancelButton;
         private Button _saveButton;
         private Button _resetButton;
 
@@ -342,33 +340,7 @@ namespace PasswordManager.UI
             _rightPanel.Controls.Add(_empCountLabel);
             _rightPanel.Controls.Add(_selectedEmpListBox);
 
-            _confirmButton = new Button
-            {
-                Text = "确定",
-                Font = boldFont9,
-                ForeColor = Color.White,
-                BackColor = Color.FromArgb(0, 120, 212),
-                Size = new Size(buttonWidth, buttonHeight),
-                Location = new Point(windowWidth - buttonWidth * 2 - buttonSpacing - bottomMargin - (int)(10 * dpiScale), windowHeight - buttonHeight - bottomMargin),
-                FlatStyle = FlatStyle.Flat,
-                Cursor = Cursors.Hand
-            };
-            _confirmButton.FlatAppearance.BorderSize = 0;
-            _confirmButton.Click += ConfirmButton_Click;
-
-            _cancelButton = new Button
-            {
-                Text = "取消",
-                Font = boldFont9,
-                ForeColor = Color.Black,
-                BackColor = Color.FromArgb(238, 238, 238),
-                Size = new Size(buttonWidth, buttonHeight),
-                Location = new Point(windowWidth - buttonWidth - bottomMargin - (int)(10 * dpiScale), windowHeight - buttonHeight - bottomMargin),
-                FlatStyle = FlatStyle.Flat,
-                Cursor = Cursors.Hand
-            };
-            _cancelButton.FlatAppearance.BorderSize = 0;
-            _cancelButton.Click += (sender, e) => this.Close();
+            
 
             _loadingPanel = new Panel
             {
@@ -405,13 +377,8 @@ namespace PasswordManager.UI
 
             this.Controls.Add(_leftPanel);
             this.Controls.Add(_rightPanel);
-            this.Controls.Add(_confirmButton);
-            this.Controls.Add(_cancelButton);
-
             _leftPanel.Visible = false;
             _rightPanel.Visible = false;
-            _confirmButton.Visible = false;
-            _cancelButton.Visible = false;
             _saveButton.Visible = false;
             _resetButton.Visible = false;
         }
@@ -821,52 +788,6 @@ namespace PasswordManager.UI
             return null;
         }
 
-        private async void ConfirmButton_Click(object sender, EventArgs e)
-        {
-            try
-            {
-                _confirmButton.Enabled = false;
-                
-                var accountDnList = _selectedEmps.Select(emp => emp.dn).ToList();
-                var deptDnList = _selectedDepts.Select(dept => dept.dn).ToList();
-
-                Logger.Info($"准备保存权限，部门数: {deptDnList.Count}，员工数: {accountDnList.Count}");
-
-                var requestData = new
-                {
-                    docId = _docId,
-                    accountDnList = accountDnList,
-                    deptDnList = deptDnList
-                };
-
-                var response = await _httpRequestService.PostAsync<object>(
-                    ApiRoutes.DocAuthUpdate,
-                    requestData,
-                    token: GlobalState.Instance.Token
-                );
-
-                if (response != null && response.status == 200)
-                {
-                    Logger.Info("权限更新成功");
-                    ShowNotification("权限保存成功");
-                }
-                else
-                {
-                    Logger.Warning($"权限更新失败: {response?.message ?? "未知错误"}");
-                    ShowNotification($"保存失败: {response?.message ?? "未知错误"}");
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"保存权限时出错: {ex.Message}");
-                ShowNotification($"保存失败: {ex.Message}");
-            }
-            finally
-            {
-                _confirmButton.Enabled = true;
-            }
-        }
-
         private void ResetButton_Click(object sender, EventArgs e)
         {
             try
@@ -980,8 +901,6 @@ namespace PasswordManager.UI
                     _loadingPanel.Visible = false;
                     _leftPanel.Visible = true;
                     _rightPanel.Visible = true;
-                    _confirmButton.Visible = true;
-                    _cancelButton.Visible = true;
                     _saveButton.Visible = true;
                     _resetButton.Visible = true;
                 }

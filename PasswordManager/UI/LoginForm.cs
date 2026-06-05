@@ -481,10 +481,8 @@ namespace PasswordManager.UI
 
         private void LoginForm_Resize(object sender, EventArgs e)
         {
-            if (this.WindowState == FormWindowState.Minimized && !this.Modal)
-            {
-                this.Hide();
-            }
+            // 移除自动隐藏功能，避免窗体无法显示的问题
+            // 改为只保留最小化到任务栏的默认行为
         }
         
         private static async Task<(dynamic, string)> requestHandler(HttpMethod method, string url, string content = null)

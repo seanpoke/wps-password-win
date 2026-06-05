@@ -122,51 +122,122 @@ namespace PasswordManager.UI
 
         [DllImport("user32.dll")]
         private static extern bool IsWindow(IntPtr hWnd);
+        
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+        
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+        
+        [DllImport("user32.dll")]
+        private static extern bool IsIconic(IntPtr hWnd);
+        
+        private const int SW_RESTORE = 9;
+        private const int SW_SHOW = 5;
 
         private void ShowMainWindow()
         {
-            LoginForm existingForm = Application.OpenForms.OfType<LoginForm>().FirstOrDefault();
-            
-            bool isFormValid = existingForm != null && !existingForm.IsDisposed && IsWindow(existingForm.Handle);
-            
-            if (isFormValid)
+            try
             {
-                try
+                LoginForm existingForm = null;
+                
+                // 首先尝试通过 _loginForm 引用查找
+                if (_loginForm != null && !_loginForm.IsDisposed)
                 {
-                    existingForm.Activate();
-                    if (existingForm.WindowState == FormWindowState.Minimized)
+                    existingForm = _loginForm;
+                }
+                
+                // 如果 _loginForm 无效，尝试从 Application.OpenForms 查找
+                if (existingForm == null || existingForm.IsDisposed)
+                {
+                    existingForm = Application.OpenForms.OfType<LoginForm>().FirstOrDefault();
+                }
+                
+                bool isFormValid = existingForm != null && !existingForm.IsDisposed;
+                
+                if (isFormValid)
+                {
+                    try
                     {
-                        existingForm.WindowState = FormWindowState.Normal;
+                        Logger.Info($"找到现有窗体，尝试激活");
+                        
+                        // 使用 Win32 API 确保窗体显示和激活
+                        IntPtr handle = existingForm.Handle;
+                        
+                        // 如果窗体是最小化的，先恢复
+                        if (IsIconic(handle))
+                        {
+                            ShowWindow(handle, SW_RESTORE);
+                        }
+                        
+                        // 确保窗体可见
+                        existingForm.Visible = true;
+                        existingForm.Show();
+                        
+                        // 激活并置顶
+                        SetForegroundWindow(handle);
+                        existingForm.Activate();
+                        existingForm.BringToFront();
+                        
+                        // 恢复正常窗口状态
+                        if (existingForm.WindowState == FormWindowState.Minimized)
+                        {
+                            existingForm.WindowState = FormWindowState.Normal;
+                        }
+                        
+                        Logger.Info("窗体激活成功");
+                        return;
                     }
-                    existingForm.Visible = true;
-                    return;
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"激活现有窗口失败: {ex.Message}");
+                        isFormValid = false;
+                    }
                 }
-                catch (Exception ex)
+                
+                // 清理旧窗体
+                if (existingForm != null && !existingForm.IsDisposed)
                 {
-                    Logger.Error($"激活现有窗口失败: {ex.Message}");
-                    isFormValid = false;
+                    try
+                    {
+                        Logger.Info("清理旧窗体");
+                        existingForm.Close();
+                        existingForm.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"清理旧窗体失败: {ex.Message}");
+                    }
                 }
+                
+                // 创建新窗体
+                Logger.Info("创建新窗体");
+                _loginForm = new LoginForm();
+                _loginForm.StartPosition = FormStartPosition.CenterScreen;
+                _loginForm.FormClosed += (sender, e) =>
+                {
+                    Logger.Info("窗体已关闭");
+                    _loginForm = null;
+                };
+                _loginForm.Show();
+                _loginForm.Activate();
+                Logger.Info("新窗体已显示");
             }
-            
-            if (existingForm != null && !existingForm.IsDisposed)
+            catch (Exception ex)
             {
+                Logger.Error($"显示主窗口失败: {ex.Message}");
+                // 发生严重错误时尝试直接创建新窗口
                 try
                 {
-                    existingForm.Close();
-                    existingForm.Dispose();
+                    _loginForm = new LoginForm();
+                    _loginForm.StartPosition = FormStartPosition.CenterScreen;
+                    _loginForm.Show();
                 }
-                catch
+                catch (Exception ex2)
                 {
+                    Logger.Error($"创建新窗口也失败: {ex2.Message}");
                 }
             }
-            
-            _loginForm = new LoginForm();
-            _loginForm.StartPosition = FormStartPosition.CenterScreen;
-            _loginForm.FormClosed += (sender, e) =>
-            {
-                _loginForm = null;
-            };
-            _loginForm.Show();
         }
 
         public void ShowBalloonTip(string title, string message, ToolTipIcon icon = ToolTipIcon.Info)
