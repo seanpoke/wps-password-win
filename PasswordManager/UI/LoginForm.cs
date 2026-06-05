@@ -363,6 +363,22 @@ namespace PasswordManager.UI
             
             try
             {
+                if (Program.IsWpsProcessRunning())
+                {
+                    DialogResult result = MessageBox.Show(
+                        "检测到wps正在运行，建议先关闭wps再执行注销，否则有丢失文件元数据的风险，是否强制注销",
+                        "提示",
+                        MessageBoxButtons.OKCancel,
+                        MessageBoxIcon.Warning,
+                        MessageBoxDefaultButton.Button2);
+                    
+                    if (result == DialogResult.Cancel)
+                    {
+                        _loginButton.Enabled = true;
+                        return;
+                    }
+                }
+                
                 GlobalState.Instance.IsLoggedIn = false;
                 
                 var (logoutSuccess, errorMessage) = await Logout();

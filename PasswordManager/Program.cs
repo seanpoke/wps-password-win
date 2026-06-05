@@ -1109,7 +1109,7 @@ namespace PasswordManager
         }
 
         // 检查WPS进程是否正在运行（仅检测有可见窗口的进程）
-        private static bool IsWpsProcessRunning()
+        public static bool IsWpsProcessRunning()
         {
             try
             {
