@@ -35,7 +35,8 @@ namespace PasswordManager.UI
         {
             if (!string.IsNullOrEmpty(GlobalState.Instance.ServerIp))
             {
-                _domainTextBox.Text = GlobalState.Instance.ServerIp;
+                string protocol = GlobalState.Instance.Protocol;
+                _domainTextBox.Text = $"{protocol}://{GlobalState.Instance.ServerIp}";
             }
             if (GlobalState.Instance.ServerPort > 0)
             {
@@ -278,7 +279,7 @@ namespace PasswordManager.UI
                 return;
             }
             
-            if (string.IsNullOrEmpty(port) || !int.TryParse(port, out _))
+            if (string.IsNullOrEmpty(port) || !int.TryParse(port, out int serverPort))
             {
                 _errorLabel.Text = "请输入有效的端口号";
                 return;
@@ -288,8 +289,20 @@ namespace PasswordManager.UI
             
             try
             {
-                GlobalState.Instance.ServerIp = domain;
-                GlobalState.Instance.ServerPort = int.Parse(port);
+                string cleanDomain = domain.Replace("http://", "", StringComparison.OrdinalIgnoreCase)
+                                          .Replace("https://", "", StringComparison.OrdinalIgnoreCase);
+                
+                int slashIndex = cleanDomain.IndexOf('/');
+                if (slashIndex > 0)
+                {
+                    cleanDomain = cleanDomain.Substring(0, slashIndex);
+                }
+                
+                string protocol = UrlParser.ExtractProtocol(domain);
+                
+                GlobalState.Instance.ServerIp = cleanDomain;
+                GlobalState.Instance.ServerPort = serverPort;
+                GlobalState.Instance.Protocol = protocol;
                 
                 var loginData = new { account = username, password = password };
                 string jsonContent = JsonSerializer.Serialize(loginData);
@@ -476,7 +489,7 @@ namespace PasswordManager.UI
         
         private static async Task<(dynamic, string)> requestHandler(HttpMethod method, string url, string content = null)
         {
-            using var httpClient = new HttpClient();
+            using HttpClient httpClient = DynamicHttpClientManager.CreateClientWithTimeout(TimeSpan.FromSeconds(5));
             
             try
             {
@@ -491,7 +504,6 @@ namespace PasswordManager.UI
                     Logger.Info($"完整请求地址: {fullUrl}");
                 }
                 
-                httpClient.Timeout = TimeSpan.FromSeconds(5);
                 Logger.Info("设置请求超时时间为5秒");
                 
                 var request = new HttpRequestMessage(method, fullUrl);

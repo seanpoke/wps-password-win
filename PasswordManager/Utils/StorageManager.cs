@@ -28,14 +28,15 @@ namespace PasswordManager.Utils
         /// <summary>
         /// 保存配置信息到本地存储
         /// </summary>
-        public static void SaveConfig(string serverIp, int serverPort)
+        public static void SaveConfig(string serverIp, int serverPort, string protocol = "http")
         {
             try
             {
                 var configData = new
                 {
                     serverIp = serverIp,
-                    serverPort = serverPort
+                    serverPort = serverPort,
+                    protocol = protocol
                 };
 
                 string jsonContent = JsonSerializer.Serialize(configData);
@@ -50,7 +51,7 @@ namespace PasswordManager.Utils
         /// <summary>
         /// 从本地存储读取配置信息
         /// </summary>
-        public static (string serverIp, int serverPort) LoadConfig()
+        public static (string serverIp, int serverPort, string protocol) LoadConfig()
         {
             try
             {
@@ -61,8 +62,9 @@ namespace PasswordManager.Utils
 
                     string serverIp = configData.GetProperty("serverIp").GetString();
                     int serverPort = configData.GetProperty("serverPort").GetInt32();
+                    string protocol = configData.TryGetProperty("protocol", out var protocolElement) ? protocolElement.GetString() : "http";
 
-                    return (serverIp, serverPort);
+                    return (serverIp, serverPort, protocol);
                 }
             }
             catch (Exception ex)
@@ -70,7 +72,7 @@ namespace PasswordManager.Utils
                 Logger.Error($"读取配置信息失败: {ex.Message}");
             }
 
-            return (null, 0);
+            return (null, 0, "http");
         }
 
         #endregion

@@ -13,6 +13,7 @@ namespace PasswordManager.Utils
         
         private string _serverIp;
         private int _serverPort;
+        private string _protocol;
         private string _username;
         private string _name;
         private string _role;
@@ -41,11 +42,12 @@ namespace PasswordManager.Utils
             try
             {
                 // 加载配置信息
-                var (serverIp, serverPort) = StorageManager.LoadConfig();
+                var (serverIp, serverPort, protocol) = StorageManager.LoadConfig();
                 if (!string.IsNullOrEmpty(serverIp) && serverPort > 0)
                 {
                     _serverIp = serverIp;
                     _serverPort = serverPort;
+                    _protocol = string.IsNullOrEmpty(protocol) ? "http" : protocol;
                 }
                 
                 // 加载用户信息
@@ -140,6 +142,25 @@ namespace PasswordManager.Utils
                 lock (_lock)
                 {
                     _serverPort = value;
+                }
+            }
+        }
+        
+        // 协议类型 (http/https)
+        public string Protocol
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return _protocol ?? "http";
+                }
+            }
+            set
+            {
+                lock (_lock)
+                {
+                    _protocol = value;
                 }
             }
         }
@@ -352,7 +373,8 @@ namespace PasswordManager.Utils
                 {
                     throw new InvalidOperationException("服务器IP和端口未设置");
                 }
-                return $"http://{_serverIp}:{_serverPort}";
+                string protocol = _protocol ?? "http";
+                return $"{protocol}://{_serverIp}:{_serverPort}";
             }
         }
         
@@ -394,7 +416,7 @@ namespace PasswordManager.Utils
             {
                 if (!string.IsNullOrEmpty(_serverIp) && _serverPort > 0)
                 {
-                    StorageManager.SaveConfig(_serverIp, _serverPort);
+                    StorageManager.SaveConfig(_serverIp, _serverPort, _protocol);
                 }
             }
         }

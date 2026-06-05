@@ -14,12 +14,9 @@ namespace PasswordManager.Services.Request
     /// </summary>
     public class HttpRequestService
     {
-        private static readonly HttpClient _httpClient;
-        
-        static HttpRequestService()
+        private HttpClient GetHttpClient()
         {
-            _httpClient = new HttpClient();
-            _httpClient.Timeout = TimeSpan.FromSeconds(30);
+            return DynamicHttpClientManager.GetSharedClient();
         }
         
         /// <summary>
@@ -72,7 +69,7 @@ namespace PasswordManager.Services.Request
                 }
                 
                 Logger.Info($"发送GET请求: {url}");
-                var response = await _httpClient.SendAsync(request);
+                var response = await GetHttpClient().SendAsync(request);
                 
                 string responseContent = await response.Content.ReadAsStringAsync();
                 Logger.Debug($"GET请求响应: {responseContent}");
@@ -121,7 +118,7 @@ namespace PasswordManager.Services.Request
                 }
                 
                 Logger.Info($"发送POST请求: {url}");
-                var response = await _httpClient.SendAsync(request);
+                var response = await GetHttpClient().SendAsync(request);
                 
                 string responseContent = await response.Content.ReadAsStringAsync();
                 Logger.Debug($"POST请求响应: {responseContent}");
@@ -170,7 +167,7 @@ namespace PasswordManager.Services.Request
                 }
                 
                 Logger.Info($"发送PUT请求: {url}");
-                var response = await _httpClient.SendAsync(request);
+                var response = await GetHttpClient().SendAsync(request);
                 
                 string responseContent = await response.Content.ReadAsStringAsync();
                 Logger.Debug($"PUT请求响应: {responseContent}");
