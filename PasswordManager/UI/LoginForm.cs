@@ -33,7 +33,11 @@ namespace PasswordManager.UI
         
         private void LoadSavedInfo()
         {
-            if (!string.IsNullOrEmpty(GlobalState.Instance.ServerIp))
+            if (!string.IsNullOrEmpty(GlobalState.Instance.RawDomain))
+            {
+                _domainTextBox.Text = GlobalState.Instance.RawDomain;
+            }
+            else if (!string.IsNullOrEmpty(GlobalState.Instance.ServerIp))
             {
                 string protocol = GlobalState.Instance.Protocol;
                 _domainTextBox.Text = $"{protocol}://{GlobalState.Instance.ServerIp}";
@@ -289,20 +293,14 @@ namespace PasswordManager.UI
             
             try
             {
-                string cleanDomain = domain.Replace("http://", "", StringComparison.OrdinalIgnoreCase)
-                                          .Replace("https://", "", StringComparison.OrdinalIgnoreCase);
-                
-                int slashIndex = cleanDomain.IndexOf('/');
-                if (slashIndex > 0)
-                {
-                    cleanDomain = cleanDomain.Substring(0, slashIndex);
-                }
-                
+                string cleanDomain = UrlParser.ExtractHost(domain);
+
                 string protocol = UrlParser.ExtractProtocol(domain);
-                
+
                 GlobalState.Instance.ServerIp = cleanDomain;
                 GlobalState.Instance.ServerPort = serverPort;
                 GlobalState.Instance.Protocol = protocol;
+                GlobalState.Instance.RawDomain = domain;
                 
                 var loginData = new { account = username, password = password };
                 string jsonContent = JsonSerializer.Serialize(loginData);

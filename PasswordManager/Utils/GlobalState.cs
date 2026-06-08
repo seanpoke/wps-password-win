@@ -14,6 +14,7 @@ namespace PasswordManager.Utils
         private string _serverIp;
         private int _serverPort;
         private string _protocol;
+        private string _rawDomain;
         private string _username;
         private string _name;
         private string _role;
@@ -42,12 +43,13 @@ namespace PasswordManager.Utils
             try
             {
                 // 加载配置信息
-                var (serverIp, serverPort, protocol) = StorageManager.LoadConfig();
+                var (serverIp, serverPort, protocol, rawDomain) = StorageManager.LoadConfig();
                 if (!string.IsNullOrEmpty(serverIp) && serverPort > 0)
                 {
                     _serverIp = serverIp;
                     _serverPort = serverPort;
-                    _protocol = string.IsNullOrEmpty(protocol) ? "http" : protocol;
+                    _protocol = string.IsNullOrEmpty(protocol) ? "https" : protocol;
+                    _rawDomain = rawDomain;
                 }
                 
                 // 加载用户信息
@@ -153,7 +155,7 @@ namespace PasswordManager.Utils
             {
                 lock (_lock)
                 {
-                    return _protocol ?? "http";
+                    return _protocol ?? "https";
                 }
             }
             set
@@ -161,6 +163,25 @@ namespace PasswordManager.Utils
                 lock (_lock)
                 {
                     _protocol = value;
+                }
+            }
+        }
+
+        // 用户原始输入的域名（trim 后，原样回显用）
+        public string RawDomain
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return _rawDomain;
+                }
+            }
+            set
+            {
+                lock (_lock)
+                {
+                    _rawDomain = value;
                 }
             }
         }
@@ -373,8 +394,8 @@ namespace PasswordManager.Utils
                 {
                     throw new InvalidOperationException("服务器IP和端口未设置");
                 }
-                string protocol = _protocol ?? "http";
-                return $"{protocol}://{_serverIp}:{_serverPort}";
+                string proto = _protocol ?? "https";
+                return $"{proto}://{_serverIp}:{_serverPort}";
             }
         }
         
@@ -416,7 +437,7 @@ namespace PasswordManager.Utils
             {
                 if (!string.IsNullOrEmpty(_serverIp) && _serverPort > 0)
                 {
-                    StorageManager.SaveConfig(_serverIp, _serverPort, _protocol);
+                    StorageManager.SaveConfig(_serverIp, _serverPort, _protocol, _rawDomain);
                 }
             }
         }

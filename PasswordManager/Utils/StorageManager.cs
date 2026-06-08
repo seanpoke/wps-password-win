@@ -28,7 +28,7 @@ namespace PasswordManager.Utils
         /// <summary>
         /// 保存配置信息到本地存储
         /// </summary>
-        public static void SaveConfig(string serverIp, int serverPort, string protocol = "http")
+        public static void SaveConfig(string serverIp, int serverPort, string protocol = "http", string rawDomain = null)
         {
             try
             {
@@ -36,7 +36,8 @@ namespace PasswordManager.Utils
                 {
                     serverIp = serverIp,
                     serverPort = serverPort,
-                    protocol = protocol
+                    protocol = protocol,
+                    rawDomain = rawDomain
                 };
 
                 string jsonContent = JsonSerializer.Serialize(configData);
@@ -51,7 +52,7 @@ namespace PasswordManager.Utils
         /// <summary>
         /// 从本地存储读取配置信息
         /// </summary>
-        public static (string serverIp, int serverPort, string protocol) LoadConfig()
+        public static (string serverIp, int serverPort, string protocol, string rawDomain) LoadConfig()
         {
             try
             {
@@ -63,8 +64,11 @@ namespace PasswordManager.Utils
                     string serverIp = configData.GetProperty("serverIp").GetString();
                     int serverPort = configData.GetProperty("serverPort").GetInt32();
                     string protocol = configData.TryGetProperty("protocol", out var protocolElement) ? protocolElement.GetString() : "http";
+                    string rawDomain = configData.TryGetProperty("rawDomain", out var rawElement) && rawElement.ValueKind == JsonValueKind.String && !string.IsNullOrEmpty(rawElement.GetString())
+                        ? rawElement.GetString()
+                        : null;
 
-                    return (serverIp, serverPort, protocol);
+                    return (serverIp, serverPort, protocol, rawDomain);
                 }
             }
             catch (Exception ex)
@@ -72,7 +76,7 @@ namespace PasswordManager.Utils
                 Logger.Error($"读取配置信息失败: {ex.Message}");
             }
 
-            return (null, 0, "http");
+            return (null, 0, "http", null);
         }
 
         #endregion

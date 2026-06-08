@@ -11,7 +11,7 @@ namespace PasswordManager.Utils
             if (!address.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
                 !address.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             {
-                address = "http://" + address;
+                address = "https://" + address;
             }
 
             if (Uri.TryCreate(address, UriKind.Absolute, out Uri validatedUri))
@@ -25,13 +25,18 @@ namespace PasswordManager.Utils
         public static string ExtractProtocol(string userInput)
         {
             string address = userInput.Trim();
-            
+
             if (address.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             {
                 return "https";
             }
-            
-            return "http";
+
+            if (address.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+            {
+                return "http";
+            }
+
+            return "https";
         }
 
         public static string ExtractHost(string userInput)
