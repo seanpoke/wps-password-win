@@ -283,6 +283,12 @@ namespace PasswordManager.UI
                 return;
             }
             
+            if (domain.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+            {
+                _errorLabel.Text = "不支持http协议，请使用https";
+                return;
+            }
+            
             if (string.IsNullOrEmpty(port) || !int.TryParse(port, out int serverPort))
             {
                 _errorLabel.Text = "请输入有效的端口号";
