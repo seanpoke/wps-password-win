@@ -175,7 +175,7 @@ namespace PasswordManager.UI
             
             _portTextBox = new TextBox
             {
-                Text = "8081",
+                Text = "8443",
                 Font = inputFont,
                 BorderStyle = BorderStyle.FixedSingle,
                 Size = new Size(120, inputHeight),
