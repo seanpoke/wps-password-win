@@ -1,10 +1,20 @@
 name: Build and Package
 
 on:
+  # 保留原有的 push/pull_request 触发方式
   push:
     branches: [ main, develop ]
   pull_request:
     branches: [ main, develop ]
+  # 新增手动触发（核心！）
+  workflow_dispatch:
+    # 可选：手动触发时可配置输入参数，这里给你加个示例
+    inputs:
+      build_reason:
+        description: '触发原因（手动构建用）'
+        required: false
+        default: '手动触发构建'
+        type: string
 
 jobs:
   build-windows:
