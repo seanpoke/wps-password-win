@@ -1,6 +1,7 @@
 using System;
 using System.Windows.Forms;
 using System.Drawing;
+using System.Runtime.InteropServices;
 
 namespace PasswordManager.UI
 {
@@ -10,12 +11,23 @@ namespace PasswordManager.UI
         private TextBox _passwordTextBox;
         private Button _confirmButton;
         private Button _cancelButton;
+        private System.Windows.Forms.Timer _topmostTimer;
 
         public string InputPassword { get; private set; }
 
+        [DllImport("user32.dll")]
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+        private const int HWND_TOPMOST = -1;
+        private const uint SWP_NOSIZE = 0x0001;
+        private const uint SWP_NOMOVE = 0x0002;
+        private const uint SWP_NOACTIVATE = 0x0010;
+
         public PasswordInputForm(string documentName)
         {
+            this.TopMost = true;
             InitializeComponent(documentName);
+            InitializeTopmostTimer();
         }
 
         private void InitializeComponent(string documentName)
@@ -99,6 +111,39 @@ namespace PasswordManager.UI
 
             this.AcceptButton = _confirmButton;
             this.CancelButton = _cancelButton;
+        }
+
+        private void InitializeTopmostTimer()
+        {
+            _topmostTimer = new System.Windows.Forms.Timer
+            {
+                Interval = 200
+            };
+            _topmostTimer.Tick += (sender, e) =>
+            {
+                if (!this.IsDisposed && this.Visible)
+                {
+                    SetWindowPos(this.Handle, (IntPtr)HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+                }
+            };
+            _topmostTimer.Start();
+        }
+
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                CreateParams cp = base.CreateParams;
+                cp.ExStyle |= 0x00000008;
+                return cp;
+            }
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            _topmostTimer?.Stop();
+            _topmostTimer?.Dispose();
+            base.OnFormClosing(e);
         }
 
         private void PasswordTextBox_KeyDown(object sender, KeyEventArgs e)
