@@ -799,36 +799,71 @@ namespace PasswordManager
                                                 
                                                 // 获取元数据
                                                 var fileMeta = FileMetaFactory.Instance.GetFileMeta(documentPath);
+                                                string password = null;
+                                                bool dialogClosed = false;
+                                                bool userCancelled = false;
+                                                string documentName = System.IO.Path.GetFileName(documentPath);
+
                                                 if (fileMeta != null && !string.IsNullOrEmpty(fileMeta.CurrentPassword))
                                                 {
-                                                    string password = fileMeta.CurrentPassword;
+                                                    password = fileMeta.CurrentPassword;
                                                     Logger.Info($"从FileMetaFactory中获取到密码,password={password}");
+                                                }
 
-                                                    bool success = autoFiller.FillDecryptPassword(password);
-                                                    if (success)
+                                                while (!dialogClosed && !userCancelled)
+                                                {
+                                                    if (string.IsNullOrEmpty(password))
                                                     {
-                                                        Logger.Info("解密密码自动填充成功");
+                                                        Logger.Warning("未找到文件元数据或密码为空，弹出密码输入框");
+
+                                                        using (var passwordInputForm = new PasswordInputForm(documentName))
+                                                        {
+                                                            passwordInputForm.TopMost = true;
+                                                            DialogResult result = passwordInputForm.ShowDialog();
+                                                            
+                                                            if (result == DialogResult.OK && !string.IsNullOrEmpty(passwordInputForm.InputPassword))
+                                                            {
+                                                                password = passwordInputForm.InputPassword;
+                                                                Logger.Info($"用户输入了密码，准备填充");
+
+                                                                if (fileMeta != null)
+                                                                {
+                                                                    FileMetaFactory.Instance.UpdatePendingPassword(documentPath, password);
+                                                                }
+                                                            }
+                                                            else
+                                                            {
+                                                                Logger.Info("用户取消了密码输入");
+                                                                userCancelled = true;
+                                                                break;
+                                                            }
+                                                        }
+                                                    }
+
+                                                    if (!string.IsNullOrEmpty(password))
+                                                    {
+                                                        bool success = autoFiller.FillDecryptPassword(password);
+                                                        if (success)
+                                                        {
+                                                            Logger.Info("解密密码自动填充成功");
+                                                        }
+                                                        else
+                                                        {
+                                                            Logger.Warning("自动填充失败，将弹出密码输入框让用户重新输入");
+                                                        }
+                                                    }
+
+                                                    dialogClosed = WaitForDialogClose(decryptDialog, 2500);
+                                                    if (dialogClosed)
+                                                    {
+                                                        Logger.Info("对话框已关闭，重置自动填充尝试记录");
+                                                        AutoFillAttemptManager.Instance.ResetAttempt(documentPath);
                                                     }
                                                     else
                                                     {
-                                                        Logger.Warning("自动填充失败");
+                                                        Logger.Warning("对话框未关闭（可能密码错误），弹出密码输入框让用户重新输入");
+                                                        password = null;
                                                     }
-                                                }
-                                                else
-                                                {
-                                                    Logger.Warning("未找到文件元数据或密码为空");
-                                                }
-                                                
-                                                // 等待对话框关闭，只有当对话框真正关闭时才重置尝试记录
-                                                bool dialogClosed = WaitForDialogClose(decryptDialog, 2500);
-                                                if (dialogClosed)
-                                                {
-                                                    Logger.Info("对话框已关闭，重置自动填充尝试记录");
-                                                    AutoFillAttemptManager.Instance.ResetAttempt(documentPath);
-                                                }
-                                                else
-                                                {
-                                                    Logger.Warning("对话框未关闭（可能密码错误），保留自动填充尝试记录");
                                                 }
                                             }
                                             else

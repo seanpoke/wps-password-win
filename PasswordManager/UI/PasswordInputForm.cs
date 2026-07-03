@@ -1,0 +1,138 @@
+using System;
+using System.Windows.Forms;
+using System.Drawing;
+
+namespace PasswordManager.UI
+{
+    public class PasswordInputForm : Form
+    {
+        private Label _promptLabel;
+        private TextBox _passwordTextBox;
+        private Button _confirmButton;
+        private Button _cancelButton;
+
+        public string InputPassword { get; private set; }
+
+        public PasswordInputForm(string documentName)
+        {
+            InitializeComponent(documentName);
+        }
+
+        private void InitializeComponent(string documentName)
+        {
+            this.Text = "输入密码";
+            this.FormBorderStyle = FormBorderStyle.FixedDialog;
+            this.MaximizeBox = false;
+            this.MinimizeBox = false;
+            this.StartPosition = FormStartPosition.CenterScreen;
+            this.BackColor = Color.White;
+            this.AutoScaleMode = AutoScaleMode.Font;
+
+            Font labelFont = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular);
+            Font inputFont = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular);
+            Font buttonFont = new Font("Microsoft YaHei UI", 9F, FontStyle.Bold);
+
+            int controlWidth = 280;
+            int inputHeight = 28;
+            int buttonHeight = 32;
+            int controlGap = 20;
+
+            int startY = 30;
+
+            _promptLabel = new Label
+            {
+                Text = $"文件 \"{documentName}\" 需要密码才能打开，请输入密码：",
+                Font = labelFont,
+                ForeColor = Color.Black,
+                AutoSize = true,
+                Location = new Point(20, startY)
+            };
+
+            startY += _promptLabel.Height + controlGap;
+
+            _passwordTextBox = new TextBox
+            {
+                Size = new Size(controlWidth, inputHeight),
+                Location = new Point(20, startY),
+                Font = inputFont,
+                PasswordChar = '*',
+                PlaceholderText = "请输入密码"
+            };
+            _passwordTextBox.KeyDown += PasswordTextBox_KeyDown;
+
+            startY += inputHeight + controlGap;
+
+            _confirmButton = new Button
+            {
+                Text = "确认",
+                Size = new Size(130, buttonHeight),
+                Location = new Point(20, startY),
+                Font = buttonFont,
+                ForeColor = Color.White,
+                BackColor = Color.FromArgb(0, 122, 204),
+                FlatStyle = FlatStyle.Flat
+            };
+            _confirmButton.FlatAppearance.BorderSize = 0;
+            _confirmButton.Click += ConfirmButton_Click;
+
+            _cancelButton = new Button
+            {
+                Text = "取消",
+                Size = new Size(130, buttonHeight),
+                Location = new Point(170, startY),
+                Font = buttonFont,
+                ForeColor = Color.Black,
+                BackColor = Color.FromArgb(220, 220, 220),
+                FlatStyle = FlatStyle.Flat
+            };
+            _cancelButton.FlatAppearance.BorderSize = 0;
+            _cancelButton.Click += CancelButton_Click;
+
+            startY += buttonHeight + 30;
+
+            this.ClientSize = new Size(controlWidth + 40, startY);
+
+            this.Controls.Add(_promptLabel);
+            this.Controls.Add(_passwordTextBox);
+            this.Controls.Add(_confirmButton);
+            this.Controls.Add(_cancelButton);
+
+            this.AcceptButton = _confirmButton;
+            this.CancelButton = _cancelButton;
+        }
+
+        private void PasswordTextBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter)
+            {
+                ConfirmButton_Click(sender, e);
+            }
+            else if (e.KeyCode == Keys.Escape)
+            {
+                CancelButton_Click(sender, e);
+            }
+        }
+
+        private void ConfirmButton_Click(object sender, EventArgs e)
+        {
+            if (!string.IsNullOrEmpty(_passwordTextBox.Text.Trim()))
+            {
+                InputPassword = _passwordTextBox.Text.Trim();
+                this.DialogResult = DialogResult.OK;
+                this.Close();
+            }
+            else
+            {
+                MessageBox.Show("请输入密码", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                _passwordTextBox.Focus();
+            }
+        }
+
+        private void CancelButton_Click(object sender, EventArgs e)
+        {
+            InputPassword = null;
+            this.DialogResult = DialogResult.Cancel;
+            this.Close();
+        }
+    }
+}
