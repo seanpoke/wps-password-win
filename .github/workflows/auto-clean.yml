@@ -14,38 +14,37 @@ jobs:
       - name: 安装依赖
         run: sudo apt-get update && sudo apt-get install -y jq
 
-      - name: 全仓库统一清理：仅保留所有工作流 最新5条成功记录
+      - name: 差异化清理：当前清理脚本保留2条，build.yml保留5条
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
+          CURRENT_FILE: "auto-clean.yml"
         run: |
           set -e
 
-          # ==============================================
-          # 规则：
-          # 1. 所有工作流
-          # 2. 失败/取消 全部删除
-          # 3. 成功记录 只保留最新5条，其余全部删除
-          # ==============================================
+          echo "===== 开始按规则清理工作流记录 ====="
+          
+          # 获取所有工作流的 id, name 和 path，用 tab 分隔
+          gh api "/repos/$REPO/actions/workflows" | jq -r '.workflows[] | "\(.id)\t\(.name)\t\(.path)"' | \
+            while IFS=$'\t' read -r WF_ID WF_NAME WF_PATH; do
+              
+              # 提取路径中的文件名 (例如从 .github/workflows/build.yml 提取出 build.yml)
+              WF_FILE=$(basename "$WF_PATH")
 
-          echo "===== 开始清理所有工作流 ====="
+              # 根据文件名动态决定保留多少条总记录（包括成功、失败等已结束状态）
+              if [ "$WF_FILE" = "$CURRENT_FILE" ]; then
+                KEEP_NUM=2
+                echo -e "\n🧹 发现清理脚本自身 [$WF_NAME] ($WF_FILE), 将保留最新 $KEEP_NUM 条历史记录"
+              else
+                KEEP_NUM=5
+                echo -e "\n📦 发现业务脚本 [$WF_NAME] ($WF_FILE), 将保留最新 $KEEP_NUM 条历史记录"
+              fi
 
-          # 1. 删除所有失败/取消的记录
-          echo "【1/2】删除所有失败、取消的记录"
-          gh api "/repos/$REPO/actions/runs?per_page=100" | \
-            jq -r '.workflow_runs[] | select(.conclusion == "failure" or .conclusion == "cancelled") | .id' | \
-            xargs -I{} sh -c 'echo "🗑️ 删除记录: {}" && gh api -X DELETE "/repos/$REPO/actions/runs/{}"'
-
-          # 2. 对每个工作流，成功记录只保留最新5条
-          echo -e "\n【2/2】所有工作流只保留最新5条成功记录"
-          gh api "/repos/$REPO/actions/workflows" | \
-            jq -r '.workflows[].id' | \
-            while read -r WF_ID; do
-              echo -e "\n处理工作流 ID: $WF_ID"
-              gh api "/repos/$REPO/actions/runs?workflow_id=$WF_ID&status=success&per_page=100" | \
-                jq -r '.workflow_runs | sort_by(.created_at) | reverse | .[5:] | .[].id' | \
-                xargs -I{} sh -c 'echo "🗑️ 删除旧成功记录: {}" && gh api -X DELETE "/repos/$REPO/actions/runs/{}"'
+              # 安全清理：获取该工作流所有已完成(completed)的记录，按时间从新到旧排序，切片丢弃最新的 KEEP_NUM 条，其余全部删除
+              gh api "/repos/$REPO/actions/workflows/$WF_ID/runs?status=completed&per_page=100" | \
+                jq -r --argjson keep "$KEEP_NUM" '.workflow_runs | sort_by(.created_at) | reverse | .[$keep:] | .[].id' | \
+                xargs -I{} sh -c 'echo "🗑️ 删除旧记录: {}" && gh api -X DELETE "/repos/$REPO/actions/runs/{}"'
+                
             done
 
           echo -e "\n✅ 全部清理完成！"
-          echo "📌 最终效果：所有工作流 → 仅保留最新5条成功记录"
