@@ -99,6 +99,7 @@ namespace PasswordManager
         private static Thread _filePathConsumerThread;
         private static volatile bool _isConsumerRunning = false;
         private static volatile string _lastPostedFilePath = null;
+        private static TraceEventSession _kernelSession = null;
 
         // 常量定义
         private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
@@ -212,8 +213,47 @@ namespace PasswordManager
                 trayIcon.Initialize();
                 trayIcon.ExitClicked += (sender, e) =>
                 {
-                    Logger.Info("用户点击退出");
+                    Logger.Info("用户点击退出，开始执行退出流程");
+                    
+                    GlobalState.Instance.IsExiting = true;
+                    Logger.Info("全局退出标志已设置");
+                    
+                    try
+                    {
+                        trayIcon.Dispose();
+                        Logger.Info("托盘图标已释放");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"释放托盘图标失败: {ex.Message}");
+                    }
+                    
+                    try
+                    {
+                        StopKernelFileListening();
+                        Logger.Info("内核文件监视器已停止");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"停止内核文件监视器失败: {ex.Message}");
+                    }
+                    
+                    try
+                    {
+                        StopFilePathConsumer();
+                        Logger.Info("文件路径消费者线程已停止");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"停止文件路径消费者线程失败: {ex.Message}");
+                    }
+                    
                     Application.Exit();
+                    Logger.Info("Application.Exit() 已调用");
+                    
+                    Thread.Sleep(500);
+                    
+                    Environment.Exit(0);
                 };
                 trayIcon.OpenFolderClicked += (sender, e) =>
                 {
@@ -561,7 +601,7 @@ namespace PasswordManager
                     string lastDialogTitle = string.Empty;
                     // 记录上一次显示悬浮按钮的对话框句柄
                     IntPtr lastShownDialog = IntPtr.Zero;
-                    while (true)
+                    while (!GlobalState.Instance.IsExiting)
                     {
                         try
                         {
@@ -605,10 +645,10 @@ namespace PasswordManager
                                         if (IsDocumentOpen(documentPath))
                                         {
                                             Logger.Info($"获取到文档路径: {documentPath}");
-                                            
+
                                             // 在文档真正打开后才初始化文件元数据
                                             TryInitializeFileMeta(documentPath);
-                                            
+
                                             // 注册文件特征（修改时间和哈希值）
                                             FileStateManager.RegisterFile(documentPath);
                                         }
@@ -790,85 +830,76 @@ namespace PasswordManager
                                                 continue;
                                             }
 
-                                            if (!AutoFillAttemptManager.Instance.HasAttempted(documentPath))
+                                            // 等待元数据初始化完成（最多等待5秒）
+                                            FileMetaFactory.Instance.WaitForInit(documentPath);
+                                            
+                                            // 获取元数据
+                                            var fileMeta = FileMetaFactory.Instance.GetFileMeta(documentPath);
+                                            string password = null;
+                                            bool dialogClosed = false;
+                                            bool userCancelled = false;
+                                            string documentName = System.IO.Path.GetFileName(documentPath);
+
+                                            if (fileMeta != null && !string.IsNullOrEmpty(fileMeta.CurrentPassword))
                                             {
-                                                AutoFillAttemptManager.Instance.MarkAttempted(documentPath);
-                                                
-                                                // 等待元数据初始化完成（最多等待5秒）
-                                                FileMetaFactory.Instance.WaitForInit(documentPath);
-                                                
-                                                // 获取元数据
-                                                var fileMeta = FileMetaFactory.Instance.GetFileMeta(documentPath);
-                                                string password = null;
-                                                bool dialogClosed = false;
-                                                bool userCancelled = false;
-                                                string documentName = System.IO.Path.GetFileName(documentPath);
+                                                password = fileMeta.CurrentPassword;
+                                                Logger.Info($"从FileMetaFactory中获取到密码,password={password}");
+                                            }
 
-                                                if (fileMeta != null && !string.IsNullOrEmpty(fileMeta.CurrentPassword))
+                                            while (!dialogClosed && !userCancelled)
+                                            {
+                                                if (string.IsNullOrEmpty(password))
                                                 {
-                                                    password = fileMeta.CurrentPassword;
-                                                    Logger.Info($"从FileMetaFactory中获取到密码,password={password}");
-                                                }
+                                                    Logger.Warning("未找到文件元数据或密码为空，弹出密码输入框");
 
-                                                while (!dialogClosed && !userCancelled)
-                                                {
-                                                    if (string.IsNullOrEmpty(password))
+                                                    using (var passwordInputForm = new PasswordInputForm(documentName))
                                                     {
-                                                        Logger.Warning("未找到文件元数据或密码为空，弹出密码输入框");
-
-                                                        using (var passwordInputForm = new PasswordInputForm(documentName))
+                                                        passwordInputForm.TopMost = true;
+                                                        DialogResult result = passwordInputForm.ShowDialog();
+                                                        
+                                                        if (result == DialogResult.OK && !string.IsNullOrEmpty(passwordInputForm.InputPassword))
                                                         {
-                                                            passwordInputForm.TopMost = true;
-                                                            DialogResult result = passwordInputForm.ShowDialog();
-                                                            
-                                                            if (result == DialogResult.OK && !string.IsNullOrEmpty(passwordInputForm.InputPassword))
-                                                            {
-                                                                password = passwordInputForm.InputPassword;
-                                                                Logger.Info($"用户输入了密码，准备填充");
+                                                            password = passwordInputForm.InputPassword;
+                                                            Logger.Info($"用户输入了密码，准备填充");
 
-                                                                if (fileMeta != null)
-                                                                {
-                                                                    FileMetaFactory.Instance.UpdatePendingPassword(documentPath, password);
-                                                                }
-                                                            }
-                                                            else
+                                                            if (fileMeta != null)
                                                             {
-                                                                Logger.Info("用户取消了密码输入");
-                                                                userCancelled = true;
-                                                                break;
+                                                                FileMetaFactory.Instance.UpdatePendingPassword(documentPath, password);
                                                             }
-                                                        }
-                                                    }
-
-                                                    if (!string.IsNullOrEmpty(password))
-                                                    {
-                                                        bool success = autoFiller.FillDecryptPassword(password);
-                                                        if (success)
-                                                        {
-                                                            Logger.Info("解密密码自动填充成功");
                                                         }
                                                         else
                                                         {
-                                                            Logger.Warning("自动填充失败，将弹出密码输入框让用户重新输入");
+                                                            Logger.Info("用户取消了密码输入");
+                                                            userCancelled = true;
+                                                            break;
                                                         }
                                                     }
+                                                }
 
-                                                    dialogClosed = WaitForDialogClose(decryptDialog, 2500);
-                                                    if (dialogClosed)
+                                                if (!string.IsNullOrEmpty(password))
+                                                {
+                                                    bool success = autoFiller.FillDecryptPassword(password);
+                                                    if (success)
                                                     {
-                                                        Logger.Info("对话框已关闭，重置自动填充尝试记录");
-                                                        AutoFillAttemptManager.Instance.ResetAttempt(documentPath);
+                                                        Logger.Info("解密密码自动填充成功");
                                                     }
                                                     else
                                                     {
-                                                        Logger.Warning("对话框未关闭（可能密码错误），弹出密码输入框让用户重新输入");
-                                                        password = null;
+                                                        Logger.Warning("自动填充失败，将弹出密码输入框让用户重新输入");
                                                     }
                                                 }
-                                            }
-                                            else
-                                            {
-                                                Logger.Info($"文档 {documentPath} 已经尝试过自动填充密码，跳过");
+
+                                                dialogClosed = WaitForDialogClose(decryptDialog, 2500);
+                                                if (dialogClosed)
+                                                {
+                                                    Logger.Info("对话框已关闭，密码验证成功");
+                                                    AutoFillAttemptManager.Instance.MarkAttempted(documentPath);
+                                                }
+                                                else
+                                                {
+                                                    Logger.Warning("对话框未关闭（可能密码错误），弹出密码输入框让用户重新输入");
+                                                    password = null;
+                                                }
                                             }
                                         }
                                         else
@@ -934,7 +965,7 @@ namespace PasswordManager
                 // 启动文档关闭监控线程
                 documentCloseMonitorThread = new Thread(() =>
                 {
-                    while (true)
+                    while (!GlobalState.Instance.IsExiting)
                     {
                         try
                         {
@@ -945,8 +976,18 @@ namespace PasswordManager
                                 foreach (string documentPath in registeredFiles)
                                 {
                                     // 1. 判断文件是否已关闭（使用新的检测逻辑）
-                                    if (IsDocumentClosed(documentPath, enableLogging: true))
+                                    bool accessDenied = false;
+                                    bool isClosed = IsDocumentClosed(documentPath, out accessDenied, enableLogging: true);
+
+                                    if (isClosed)
                                     {
+                                        // 1.1 遇到权限异常（如微信下载的文件），不做任何清理
+                                        if (accessDenied)
+                                        {
+                                            Logger.Info($"[检测文档关闭]: {documentPath} 因权限异常跳过本次清理");
+                                            continue;
+                                        }
+
                                         // 2. 已关闭则清理AutoFillAttemptManager中的记录
                                         AutoFillAttemptManager.Instance.OnDocumentClosed(documentPath);
 
@@ -978,7 +1019,7 @@ namespace PasswordManager
                                                 // 触发条件2：文件未修改，但检测文档尾部是否存在UID元数据
                                                 FileMetaManager checkManager = new FileMetaManager();
                                                 bool hasUidMeta = checkManager.HasUidMetadata(documentPath);
-                                                
+
                                                 if (!hasUidMeta)
                                                 {
                                                     needWriteMetadata = true;
@@ -1102,7 +1143,7 @@ namespace PasswordManager
                 // 启动心跳检测线程
                 Thread heartbeatThread = new Thread(async () =>
                 {
-                    while (true)
+                    while (!GlobalState.Instance.IsExiting)
                     {
                         try
                         {
@@ -1181,7 +1222,7 @@ namespace PasswordManager
         private static extern bool IsWindowVisible(IntPtr hWnd);
 
         // 隐藏控制台窗口
-        
+
 
         // 检查文档是否打开（保留原有逻辑，简单的文件锁定检测）
         private static bool IsDocumentOpen(string documentPath, bool enableLogging = false)
@@ -1190,7 +1231,7 @@ namespace PasswordManager
             {
                 if (enableLogging)
                 {
-                    Logger.Info($"检测文档打开: 文档路径不存在 {documentPath}");
+                    Logger.Info($"[文档打开检测] 文档路径不存在: {documentPath}");
                 }
                 return false;
             }
@@ -1201,28 +1242,39 @@ namespace PasswordManager
                 {
                     if (enableLogging)
                     {
-                        Logger.Info($"检测文档打开: {documentPath} 未被其他进程锁定");
+                        Logger.Info($"[文档打开检测] 文件未被锁定，可以以独占方式打开: {documentPath}");
                     }
                     return false;
                 }
             }
             catch (System.IO.IOException)
             {
+                Logger.Info($"[文档打开检测] 文件被其他进程锁定（WPS可能正在打开）: {documentPath}");
+                return true;
+            }
+            catch (System.UnauthorizedAccessException)
+            {
+                // 文件被占用且没有读权限（如微信下载的文件），
+                // 视为已打开，触发后续元数据初始化
+                Logger.Info($"[文档打开检测] 文件被占用（UnauthorizedAccessException），视为已打开: {documentPath}");
                 return true;
             }
             catch (Exception ex)
             {
                 if (enableLogging)
                 {
-                    Logger.Error($"检测文档打开: {documentPath} 错误信息: {ex.Message}，异常类型: {ex.GetType().Name}");
+                    Logger.Error($"[文档打开检测] 检测失败: {documentPath}，错误: {ex.Message}，类型: {ex.GetType().Name}");
                 }
                 return false;
             }
         }
 
         // 检查文档是否已关闭（新的检测逻辑，包含多重验证）
-        private static bool IsDocumentClosed(string documentPath, bool enableLogging = false)
+        // 通过 out 参数 accessDenied 告知调用方是否遇到权限异常（此类情况不做任何后续清理处理）
+        private static bool IsDocumentClosed(string documentPath, out bool accessDenied, bool enableLogging = false)
         {
+            accessDenied = false;
+
             if (string.IsNullOrEmpty(documentPath) || !System.IO.File.Exists(documentPath))
             {
                 if (enableLogging)
@@ -1271,6 +1323,17 @@ namespace PasswordManager
                         Logger.Info($"[检测文档关闭]: {documentPath} 第{i + 1}次检测被锁定");
                     }
                     return false;
+                }
+                catch (System.UnauthorizedAccessException)
+                {
+                    // 文件无权限访问（如微信下载的文件，可能被微信进程持有），
+                    // 标记为权限异常，调用方不做任何清理处理
+                    if (enableLogging)
+                    {
+                        Logger.Info($"[检测文档关闭]: {documentPath} 第{i + 1}次检测遇到UnauthorizedAccessException，标记为权限异常，跳过清理");
+                    }
+                    accessDenied = true;
+                    return true;
                 }
                 catch (Exception ex)
                 {
@@ -1928,16 +1991,18 @@ namespace PasswordManager
         {
             if (string.IsNullOrEmpty(documentPath))
             {
+                Logger.Info($"TryInitializeFileMeta: 文件路径为空，跳过");
                 return;
             }
 
             // 检查文件元数据是否已存在
             if (FileMetaFactory.Instance.HasFileMeta(documentPath))
             {
+                Logger.Info($"TryInitializeFileMeta: 文件 {documentPath} 元数据已存在，跳过初始化");
                 return;
             }
 
-            Logger.Info($"开始初始化文件元数据: {documentPath}");
+            Logger.Info($"[元数据初始化] 开始初始化文件元数据: {documentPath}");
 
             try
             {
@@ -3325,63 +3390,64 @@ namespace PasswordManager
             {
                 Logger.Info("【内核级拦截】正在启动 Windows 内核文件监视器...");
 
-                using (var session = new TraceEventSession(SessionName, null))
-                {
-                    session.StopOnDispose = true;
+                _kernelSession = new TraceEventSession(SessionName, null);
+                _kernelSession.StopOnDispose = true;
 
-                    session.EnableKernelProvider(KernelTraceEventParser.Keywords.FileIOInit | KernelTraceEventParser.Keywords.FileIO);
+                _kernelSession.EnableKernelProvider(KernelTraceEventParser.Keywords.FileIOInit | KernelTraceEventParser.Keywords.FileIO);
 
-                    session.Source.Kernel.All += (TraceEvent data) =>
+                _kernelSession.Source.Kernel.All += (TraceEvent data) =>
+                    {
+                        try
                         {
-                            try
+                            if (GlobalState.Instance.IsExiting)
+                                return;
+
+                            string processName = data.ProcessName;
+                            string eventName = data.EventName;
+                            
+                            if (processName != null && (processName.Equals("wps", StringComparison.OrdinalIgnoreCase) || 
+                                                       processName.Equals("wps.exe", StringComparison.OrdinalIgnoreCase)))
                             {
-                                string processName = data.ProcessName;
-                                string eventName = data.EventName;
+                                string filePath = null;
+                                string fileNamePayload = data.PayloadByName("FileName")?.ToString();
+                                string pathPayload = data.PayloadByName("Path")?.ToString();
                                 
-                                if (processName != null && (processName.Equals("wps", StringComparison.OrdinalIgnoreCase) || 
-                                                           processName.Equals("wps.exe", StringComparison.OrdinalIgnoreCase)))
+                                if (!string.IsNullOrEmpty(fileNamePayload))
                                 {
-                                    string filePath = null;
-                                    string fileNamePayload = data.PayloadByName("FileName")?.ToString();
-                                    string pathPayload = data.PayloadByName("Path")?.ToString();
+                                    filePath = fileNamePayload;
+                                }
+                                else if (!string.IsNullOrEmpty(pathPayload))
+                                {
+                                    filePath = pathPayload;
+                                }
+                                
+                                if (!string.IsNullOrEmpty(filePath))
+                                {
+                                    bool isTargetExt = IsTargetExtension(filePath);
+                                    bool isOpenOp = IsFileOpenOperation(eventName);
                                     
-                                    if (!string.IsNullOrEmpty(fileNamePayload))
+                                    if (isTargetExt && isOpenOp)
                                     {
-                                        filePath = fileNamePayload;
-                                    }
-                                    else if (!string.IsNullOrEmpty(pathPayload))
-                                    {
-                                        filePath = pathPayload;
-                                    }
-                                    
-                                    if (!string.IsNullOrEmpty(filePath))
-                                    {
-                                        bool isTargetExt = IsTargetExtension(filePath);
-                                        bool isOpenOp = IsFileOpenOperation(eventName);
+                                        string normalPath = ConvertDevicePathToDriveLetter(filePath);
                                         
-                                        if (isTargetExt && isOpenOp)
+                                        if (!string.Equals(_lastPostedFilePath, normalPath, StringComparison.OrdinalIgnoreCase))
                                         {
-                                            string normalPath = ConvertDevicePathToDriveLetter(filePath);
-                                            
-                                            if (!string.Equals(_lastPostedFilePath, normalPath, StringComparison.OrdinalIgnoreCase))
-                                            {
-                                                _lastPostedFilePath = normalPath;
-                                                Console.WriteLine($"[打开文件] {normalPath}");
-                                                _filePathQueue.Add(normalPath);
-                                                Logger.Info($"[内核识别] WPS操作文档: {normalPath}");
-                                            }
+                                            _lastPostedFilePath = normalPath;
+                                            Console.WriteLine($"[打开文件] {normalPath}");
+                                            _filePathQueue.Add(normalPath);
+                                            Logger.Info($"[内核识别] WPS操作文档: {normalPath}");
                                         }
                                     }
                                 }
                             }
-                            catch (Exception ex)
-                            {
-                                Logger.Error($"内核事件处理异常: {ex.Message}");
-                            }
-                        };
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Error($"内核事件处理异常: {ex.Message}");
+                        }
+                    };
 
-                    session.Source.Process();
-                }
+                _kernelSession.Source.Process();
             }
             catch (Exception ex)
             {
@@ -3422,7 +3488,7 @@ namespace PasswordManager
         {
             try
             {
-                while (_isConsumerRunning)
+                while (_isConsumerRunning && !GlobalState.Instance.IsExiting)
                 {
                     string filePath = _filePathQueue.Take();
                     
@@ -3466,6 +3532,24 @@ namespace PasswordManager
             }
             
             Logger.Info("文件识别消费者线程已停止");
+        }
+
+        private static void StopKernelFileListening()
+        {
+            try
+            {
+                if (_kernelSession != null)
+                {
+                    _kernelSession.Source.StopProcessing();
+                    _kernelSession.Dispose();
+                    _kernelSession = null;
+                    Logger.Info("内核文件监视器已停止");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"停止内核文件监视器失败: {ex.Message}");
+            }
         }
 
         private static string ConvertDevicePathToDriveLetter(string devicePath)

@@ -411,10 +411,9 @@ namespace PasswordManager.Monitor
             return string.Empty;
         }
 
-        private static readonly object _pathMatchCacheLock = new object();
-        private static readonly Dictionary<string, string> _pathMatchCache = new Dictionary<string, string>();
-        private static long _lastCacheCleanupTime = 0;
-        private const long CACHE_CLEANUP_INTERVAL = 300000;
+
+
+
 
         public string GetDocumentPath(IntPtr dialogHandle)
         {
@@ -424,37 +423,10 @@ namespace PasswordManager.Monitor
 
                 if (!string.IsNullOrEmpty(docName))
                 {
-                    CleanupCacheIfNeeded();
-
-                    string cachedPath;
-                    lock (_pathMatchCacheLock)
-                    {
-                        if (_pathMatchCache.TryGetValue(docName, out cachedPath))
-                        {
-                            if (File.Exists(cachedPath))
-                            {
-                                // Logger.Info($"[路径匹配] 从缓存中找到文档路径: {cachedPath}");
-                                return cachedPath;
-                            }
-                            _pathMatchCache.Remove(docName);
-                        }
-                        else if (docName.StartsWith("[只读]"))
-                        {
-                            string candidateName = docName.Substring(4);
-                            if (_pathMatchCache.TryGetValue(candidateName, out cachedPath))
-                            {
-                                if (File.Exists(cachedPath))
-                                {
-                                    // Logger.Info($"[路径匹配] 去掉[只读]前缀后从缓存中找到文档路径: {cachedPath}");
-                                    return cachedPath;
-                                }
-                                _pathMatchCache.Remove(candidateName);
-                            }
-                        }
-                    }
-
                     List<string> possiblePaths = GlobalState.Instance.GetPossiblePaths();
-                    
+
+                    string targetDocName = docName.StartsWith("[只读]") ? docName.Substring(4).Trim() : docName;
+
                     for (int i = possiblePaths.Count - 1; i >= 0; i--)
                     {
                         string path = possiblePaths[i];
@@ -465,34 +437,41 @@ namespace PasswordManager.Monitor
 
                         string fileName = Path.GetFileName(path);
                         string pattern = $"^{Regex.Escape(fileName)}$";
-                        if (Regex.IsMatch(docName, pattern, RegexOptions.IgnoreCase))
+                        if (Regex.IsMatch(targetDocName, pattern, RegexOptions.IgnoreCase))
                         {
                             if (File.Exists(path))
                             {
                                 Logger.Info($"[路径匹配] 成功匹配文档路径: {path}");
-                                lock (_pathMatchCacheLock)
-                                {
-                                    _pathMatchCache[docName] = path;
-                                }
                                 return path;
+                            }
+                        }
+                    }
+
+                    if (docName.StartsWith("[只读]"))
+                    {
+                        for (int i = possiblePaths.Count - 1; i >= 0; i--)
+                        {
+                            string path = possiblePaths[i];
+                            if (string.IsNullOrEmpty(path))
+                            {
+                                continue;
+                            }
+
+                            string fileName = Path.GetFileName(path);
+                            string pattern = $"^{Regex.Escape(fileName)}$";
+                            if (Regex.IsMatch(docName, pattern, RegexOptions.IgnoreCase))
+                            {
+                                if (File.Exists(path))
+                                {
+                                    Logger.Info($"[路径匹配] 使用原始名称匹配文档路径: {path}");
+                                    return path;
+                                }
                             }
                         }
                     }
                 }
                 else
                 {
-                    lock (_pathMatchCacheLock)
-                    {
-                        if (_pathMatchCache.Count == 1)
-                        {
-                            string cachedPath = _pathMatchCache.Values.First();
-                            if (File.Exists(cachedPath))
-                            {
-                                return cachedPath;
-                            }
-                        }
-                    }
-
                     List<string> possiblePaths = GlobalState.Instance.GetPossiblePaths();
                     foreach (string path in possiblePaths)
                     {
@@ -511,30 +490,7 @@ namespace PasswordManager.Monitor
             return null;
         }
 
-        private void CleanupCacheIfNeeded()
-        {
-            long currentTime = DateTimeOffset.Now.ToUnixTimeMilliseconds();
-            if (currentTime - _lastCacheCleanupTime > CACHE_CLEANUP_INTERVAL)
-            {
-                lock (_pathMatchCacheLock)
-                {
-                    List<string> keysToRemove = new List<string>();
-                    foreach (var kvp in _pathMatchCache)
-                    {
-                        if (!File.Exists(kvp.Value))
-                        {
-                            keysToRemove.Add(kvp.Key);
-                        }
-                    }
-                    foreach (string key in keysToRemove)
-                    {
-                        _pathMatchCache.Remove(key);
-                    }
-                    _lastCacheCleanupTime = currentTime;
-                    Logger.Info($"[路径匹配] 缓存清理完成，移除 {keysToRemove.Count} 条无效记录");
-                }
-            }
-        }
+
 
         private string ResolveShortcut(string lnkPath)
         {

@@ -64,7 +64,30 @@ namespace PasswordManager.UI
             _contextMenu.Items.Add(new ToolStripSeparator());
             _contextMenu.Items.Add(exitItem);
 
-            _notifyIcon.ContextMenuStrip = _contextMenu;
+            _notifyIcon.MouseUp += (sender, e) =>
+            {
+                if (e.Button == MouseButtons.Right)
+                {
+                    Form hiddenForm = new Form
+                    {
+                        Size = new System.Drawing.Size(1, 1),
+                        ShowInTaskbar = false,
+                        FormBorderStyle = FormBorderStyle.None,
+                        Opacity = 0,
+                        TopMost = true
+                    };
+                    hiddenForm.Show();
+                    SetForegroundWindow(hiddenForm.Handle);
+
+                    _contextMenu.Closed += (s, args) =>
+                    {
+                        hiddenForm.Close();
+                        hiddenForm.Dispose();
+                    };
+
+                    _contextMenu.Show(Cursor.Position);
+                }
+            };
 
             _notifyIcon.DoubleClick += (sender, e) =>
             {

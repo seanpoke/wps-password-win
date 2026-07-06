@@ -53,7 +53,8 @@ namespace PasswordManager.Business
                 return null;
             }
 
-            fileMetaMap.TryGetValue(filePath, out FileMeta fileMeta);
+            string normalizedPath = filePath.ToLowerInvariant();
+            fileMetaMap.TryGetValue(normalizedPath, out FileMeta fileMeta);
             return fileMeta;
         }
 
@@ -185,12 +186,16 @@ namespace PasswordManager.Business
 
         public void CleanupFileMeta(string filePath)
         {
-            if (!string.IsNullOrEmpty(filePath) && fileMetaMap.TryRemove(filePath, out _))
+            if (string.IsNullOrEmpty(filePath))
             {
-                Logger.Info($"清理文件 {filePath} 的元数据");
-                AutoFillAttemptManager.Instance.ResetAttempt(filePath);
-                // 清理对应的等待事件
-                RemoveInitWaitEvent(filePath);
+                return;
+            }
+            string normalizedPath = filePath.ToLowerInvariant();
+            if (fileMetaMap.TryRemove(normalizedPath, out _))
+            {
+                Logger.Info($"清理文件 {normalizedPath} 的元数据");
+                AutoFillAttemptManager.Instance.ResetAttempt(normalizedPath);
+                RemoveInitWaitEvent(normalizedPath);
             }
         }
 
@@ -297,7 +302,12 @@ namespace PasswordManager.Business
 
         public bool HasFileMeta(string filePath)
         {
-            return !string.IsNullOrEmpty(filePath) && fileMetaMap.ContainsKey(filePath);
+            if (string.IsNullOrEmpty(filePath))
+            {
+                return false;
+            }
+            string normalizedPath = filePath.ToLowerInvariant();
+            return fileMetaMap.ContainsKey(normalizedPath);
         }
 
         public int GetFileMetaCount()
@@ -309,8 +319,10 @@ namespace PasswordManager.Business
         {
             if (fileMeta != null && !string.IsNullOrEmpty(fileMeta.FilePath))
             {
-                fileMetaMap.TryAdd(fileMeta.FilePath, fileMeta);
-                Logger.Info($"添加文件元数据: {fileMeta.FilePath}");
+                string normalizedPath = fileMeta.FilePath.ToLowerInvariant();
+                fileMeta.FilePath = normalizedPath;
+                fileMetaMap.TryAdd(normalizedPath, fileMeta);
+                Logger.Info($"添加文件元数据: {normalizedPath}");
             }
         }
 

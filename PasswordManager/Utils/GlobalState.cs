@@ -20,6 +20,7 @@ namespace PasswordManager.Utils
         private string _role;
         private string _token;
         private volatile bool _isLoggedIn;
+        private volatile bool _isExiting;
         private string _publicKey;
         private string _keyVersion;
         private string _lastFailedFileName;
@@ -204,6 +205,13 @@ namespace PasswordManager.Utils
                 }
             }
         }
+
+        // 退出状态
+        public bool IsExiting
+        {
+            get => _isExiting;
+            set => _isExiting = value;
+        }
         
         // Token
         public string Token
@@ -338,8 +346,6 @@ namespace PasswordManager.Utils
             }
         }
 
-
-
         private readonly object _possiblePathsLock = new object();
         private LinkedList<string> _possiblePaths = new LinkedList<string>();
         private volatile List<string> _possiblePathsReadCopy = new List<string>();
@@ -352,15 +358,17 @@ namespace PasswordManager.Utils
                 return;
             }
 
+            string normalizedPath = path.ToLowerInvariant();
+
             lock (_possiblePathsLock)
             {
-                var existingNode = _possiblePaths.Find(path);
+                var existingNode = _possiblePaths.Find(normalizedPath);
                 if (existingNode != null)
                 {
                     _possiblePaths.Remove(existingNode);
                 }
 
-                _possiblePaths.AddLast(path);
+                _possiblePaths.AddLast(normalizedPath);
 
                 while (_possiblePaths.Count > MAX_POSSIBLE_PATHS)
                 {
