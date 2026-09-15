@@ -71,69 +71,76 @@ namespace PasswordManager.UI
             int buttonSpacing = (int)(6 * dpiScale);
             Font buttonFont = DpiHelper.ScaleFont(new Font("微软雅黑", 9F, FontStyle.Bold));
 
+            // 与弹窗背景一致的浅灰色调
+            Color btnBg = Color.FromArgb(245, 245, 245);
+            Color btnBorder = Color.FromArgb(220, 220, 220);
+            Color btnText = Color.FromArgb(51, 51, 51);
+            Color btnHoverBg = Color.FromArgb(235, 235, 235);
+            Color btnPressBg = Color.FromArgb(225, 225, 225);
+
             _generateButton = new Button
             {
                 Text = "生成密码",
                 FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(0, 120, 212),
-                ForeColor = Color.White,
+                BackColor = btnBg,
+                ForeColor = btnText,
                 Font = buttonFont,
                 Height = buttonHeight,
                 Location = new Point(0, 0),
                 Cursor = Cursors.Hand,
                 UseVisualStyleBackColor = false,
-                FlatAppearance = { BorderSize = 0 },
+                FlatAppearance = { BorderSize = 1, BorderColor = btnBorder },
                 AutoSize = true,
                 Padding = new Padding((int)(12 * dpiScale), 0, (int)(12 * dpiScale), 0)
             };
             _generateButton.Click += (sender, e) => GeneratePasswordClicked?.Invoke(this, EventArgs.Empty);
-            _generateButton.MouseEnter += (sender, e) => _generateButton.BackColor = Color.FromArgb(26, 115, 232);
-            _generateButton.MouseLeave += (sender, e) => _generateButton.BackColor = Color.FromArgb(0, 120, 212);
-            _generateButton.MouseDown += (sender, e) => _generateButton.BackColor = Color.FromArgb(0, 90, 170);
-            _generateButton.MouseUp += (sender, e) => _generateButton.BackColor = Color.FromArgb(26, 115, 232);
+            _generateButton.MouseEnter += (sender, e) => _generateButton.BackColor = btnHoverBg;
+            _generateButton.MouseLeave += (sender, e) => _generateButton.BackColor = btnBg;
+            _generateButton.MouseDown += (sender, e) => _generateButton.BackColor = btnPressBg;
+            _generateButton.MouseUp += (sender, e) => _generateButton.BackColor = btnHoverBg;
 
             _extractPasswordButton = new Button
             {
                 Text = "提取密码",
                 FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(0, 150, 136),
-                ForeColor = Color.White,
+                BackColor = btnBg,
+                ForeColor = btnText,
                 Font = buttonFont,
                 Height = buttonHeight,
                 Location = new Point(0, buttonHeight + buttonSpacing),
                 Cursor = Cursors.Hand,
                 UseVisualStyleBackColor = false,
-                FlatAppearance = { BorderSize = 0 },
+                FlatAppearance = { BorderSize = 1, BorderColor = btnBorder },
                 AutoSize = true,
                 Padding = new Padding((int)(12 * dpiScale), 0, (int)(12 * dpiScale), 0)
             };
             _extractPasswordButton.Click += ExtractPasswordButton_Click;
-            _extractPasswordButton.MouseEnter += (sender, e) => _extractPasswordButton.BackColor = Color.FromArgb(0, 170, 156);
-            _extractPasswordButton.MouseLeave += (sender, e) => _extractPasswordButton.BackColor = Color.FromArgb(0, 150, 136);
-            _extractPasswordButton.MouseDown += (sender, e) => _extractPasswordButton.BackColor = Color.FromArgb(0, 120, 110);
-            _extractPasswordButton.MouseUp += (sender, e) => _extractPasswordButton.BackColor = Color.FromArgb(0, 170, 156);
+            _extractPasswordButton.MouseEnter += (sender, e) => _extractPasswordButton.BackColor = btnHoverBg;
+            _extractPasswordButton.MouseLeave += (sender, e) => _extractPasswordButton.BackColor = btnBg;
+            _extractPasswordButton.MouseDown += (sender, e) => _extractPasswordButton.BackColor = btnPressBg;
+            _extractPasswordButton.MouseUp += (sender, e) => _extractPasswordButton.BackColor = btnHoverBg;
 
             _authButton = new Button
             {
                 Text = "文档权限",
                 FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(156, 39, 176),
-                ForeColor = Color.White,
+                BackColor = btnBg,
+                ForeColor = btnText,
                 Font = buttonFont,
                 Height = buttonHeight,
                 Location = new Point(0, (buttonHeight + buttonSpacing) * 2),
                 Cursor = Cursors.Hand,
                 Visible = false,
                 UseVisualStyleBackColor = false,
-                FlatAppearance = { BorderSize = 0 },
+                FlatAppearance = { BorderSize = 1, BorderColor = btnBorder },
                 AutoSize = true,
                 Padding = new Padding((int)(12 * dpiScale), 0, (int)(12 * dpiScale), 0)
             };
             _authButton.Click += AuthButton_Click;
-            _authButton.MouseEnter += (sender, e) => _authButton.BackColor = Color.FromArgb(176, 59, 196);
-            _authButton.MouseLeave += (sender, e) => _authButton.BackColor = Color.FromArgb(156, 39, 176);
-            _authButton.MouseDown += (sender, e) => _authButton.BackColor = Color.FromArgb(126, 29, 146);
-            _authButton.MouseUp += (sender, e) => _authButton.BackColor = Color.FromArgb(176, 59, 196);
+            _authButton.MouseEnter += (sender, e) => _authButton.BackColor = btnHoverBg;
+            _authButton.MouseLeave += (sender, e) => _authButton.BackColor = btnBg;
+            _authButton.MouseDown += (sender, e) => _authButton.BackColor = btnPressBg;
+            _authButton.MouseUp += (sender, e) => _authButton.BackColor = btnHoverBg;
 
             this.Controls.Add(_generateButton);
             this.Controls.Add(_extractPasswordButton);
@@ -597,8 +604,8 @@ namespace PasswordManager.UI
             // 使用密码框所在显示器的DPI
             float dpiScale = DpiHelper.GetDpiScaleForWindow(passwordEditHandle);
 
-            // 计算按钮位置（密码框右侧5px）
-            int x = (int)(rect.Right + 5 * dpiScale);
+            // 计算按钮位置（密码框左侧，间距5px）
+            int x = (int)(rect.Left - this.Width - 5 * dpiScale);
             int y = (int)(rect.Top + (rect.Bottom - rect.Top - this.Height) / 2);
 
             // 只有在位置发生变化时才更新位置
@@ -624,14 +631,14 @@ namespace PasswordManager.UI
             // 使用对话框所在显示器的DPI
             float dpiScale = DpiHelper.GetDpiScaleForWindow(dialogHandle);
 
-            // 计算按钮位置（对话框右侧，距离右边框5px，垂直居中）
-            int x = (int)(rect.Right + 5 * dpiScale);
+            // 计算按钮位置（对话框左侧，距离左边框5px，垂直居中）
+            int x = (int)(rect.Left - this.Width - 5 * dpiScale);
             int y = (int)(rect.Top + (rect.Bottom - rect.Top - this.Height) / 2);
 
             // 只有在位置发生变化时才更新位置
             if (this.Location.X != x || this.Location.Y != y)
             {
-                Logger.Debug($"显示悬浮按钮在对话框右侧，位置: X={x}, Y={y}, DPI缩放: {dpiScale}");
+                Logger.Debug($"显示悬浮按钮在对话框左侧，位置: X={x}, Y={y}, DPI缩放: {dpiScale}");
                 this.Location = new System.Drawing.Point(x, y);
             }
 
