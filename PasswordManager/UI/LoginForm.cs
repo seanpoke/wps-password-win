@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -140,6 +141,9 @@ namespace PasswordManager.UI
                 Location = new Point(labelWidth + labelGap * 2, startY + controlGap)
             };
             this.Controls.Add(_passwordTextBox);
+            var loginEye = CreatePasswordEyeLabel(_passwordTextBox);
+            this.Controls.Add(loginEye);
+            loginEye.BringToFront();
             
             Label domainLabel = new Label
             {
@@ -160,6 +164,10 @@ namespace PasswordManager.UI
                 Size = new Size(inputWidth, inputHeight),
                 Location = new Point(labelWidth + labelGap * 2, startY + controlGap * 2)
             };
+            // 双击域名输入框在 https/http 之间切换协议
+            _domainTextBox.DoubleClick += DomainTextBox_DoubleClick;
+            var domainTip = new ToolTip();
+            domainTip.SetToolTip(_domainTextBox, "双击可切换 https/http 协议");
             this.Controls.Add(_domainTextBox);
             
             Label portLabel = new Label
@@ -251,7 +259,60 @@ namespace PasswordManager.UI
             
             UpdateUIState();
         }
-        
+
+        [DllImport("user32.dll", EntryPoint = "SendMessage")]
+        private static extern IntPtr SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
+
+        private const int EM_SETMARGINS = 0x00D3;
+        private const int EC_RIGHTMARGIN = 0x2;
+
+        /// <summary>
+        /// 在密码框内部右侧嵌入无边框"小眼睛"图标：点击在明文/密文之间切换。
+        /// 通过 EM_SETMARGINS 增大文本框右边距，避免输入内容被图标遮挡。
+        /// </summary>
+        internal static Label CreatePasswordEyeLabel(TextBox textBox)
+        {
+            Action setMargin = () => SendMessage(textBox.Handle, EM_SETMARGINS, EC_RIGHTMARGIN, 30 << 16);
+            textBox.HandleCreated += (s, e) => setMargin();
+            setMargin();
+
+            Label eyeLabel = new Label
+            {
+                Text = "👁",
+                Size = new Size(24, textBox.Height - 2),
+                Location = new Point(textBox.Right - 28, textBox.Top + 1),
+                BackColor = textBox.BackColor,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Cursor = Cursors.Hand
+            };
+            eyeLabel.Click += (s, e) =>
+            {
+                bool hidden = textBox.PasswordChar != '\0';
+                textBox.PasswordChar = hidden ? '\0' : '*';
+                eyeLabel.Text = hidden ? "🙈" : "👁";
+            };
+            return eyeLabel;
+        }
+
+        private void DomainTextBox_DoubleClick(object sender, EventArgs e)
+        {
+            string text = _domainTextBox.Text.Trim();
+            if (text.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                _domainTextBox.Text = "http://" + text.Substring(8);
+            }
+            else if (text.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+            {
+                _domainTextBox.Text = "https://" + text.Substring(7);
+            }
+            else
+            {
+                _domainTextBox.Text = "https://" + text;
+            }
+            _domainTextBox.SelectionStart = _domainTextBox.Text.Length;
+            Logger.Info($"域名协议已切换为: {UrlParser.ExtractProtocol(_domainTextBox.Text)}");
+        }
+
         private async void LoginButton_Click(object sender, EventArgs e)
         {
             if (GlobalState.Instance.IsLoggedIn)
@@ -280,12 +341,6 @@ namespace PasswordManager.UI
             if (string.IsNullOrEmpty(domain))
             {
                 _errorLabel.Text = "请输入域名";
-                return;
-            }
-            
-            if (domain.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
-            {
-                _errorLabel.Text = "不支持http协议，请使用https";
                 return;
             }
             
@@ -319,6 +374,18 @@ namespace PasswordManager.UI
                     string account = response.data.GetProperty("account").GetString();
                     string name = response.data.GetProperty("name").GetString();
                     string role = response.data.TryGetProperty("role", out JsonElement roleElement) ? roleElement.GetString() : null;
+                    bool needChangePwd = response.data.TryGetProperty("needChangePwd", out JsonElement ncpElement) && ncpElement.ValueKind == JsonValueKind.True;
+                    
+                    // 首次登录需强制改密：仅使用登录返回的临时 token 完成改密，
+                    // 不存储任何用户信息与 token（不调用 SaveUserInfo / SaveConfig，不设置 IsLoggedIn）。
+                    if (needChangePwd)
+                    {
+                        Logger.Info($"用户 {account} 首次登录需修改密码(needChangePwd=true)，弹出重置密码窗口");
+                        var changePwdForm = new ChangePasswordForm(account, password, token);
+                        changePwdForm.ShowDialog(this);
+                        _loginButton.Enabled = true;
+                        return;
+                    }
                     
                     GlobalState.Instance.Username = account;
                     GlobalState.Instance.Name = name;

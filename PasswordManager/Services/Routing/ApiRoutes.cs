@@ -46,6 +46,11 @@ namespace PasswordManager.Services.Routing
         public const string AccountLogout = "/account/logout";
         
         /// <summary>
+        /// 修改密码接口
+        /// </summary>
+        public const string AccountChangePassword = "/account/change-password";
+        
+        /// <summary>
         /// 获取LDAP配置接口
         /// </summary>
         public const string ConfigLdap = "/config/ldap";

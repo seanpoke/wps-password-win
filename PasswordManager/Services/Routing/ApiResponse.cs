@@ -153,7 +153,13 @@ namespace PasswordManager.Services.Routing
         public string name { get; set; }
         
         /// <summary>
-        /// LDAP完整路径
+        /// 节点 ID：type=0 为 sys_dept.id，type=1 为 sys_user.id
+        /// </summary>
+        public long id { get; set; }
+        
+        /// <summary>
+        /// LDAP 完整路径（DN）：部门为 sys_dept.path；用户为 CN=账号,部门DN。
+        /// 用于"勾选父部门按 dn.StartsWith() 包含子节点"的层级判断。
         /// </summary>
         public string dn { get; set; }
         
