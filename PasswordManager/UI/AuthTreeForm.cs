@@ -388,11 +388,11 @@ namespace PasswordManager.UI
             var nodeDto = e.Node.Tag as LdapNodeDTO;
             if (nodeDto != null)
             {
-                if (e.Node.Checked && nodeDto.type == 1 && _autoCheckedEmpDns.Contains(nodeDto.dn))
+                if (e.Node.Checked && nodeDto.type == 1 && nodeDto.dn != null && _autoCheckedEmpDns.Contains(nodeDto.dn))
                 {
                     e.Cancel = true;
                 }
-                else if (e.Node.Checked && nodeDto.type == 0 && _autoCheckedDeptDns.Contains(nodeDto.dn))
+                else if (e.Node.Checked && nodeDto.type == 0 && nodeDto.dn != null && _autoCheckedDeptDns.Contains(nodeDto.dn))
                 {
                     e.Cancel = true;
                 }
@@ -430,9 +430,12 @@ namespace PasswordManager.UI
                     deptNode.Checked = true;
                     
                     string deptDn = deptDto.dn;
-                    
-                    _selectedEmps.RemoveAll(emp => emp.dn.StartsWith(deptDn));
-                    _selectedDepts.RemoveAll(d => d.dn.StartsWith(deptDn) && d.dn != deptDn);
+                    if (!string.IsNullOrEmpty(deptDn))
+                    {
+                        // 勾选父部门：移除所有 dn 前缀命中该部门的子孙，由父部门统一代表
+                        _selectedEmps.RemoveAll(emp => emp.dn != null && emp.dn.StartsWith(deptDn));
+                        _selectedDepts.RemoveAll(d => d.dn != null && d.dn.StartsWith(deptDn) && d.dn != deptDn);
+                    }
                     
                     AutoCheckChildEmps(deptNode, true);
                     
@@ -460,7 +463,7 @@ namespace PasswordManager.UI
             var empDto = empNode.Tag as LdapNodeDTO;
             if (empDto == null) return;
 
-            if (_autoCheckedEmpDns.Contains(empDto.dn))
+            if (empDto.dn != null && _autoCheckedEmpDns.Contains(empDto.dn))
             {
                 if (!isChecked)
                 {
@@ -501,7 +504,7 @@ namespace PasswordManager.UI
                         {
                             childNode.Checked = true;
                             
-                            if (!_autoCheckedEmpDns.Contains(childDto.dn))
+                            if (childDto.dn != null && !_autoCheckedEmpDns.Contains(childDto.dn))
                             {
                                 _autoCheckedEmpDns.Add(childDto.dn);
                             }
@@ -517,7 +520,7 @@ namespace PasswordManager.UI
                         {
                             childNode.Checked = true;
                             
-                            if (!_autoCheckedDeptDns.Contains(childDto.dn))
+                            if (childDto.dn != null && !_autoCheckedDeptDns.Contains(childDto.dn))
                             {
                                 _autoCheckedDeptDns.Add(childDto.dn);
                             }
@@ -525,7 +528,7 @@ namespace PasswordManager.UI
                             childNode.ForeColor = isMatched ? Color.Red : Color.Gray;
                             
                             _selectedDepts.RemoveAll(n => n.dn == childDto.dn);
-                            _selectedEmps.RemoveAll(emp => emp.dn.StartsWith(childDto.dn));
+                            _selectedEmps.RemoveAll(emp => emp.dn != null && childDto.dn != null && emp.dn.StartsWith(childDto.dn));
                         }
                     }
                 }
@@ -542,7 +545,7 @@ namespace PasswordManager.UI
                 {
                     if (childDto.type == 1)
                     {
-                        if (_autoCheckedEmpDns.Contains(childDto.dn))
+                        if (childDto.dn != null && _autoCheckedEmpDns.Contains(childDto.dn))
                         {
                             _autoCheckedEmpDns.Remove(childDto.dn);
                             bool isMatched = _matchedNodes.Contains(childNode);
@@ -558,7 +561,7 @@ namespace PasswordManager.UI
                     }
                     else
                     {
-                        if (_autoCheckedDeptDns.Contains(childDto.dn))
+                        if (childDto.dn != null && _autoCheckedDeptDns.Contains(childDto.dn))
                         {
                             _autoCheckedDeptDns.Remove(childDto.dn);
                             bool isMatched = _matchedNodes.Contains(childNode);
@@ -584,7 +587,7 @@ namespace PasswordManager.UI
             var nodeDto = node.Tag as LdapNodeDTO;
             if (nodeDto != null && nodeDto.type == 0 && node.Checked)
             {
-                if (_autoCheckedDeptDns.Contains(nodeDto.dn))
+                if (nodeDto.dn != null && _autoCheckedDeptDns.Contains(nodeDto.dn))
                 {
                     return IsParentDeptChecked(node.Parent);
                 }
@@ -652,14 +655,14 @@ namespace PasswordManager.UI
             foreach (var dept in _selectedDepts)
             {
                 string displayText = $"[{dept.name}]";
-                _selectedDeptListBox.Items.Add(new { Dn = dept.dn, DisplayText = displayText, Node = dept, IsDept = true });
+                _selectedDeptListBox.Items.Add(new { Id = dept.id, DisplayText = displayText, Node = dept, IsDept = true });
             }
 
             _selectedEmpListBox.Items.Clear();
             foreach (var emp in _selectedEmps)
             {
                 string displayText = emp.name;
-                _selectedEmpListBox.Items.Add(new { Dn = emp.dn, DisplayText = displayText, Node = emp, IsDept = false });
+                _selectedEmpListBox.Items.Add(new { Id = emp.id, DisplayText = displayText, Node = emp, IsDept = false });
             }
             UpdateSelectedCount();
         }
@@ -744,7 +747,7 @@ namespace PasswordManager.UI
 
                 if (isDept)
                 {
-                    TreeNode treeNode = FindTreeNodeByDn(_authTreeView.Nodes, node.dn);
+                    TreeNode treeNode = FindTreeNodeById(_authTreeView.Nodes, node.id);
                     if (treeNode != null)
                     {
                         HandleDeptNodeCheck(treeNode, false);
@@ -752,7 +755,7 @@ namespace PasswordManager.UI
                 }
                 else
                 {
-                    TreeNode treeNode = FindTreeNodeByDn(_authTreeView.Nodes, node.dn);
+                    TreeNode treeNode = FindTreeNodeById(_authTreeView.Nodes, node.id);
                     if (treeNode != null)
                     {
                         _isUpdatingCheckState = true;
@@ -770,16 +773,16 @@ namespace PasswordManager.UI
             }
         }
 
-        private TreeNode FindTreeNodeByDn(TreeNodeCollection nodes, string dn)
+        private TreeNode FindTreeNodeById(TreeNodeCollection nodes, long id)
         {
             foreach (TreeNode node in nodes)
             {
                 var nodeDto = node.Tag as LdapNodeDTO;
-                if (nodeDto != null && nodeDto.dn == dn)
+                if (nodeDto != null && nodeDto.id == id)
                 {
                     return node;
                 }
-                TreeNode found = FindTreeNodeByDn(node.Nodes, dn);
+                TreeNode found = FindTreeNodeById(node.Nodes, id);
                 if (found != null)
                 {
                     return found;
@@ -834,16 +837,16 @@ namespace PasswordManager.UI
             {
                 _saveButton.Enabled = false;
 
-                var accountDnList = _selectedEmps.Select(emp => emp.dn).ToList();
-                var deptDnList = _selectedDepts.Select(dept => dept.dn).ToList();
+                var userIdList = _selectedEmps.Select(emp => emp.id).ToList();
+                var deptIdList = _selectedDepts.Select(dept => dept.id).ToList();
 
-                Logger.Info($"准备保存权限，部门数: {deptDnList.Count}，员工数: {accountDnList.Count}");
+                Logger.Info($"准备保存权限，部门数: {deptIdList.Count}，员工数: {userIdList.Count}");
 
                 var requestData = new
                 {
                     docId = _docId,
-                    accountDnList = accountDnList,
-                    deptDnList = deptDnList
+                    userIdList = userIdList,
+                    deptIdList = deptIdList
                 };
 
                 var response = await _httpRequestService.PostAsync<object>(
@@ -1055,8 +1058,7 @@ namespace PasswordManager.UI
                     }
                     else
                     {
-                        bool isAutoChecked = _autoCheckedEmpDns.Contains(nodeDto?.dn) || 
-                                             _autoCheckedDeptDns.Contains(nodeDto?.dn);
+                        bool isAutoChecked = nodeDto?.dn != null && (_autoCheckedEmpDns.Contains(nodeDto.dn) || _autoCheckedDeptDns.Contains(nodeDto.dn));
                         node.ForeColor = isAutoChecked ? Color.Gray : Color.Black;
                     }
                     
@@ -1068,8 +1070,7 @@ namespace PasswordManager.UI
                 }
                 else
                 {
-                    bool isAutoChecked = _autoCheckedEmpDns.Contains(nodeDto?.dn) || 
-                                         _autoCheckedDeptDns.Contains(nodeDto?.dn);
+                    bool isAutoChecked = nodeDto?.dn != null && (_autoCheckedEmpDns.Contains(nodeDto.dn) || _autoCheckedDeptDns.Contains(nodeDto.dn));
                     
                     node.ForeColor = isAutoChecked ? Color.Gray : Color.Black;
                 }
@@ -1090,9 +1091,8 @@ namespace PasswordManager.UI
         {
             foreach (TreeNode node in nodes)
             {
-                node.ForeColor = _autoCheckedEmpDns.Contains(((LdapNodeDTO)node.Tag)?.dn) || 
-                               _autoCheckedDeptDns.Contains(((LdapNodeDTO)node.Tag)?.dn) 
-                               ? Color.Gray : Color.Black;
+                var hlDto = (LdapNodeDTO)node.Tag;
+                node.ForeColor = hlDto.dn != null && (_autoCheckedEmpDns.Contains(hlDto.dn) || _autoCheckedDeptDns.Contains(hlDto.dn)) ? Color.Gray : Color.Black;
                 ResetHighlight(node.Nodes);
             }
         }
@@ -1165,6 +1165,14 @@ namespace PasswordManager.UI
 
     public class LdapNodeDTO
     {
+        /// <summary>
+        /// 节点 ID：type=0 为 sys_dept.id，type=1 为 sys_user.id
+        /// </summary>
+        public long id { get; set; }
+        /// <summary>
+        /// LDAP 完整路径（DN）：部门为 sys_dept.path；用户为 CN=账号,部门DN。
+        /// 用于"勾选父部门按 dn.StartsWith() 包含子节点"的层级判断。
+        /// </summary>
         public string dn { get; set; }
         public string name { get; set; }
         public int type { get; set; }
