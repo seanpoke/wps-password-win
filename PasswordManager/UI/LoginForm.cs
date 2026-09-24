@@ -22,6 +22,7 @@ namespace PasswordManager.UI
         private TextBox _domainTextBox;
         private TextBox _portTextBox;
         private Button _loginButton;
+        private Button _changePwdButton;
         private Label _errorLabel;
         private Label _loadingLabel;
         private Panel _loadingOverlay;
@@ -234,6 +235,26 @@ namespace PasswordManager.UI
             _loginButton.MouseUp += (sender, e) => _loginButton.BackColor = Color.FromArgb(26, 115, 232);
             _loginButton.Click += LoginButton_Click;
             this.Controls.Add(_loginButton);
+
+            // 修改密码按钮：已登录态显示，位于"注销"按钮左侧
+            _changePwdButton = new Button
+            {
+                Text = "修改密码",
+                Font = buttonFont,
+                BackColor = Color.FromArgb(0, 120, 212),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand,
+                Size = new Size(100, 35),
+                Location = new Point(this.ClientSize.Width - 230, startY + controlGap * 5)
+            };
+            _changePwdButton.FlatAppearance.BorderSize = 0;
+            _changePwdButton.MouseEnter += (sender, e) => _changePwdButton.BackColor = Color.FromArgb(26, 115, 232);
+            _changePwdButton.MouseLeave += (sender, e) => _changePwdButton.BackColor = Color.FromArgb(0, 120, 212);
+            _changePwdButton.MouseDown += (sender, e) => _changePwdButton.BackColor = Color.FromArgb(0, 90, 170);
+            _changePwdButton.MouseUp += (sender, e) => _changePwdButton.BackColor = Color.FromArgb(26, 115, 232);
+            _changePwdButton.Click += ChangePwdButton_Click;
+            this.Controls.Add(_changePwdButton);
             
             _loadingOverlay = new Panel
             {
@@ -484,6 +505,29 @@ namespace PasswordManager.UI
             }
         }
         
+        /// <summary>
+        /// 已登录态点击"修改密码"：弹出修改密码弹窗（需输入原密码）。
+        /// </summary>
+        private void ChangePwdButton_Click(object sender, EventArgs e)
+        {
+            string account = GlobalState.Instance.Username ?? _usernameTextBox.Text.Trim();
+            if (string.IsNullOrEmpty(account))
+            {
+                _errorLabel.Text = "请先输入用户名再修改密码";
+                return;
+            }
+            bool wasLoggedIn = GlobalState.Instance.IsLoggedIn;
+            Logger.Info($"用户 {account} 主动发起修改密码");
+            using (var changePwdForm = new ChangePasswordForm(account))
+            {
+                if (changePwdForm.ShowDialog(this) == DialogResult.OK && wasLoggedIn)
+                {
+                    Logger.Info("修改密码成功，已登录态自动执行注销");
+                    LogoutButton_Click(this, EventArgs.Empty);
+                }
+            }
+        }
+
         public void SetLoading(bool isLoading)
         {
             if (isLoading)
@@ -538,7 +582,8 @@ namespace PasswordManager.UI
                 _portTextBox.Enabled = false;
                 
                 _loginButton.Enabled = true;
-                
+                _changePwdButton.Visible = true;
+
                 _errorLabel.Text = "";
             }
             else
@@ -547,6 +592,8 @@ namespace PasswordManager.UI
                 _loginButton.Click -= LoginButton_Click;
                 _loginButton.Click -= LogoutButton_Click;
                 _loginButton.Click += LoginButton_Click;
+
+                _changePwdButton.Visible = true;
                 
                 _userInfoLabel.Visible = false;
                 
