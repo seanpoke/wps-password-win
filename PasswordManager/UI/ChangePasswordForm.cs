@@ -9,40 +9,52 @@ using PasswordManager.Utils;
 namespace PasswordManager.UI
 {
     /// <summary>
-    /// 首次登录强制改密弹窗。
-    /// 在 LoginForm 判定 needChangePwd=true 时弹出，仅使用登录返回的临时 token，
-    /// 不落地任何用户信息与 token；改密成功后关闭，由用户回到登录页用新密码重新登录。
+    /// 修改/重置密码弹窗，两种模式：
+    /// 1. 首次登录强制改密（needChangePwd=true）：需传入原密码与临时 token，显示"账号/新密码/确认密码"；
+    /// 2. 登录页主动修改（已登录态点击"修改密码"按钮）：需手动输入原密码，显示"原密码/新密码/确认密码"。
+    /// 接口约定（/account/change-password）：token 不再放请求头，account 放入请求体。
     /// </summary>
     public class ChangePasswordForm : Form
     {
         private readonly string _account;
         private readonly string _oldPassword;
-        private readonly string _token;
+        private readonly bool _requireOldPassword;
 
         private Label _accountLabel;
+        private TextBox _oldPasswordTextBox;
         private TextBox _newPasswordTextBox;
         private TextBox _confirmPasswordTextBox;
         private Button _saveButton;
         private Label _errorLabel;
         private Label _tipLabel;
 
+        /// <summary>首次登录强制改密：原密码由登录时输入的密码提供，无需再次输入。</summary>
         public ChangePasswordForm(string account, string oldPassword, string token)
         {
             _account = account;
             _oldPassword = oldPassword;
-            _token = token;
+            _requireOldPassword = false;
+            InitializeComponent();
+        }
+
+        /// <summary>登录页主动修改密码：需手动输入原密码。</summary>
+        public ChangePasswordForm(string account)
+        {
+            _account = account;
+            _oldPassword = null;
+            _requireOldPassword = true;
             InitializeComponent();
         }
 
         private void InitializeComponent()
         {
-            this.Text = "重置密码";
+            this.Text = _requireOldPassword ? "修改密码" : "重置密码";
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
             this.MinimizeBox = false;
             this.StartPosition = FormStartPosition.CenterScreen;
             this.BackColor = Color.White;
-            this.ClientSize = new Size(440, 310);
+            this.ClientSize = new Size(440, 330);
 
             Font labelFont = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular);
             Font inputFont = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular);
@@ -56,7 +68,7 @@ namespace PasswordManager.UI
 
             Label titleLabel = new Label
             {
-                Text = "首次登录，请重置密码",
+                Text = _requireOldPassword ? "修改密码" : "首次登录，请重置密码",
                 ForeColor = Color.FromArgb(0, 120, 212),
                 Font = new Font("Microsoft YaHei UI", 11F, FontStyle.Bold),
                 AutoSize = true,
@@ -64,27 +76,57 @@ namespace PasswordManager.UI
             };
             this.Controls.Add(titleLabel);
 
-            Label accountLabel = new Label
+            // 第一行：主动改密模式为"原密码"输入框；首次改密模式为只读"账号"展示
+            if (_requireOldPassword)
             {
-                Text = "账号:",
-                TextAlign = ContentAlignment.MiddleRight,
-                Font = labelFont,
-                ForeColor = Color.FromArgb(60, 60, 60),
-                Size = new Size(labelWidth, inputHeight),
-                Location = new Point(15, startY)
-            };
-            this.Controls.Add(accountLabel);
+                Label oldPwdLabel = new Label
+                {
+                    Text = "原密码:",
+                    TextAlign = ContentAlignment.MiddleRight,
+                    Font = labelFont,
+                    ForeColor = Color.FromArgb(60, 60, 60),
+                    Size = new Size(labelWidth, inputHeight),
+                    Location = new Point(15, startY)
+                };
+                this.Controls.Add(oldPwdLabel);
 
-            _accountLabel = new Label
+                _oldPasswordTextBox = new TextBox
+                {
+                    PasswordChar = '*',
+                    Font = inputFont,
+                    BorderStyle = BorderStyle.FixedSingle,
+                    Size = new Size(inputWidth, inputHeight),
+                    Location = new Point(15 + labelWidth, startY)
+                };
+                this.Controls.Add(_oldPasswordTextBox);
+                var oldPwdEye = LoginForm.CreatePasswordEyeLabel(_oldPasswordTextBox);
+                this.Controls.Add(oldPwdEye);
+                oldPwdEye.BringToFront();
+            }
+            else
             {
-                Text = _account ?? "",
-                TextAlign = ContentAlignment.MiddleLeft,
-                Font = labelFont,
-                ForeColor = Color.Black,
-                AutoSize = true,
-                Location = new Point(15 + labelWidth, startY)
-            };
-            this.Controls.Add(_accountLabel);
+                Label accountLabel = new Label
+                {
+                    Text = "账号:",
+                    TextAlign = ContentAlignment.MiddleRight,
+                    Font = labelFont,
+                    ForeColor = Color.FromArgb(60, 60, 60),
+                    Size = new Size(labelWidth, inputHeight),
+                    Location = new Point(15, startY)
+                };
+                this.Controls.Add(accountLabel);
+
+                _accountLabel = new Label
+                {
+                    Text = _account ?? "",
+                    TextAlign = ContentAlignment.MiddleLeft,
+                    Font = labelFont,
+                    ForeColor = Color.Black,
+                    AutoSize = true,
+                    Location = new Point(15 + labelWidth, startY)
+                };
+                this.Controls.Add(_accountLabel);
+            }
 
             Label newPwdLabel = new Label
             {
@@ -150,8 +192,10 @@ namespace PasswordManager.UI
                 Text = "",
                 ForeColor = Color.Red,
                 Font = labelFont,
-                AutoSize = true,
-                Location = new Point(15, startY + gap * 3 + 30)
+                AutoSize = false,
+                Size = new Size(410, 52),
+                TextAlign = ContentAlignment.TopLeft,
+                Location = new Point(15, startY + gap * 3 + 26)
             };
             this.Controls.Add(_errorLabel);
 
@@ -164,7 +208,7 @@ namespace PasswordManager.UI
                 FlatStyle = FlatStyle.Flat,
                 Cursor = Cursors.Hand,
                 Size = new Size(100, 35),
-                Location = new Point(this.ClientSize.Width - 120, startY + gap * 3 + 68)
+                Location = new Point(this.ClientSize.Width - 120, startY + gap * 3 + 84)
             };
             _saveButton.FlatAppearance.BorderSize = 0;
             _saveButton.Click += SaveButton_Click;
@@ -173,8 +217,15 @@ namespace PasswordManager.UI
 
         private async void SaveButton_Click(object sender, EventArgs e)
         {
+            string oldPwd = _requireOldPassword ? _oldPasswordTextBox.Text : _oldPassword;
             string newPwd = _newPasswordTextBox.Text;
             string confirmPwd = _confirmPasswordTextBox.Text;
+
+            if (_requireOldPassword && string.IsNullOrEmpty(oldPwd))
+            {
+                _errorLabel.Text = "请输入原密码";
+                return;
+            }
 
             if (string.IsNullOrEmpty(newPwd))
             {
@@ -197,7 +248,7 @@ namespace PasswordManager.UI
             _saveButton.Enabled = false;
             _errorLabel.Text = "";
 
-            bool success = await DoChangePasswordAsync(newPwd);
+            bool success = await DoChangePasswordAsync(oldPwd, newPwd);
 
             if (success)
             {
@@ -212,24 +263,22 @@ namespace PasswordManager.UI
             }
         }
 
-        private async Task<bool> DoChangePasswordAsync(string newPassword)
+        private async Task<bool> DoChangePasswordAsync(string oldPassword, string newPassword)
         {
             try
             {
                 var httpRequestService = new HttpRequestService();
+                // 接口约定（v1）：token 不再放请求头，account 放入请求体
                 var requestData = new
                 {
-                    oldPassword = _oldPassword,
+                    account = _account,
+                    oldPassword = oldPassword,
                     newPassword = newPassword
                 };
 
-                // 优先使用登录成功后返回的临时 token；若该 token 为空，则从全局缓存获取
-                string effectiveToken = _token ?? GlobalState.Instance.Token;
-
                 var response = await httpRequestService.PostAsync<object>(
                     ApiRoutes.AccountChangePassword,
-                    requestData,
-                    effectiveToken
+                    requestData
                 );
 
                 if (response != null && response.status == 200)
