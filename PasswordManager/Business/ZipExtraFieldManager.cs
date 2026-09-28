@@ -212,15 +212,6 @@ namespace PasswordManager.Business
         /// <summary>
         /// 检查文件是否为有效的ZIP文件或Office文档
         /// </summary>
-        public bool IsValidZipFile(string filePath)
-        {
-            string error;
-            return IsValidZipFile(filePath, out error);
-        }
-
-        /// <summary>
-        /// 检查文件是否为有效的ZIP文件或Office文档
-        /// </summary>
         /// <param name="filePath">文件路径</param>
         /// <param name="errorMessage">输出错误信息</param>
         /// <returns>是否为有效的ZIP文件</returns>
@@ -517,14 +508,6 @@ namespace PasswordManager.Business
                 Logger.Error($"写入ZIP元数据失败: {ex.Message}");
                 throw; // 重新抛出异常，让上层处理
             }
-        }
-
-        /// <summary>
-        /// 从ZIP文件尾部读取元数据
-        /// </summary>
-        public bool ReadMetadataFromFileEnd(string filePath, out byte type, out string content)
-        {
-            return ReadMetadataFromFileEnd(filePath, 0, out type, out content);
         }
 
         /// <summary>

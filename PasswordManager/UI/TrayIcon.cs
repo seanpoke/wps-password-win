@@ -3,6 +3,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using PasswordManager.Utils;
+using PasswordManager.UI.Controls;
 
 namespace PasswordManager.UI
 {
@@ -35,33 +36,55 @@ namespace PasswordManager.UI
                 throw;
             }
 
-            _contextMenu = new ContextMenuStrip();
+            _contextMenu = new ContextMenuStrip
+            {
+                Renderer = new PrototypeMenuRenderer(),
+                ShowImageMargin = false,
+                ShowCheckMargin = false,
+                AutoClose = true
+            };
+            _contextMenu.Padding = new Padding(Theme.S(4));
+            // 菜单弹出时强制原型尺寸（宽 240、高按项累加），并应用 Win11 8px 圆角
+            _contextMenu.Opening += (_, _) =>
+            {
+                if (!_contextMenu.IsHandleCreated)
+                {
+                    var _ = _contextMenu.Handle;   // 强制创建句柄以便设置 DWM 圆角
+                }
+                int h = Theme.S(8);
+                foreach (ToolStripItem it in _contextMenu.Items)
+                    h += it.Height;
+                _contextMenu.AutoSize = false;
+                _contextMenu.Width = Theme.S(240);
+                _contextMenu.Height = h;
+                MenuDwm.ApplyRound(_contextMenu.Handle);
+            };
 
-            ToolStripMenuItem homeItem = new ToolStripMenuItem("主页");
+            var homeItem = new PrototypeMenuItem("主页", "house");
             homeItem.Click += (sender, e) => ShowMainWindow();
 
-            ToolStripMenuItem showLogItem = new ToolStripMenuItem("显示日志");
+            var showLogItem = new PrototypeMenuItem("显示日志", "log");
             showLogItem.Click += (sender, e) => ShowLogClicked?.Invoke(this, EventArgs.Empty);
 
-            ToolStripMenuItem openFolderItem = new ToolStripMenuItem("打开安装目录");
+            var openFolderItem = new PrototypeMenuItem("打开安装目录", "folder");
             openFolderItem.Click += (sender, e) => OpenFolderClicked?.Invoke(this, EventArgs.Empty);
 
-            ToolStripMenuItem exitItem = new ToolStripMenuItem("退出");
+            var exitItem = new PrototypeMenuItem("退出", "power", danger: true);
             exitItem.Click += (sender, e) => ExitClicked?.Invoke(this, EventArgs.Empty);
 
             _contextMenu.Items.Add(homeItem);
             _contextMenu.Items.Add(showLogItem);
-            
+
             if (IsAdminUser())
             {
-                ToolStripMenuItem queryMetaItem = new ToolStripMenuItem("查询元数据");
+                var queryMetaItem = new PrototypeMenuItem("查询元数据", "meta");
                 queryMetaItem.Click += (sender, e) => ShowMetaQueryWindow();
                 _contextMenu.Items.Add(queryMetaItem);
             }
-            
-            _contextMenu.Items.Add(new ToolStripSeparator());
+
+            _contextMenu.Items.Add(MakeSeparator());
             _contextMenu.Items.Add(openFolderItem);
-            _contextMenu.Items.Add(new ToolStripSeparator());
+            _contextMenu.Items.Add(MakeSeparator());
             _contextMenu.Items.Add(exitItem);
 
             _notifyIcon.MouseUp += (sender, e) =>
@@ -92,6 +115,18 @@ namespace PasswordManager.UI
             _notifyIcon.DoubleClick += (sender, e) =>
             {
                 ShowMainWindow();
+            };
+        }
+
+        /// <summary>原型 .sep：分隔线项，高度 9px（上下 margin 4 + 1px 线）。</summary>
+        private static ToolStripSeparator MakeSeparator()
+        {
+            return new ToolStripSeparator
+            {
+                AutoSize = false,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+                Height = Theme.S(9)
             };
         }
 
@@ -282,7 +317,7 @@ namespace PasswordManager.UI
                 if (isAdmin && existingMetaItem == null)
                 {
                     Logger.Info("用户是管理员，添加查询元数据菜单");
-                    ToolStripMenuItem queryMetaItem = new ToolStripMenuItem("查询元数据");
+                    var queryMetaItem = new PrototypeMenuItem("查询元数据", "meta");
                     queryMetaItem.Click += (sender, e) => ShowMetaQueryWindow();
                     
                     int insertIndex = _contextMenu.Items.IndexOf(_contextMenu.Items.OfType<ToolStripMenuItem>().FirstOrDefault(item => item.Text == "显示日志")) + 1;

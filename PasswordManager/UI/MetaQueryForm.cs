@@ -1,4 +1,5 @@
 using System;
+using System.Drawing;
 using System.IO;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -6,22 +7,36 @@ using PasswordManager.Business;
 using PasswordManager.Services.Request;
 using PasswordManager.Services.Routing;
 using PasswordManager.Utils;
+using PasswordManager.UI.Controls;
 
 namespace PasswordManager.UI
 {
-    public class MetaQueryForm : Form
+    /// <summary>
+    /// 查询元数据窗口（严格还原原型 app-prototype.html SCREEN 6「查询元数据」）：
+    /// 选择文件行（mono 只读路径框 + 「选择文件」/「查询」按钮，支持文件拖拽）+
+    /// 错误横幅 + 元数据信息卡（uid/EncodePassword/keyVersion/DecodePassword，等宽省略 + 悬停完整 + 复制按钮）+
+    /// 提示行 + 右对齐关闭按钮。
+    /// 业务逻辑保留：FileMetaManager 读取 + /doc/password 解密接口。
+    /// 布局基准：窗口 480px 宽、content padding 32px（内容区 416px）。
+    /// </summary>
+    public class MetaQueryForm : ThemedWindow
     {
-        private TextBox _filePathTextBox;
-        private Button _queryButton;
-        private TextBox _uidTextBox;
-        private TextBox _encodePasswordTextBox;
-        private TextBox _keyVersionTextBox;
-        private TextBox _decodePasswordTextBox;
-        private Label _errorLabel;
-        private Label _loadingLabel;
-        private Panel _resultPanel;
+        private static int WinWidth => Theme.S(480);
+        private static int ContentX => Theme.S(32);      // .content padding 32
+        private static int ContentWidth => Theme.S(416); // 480 - 32*2
 
-        private FileMetaManager _fileMetaManager;
+        private Label _pathLabel = null!;
+        private ThemedTextBox _pathBox = null!;
+        private ThemedButton _browseButton = null!;
+        private ThemedButton _queryButton = null!;
+        private Label _pathError = null!;
+        private InfoBanner _banner = null!;
+        private InfoCard _metaCard = null!;
+        private Label _hintLine = null!;
+        private ThemedButton _closeButton = null!;
+
+        private readonly FileMetaManager _fileMetaManager;
+        private bool _busy;
 
         public MetaQueryForm()
         {
@@ -31,252 +46,206 @@ namespace PasswordManager.UI
 
         private void InitializeComponent()
         {
-            this.Text = "请输入文件路径";
-            this.FormBorderStyle = FormBorderStyle.FixedDialog;
-            this.MaximizeBox = false;
-            this.MinimizeBox = false;
-            this.StartPosition = FormStartPosition.CenterScreen;
-            this.BackColor = System.Drawing.Color.White;
-            this.ClientSize = new System.Drawing.Size(700, 320);
+            Text = "查询元数据";
+            ShowMinimizeButton = false;
+            ShowMaximizeButton = false;
+            AllowDrop = true;
 
-            Font labelFont = new System.Drawing.Font("Microsoft YaHei UI", 9F, System.Drawing.FontStyle.Regular);
-            Font inputFont = new System.Drawing.Font("Microsoft YaHei UI", 9F, System.Drawing.FontStyle.Regular);
-            Font buttonFont = new System.Drawing.Font("Microsoft YaHei UI", 9F, System.Drawing.FontStyle.Bold);
-
-            int labelGap = 15;
-            int controlGap = 28;
-            int startY = 20;
-            int inputWidth = 450;
-            int buttonWidth = 80;
-            int labelWidth = 70;
-
-            Label filePathLabel = new Label
+            // 文件拖拽（原型：把文件拖拽到上方输入框即可查询）
+            DragEnter += (_, e) =>
             {
-                Text = "文件路径:",
-                TextAlign = System.Drawing.ContentAlignment.MiddleRight,
-                Font = labelFont,
-                ForeColor = System.Drawing.Color.FromArgb(60, 60, 60),
-                Size = new System.Drawing.Size(labelWidth, 26),
-                Location = new System.Drawing.Point(labelGap, startY)
-            };
-            this.Controls.Add(filePathLabel);
-
-            _filePathTextBox = new TextBox
-            {
-                Font = inputFont,
-                BorderStyle = BorderStyle.FixedSingle,
-                Size = new System.Drawing.Size(inputWidth, 26),
-                Location = new System.Drawing.Point(labelWidth + labelGap * 2, startY),
-                PlaceholderText = "请输入文件路径"
-            };
-            this.Controls.Add(_filePathTextBox);
-
-            _queryButton = new Button
-            {
-                Text = "查询",
-                Font = buttonFont,
-                BackColor = System.Drawing.Color.FromArgb(0, 120, 212),
-                ForeColor = System.Drawing.Color.White,
-                FlatStyle = FlatStyle.Flat,
-                Cursor = Cursors.Hand,
-                Size = new System.Drawing.Size(buttonWidth, 26),
-                Location = new System.Drawing.Point(labelWidth + labelGap * 2 + inputWidth + labelGap, startY)
-            };
-            _queryButton.FlatAppearance.BorderSize = 0;
-            _queryButton.MouseEnter += (sender, e) => _queryButton.BackColor = System.Drawing.Color.FromArgb(26, 115, 232);
-            _queryButton.MouseLeave += (sender, e) => _queryButton.BackColor = System.Drawing.Color.FromArgb(0, 120, 212);
-            _queryButton.MouseDown += (sender, e) => _queryButton.BackColor = System.Drawing.Color.FromArgb(0, 90, 170);
-            _queryButton.MouseUp += (sender, e) => _queryButton.BackColor = System.Drawing.Color.FromArgb(26, 115, 232);
-            _queryButton.Click += QueryButton_Click;
-            this.Controls.Add(_queryButton);
-
-            _loadingLabel = new Label
-            {
-                Text = "查询中...",
-                ForeColor = System.Drawing.Color.Blue,
-                Font = labelFont,
-                AutoSize = true,
-                Visible = false,
-                Location = new System.Drawing.Point(labelGap, startY + controlGap)
-            };
-            this.Controls.Add(_loadingLabel);
-
-            _resultPanel = new Panel
-            {
-                Size = new System.Drawing.Size(670, 180),
-                Location = new System.Drawing.Point(labelGap, startY + controlGap),
-                BorderStyle = BorderStyle.FixedSingle
-            };
-            this.Controls.Add(_resultPanel);
-
-            int fieldGap = 42;
-            int fieldStartY = 10;
-            int fieldLabelWidth = 130;
-            int fieldValueWidth = 520;
-            int fieldValueHeight = 38;
-
-            Label uidFieldLabel = new Label
-            {
-                Text = "uid:",
-                TextAlign = System.Drawing.ContentAlignment.MiddleRight,
-                Font = labelFont,
-                ForeColor = System.Drawing.Color.FromArgb(60, 60, 60),
-                Size = new System.Drawing.Size(fieldLabelWidth, fieldValueHeight),
-                Location = new System.Drawing.Point(5, fieldStartY)
-            };
-            _resultPanel.Controls.Add(uidFieldLabel);
-
-            _uidTextBox = new TextBox
-            {
-                Text = "",
-                Font = inputFont,
-                ForeColor = System.Drawing.Color.Black,
-                Size = new System.Drawing.Size(fieldValueWidth, fieldValueHeight),
-                Location = new System.Drawing.Point(fieldLabelWidth + 5, fieldStartY),
-                BorderStyle = BorderStyle.FixedSingle,
-                ReadOnly = true,
-                Multiline = true,
-                WordWrap = true,
-                ScrollBars = ScrollBars.Vertical,
-                BackColor = System.Drawing.Color.White
-            };
-            _resultPanel.Controls.Add(_uidTextBox);
-
-            Label encodePasswordFieldLabel = new Label
-            {
-                Text = "EncodePassword:",
-                TextAlign = System.Drawing.ContentAlignment.MiddleRight,
-                Font = labelFont,
-                ForeColor = System.Drawing.Color.FromArgb(60, 60, 60),
-                Size = new System.Drawing.Size(fieldLabelWidth, fieldValueHeight),
-                Location = new System.Drawing.Point(5, fieldStartY + fieldGap)
-            };
-            _resultPanel.Controls.Add(encodePasswordFieldLabel);
-
-            _encodePasswordTextBox = new TextBox
-            {
-                Text = "",
-                Font = inputFont,
-                ForeColor = System.Drawing.Color.Black,
-                Size = new System.Drawing.Size(fieldValueWidth, fieldValueHeight),
-                Location = new System.Drawing.Point(fieldLabelWidth + 5, fieldStartY + fieldGap),
-                BorderStyle = BorderStyle.FixedSingle,
-                ReadOnly = true,
-                Multiline = true,
-                WordWrap = true,
-                ScrollBars = ScrollBars.Vertical,
-                BackColor = System.Drawing.Color.White
-            };
-            _resultPanel.Controls.Add(_encodePasswordTextBox);
-
-            Label keyVersionFieldLabel = new Label
-            {
-                Text = "keyVersion:",
-                TextAlign = System.Drawing.ContentAlignment.MiddleRight,
-                Font = labelFont,
-                ForeColor = System.Drawing.Color.FromArgb(60, 60, 60),
-                Size = new System.Drawing.Size(fieldLabelWidth, fieldValueHeight),
-                Location = new System.Drawing.Point(5, fieldStartY + fieldGap * 2)
-            };
-            _resultPanel.Controls.Add(keyVersionFieldLabel);
-
-            _keyVersionTextBox = new TextBox
-            {
-                Text = "",
-                Font = inputFont,
-                ForeColor = System.Drawing.Color.Black,
-                Size = new System.Drawing.Size(fieldValueWidth, fieldValueHeight),
-                Location = new System.Drawing.Point(fieldLabelWidth + 5, fieldStartY + fieldGap * 2),
-                BorderStyle = BorderStyle.FixedSingle,
-                ReadOnly = true,
-                Multiline = true,
-                WordWrap = true,
-                ScrollBars = ScrollBars.Vertical,
-                BackColor = System.Drawing.Color.White
-            };
-            _resultPanel.Controls.Add(_keyVersionTextBox);
-
-            Label decodePasswordFieldLabel = new Label
-            {
-                Text = "DecodePassword:",
-                TextAlign = System.Drawing.ContentAlignment.MiddleRight,
-                Font = labelFont,
-                ForeColor = System.Drawing.Color.FromArgb(60, 60, 60),
-                Size = new System.Drawing.Size(fieldLabelWidth, fieldValueHeight),
-                Location = new System.Drawing.Point(5, fieldStartY + fieldGap * 3)
-            };
-            _resultPanel.Controls.Add(decodePasswordFieldLabel);
-
-            _decodePasswordTextBox = new TextBox
-            {
-                Text = "",
-                Font = inputFont,
-                ForeColor = System.Drawing.Color.Black,
-                Size = new System.Drawing.Size(fieldValueWidth, fieldValueHeight),
-                Location = new System.Drawing.Point(fieldLabelWidth + 5, fieldStartY + fieldGap * 3),
-                BorderStyle = BorderStyle.FixedSingle,
-                ReadOnly = true,
-                Multiline = true,
-                WordWrap = true,
-                ScrollBars = ScrollBars.Vertical,
-                BackColor = System.Drawing.Color.White
-            };
-            _resultPanel.Controls.Add(_decodePasswordTextBox);
-
-            _errorLabel = new Label
-            {
-                Text = "",
-                ForeColor = System.Drawing.Color.Red,
-                Font = labelFont,
-                Size = new System.Drawing.Size(670, 25),
-                AutoSize = false,
-                Location = new System.Drawing.Point(labelGap, startY + controlGap + 190)
-            };
-            this.Controls.Add(_errorLabel);
-
-            _filePathTextBox.KeyDown += (sender, e) =>
-            {
-                if (e.KeyCode == Keys.Enter)
+                if (e.Data?.GetDataPresent(DataFormats.FileDrop) == true)
                 {
-                    _queryButton.PerformClick();
+                    e.Effect = DragDropEffects.Copy;
+                    _pathBox.DropHighlight = true;
+                    _pathBox.Invalidate();
                 }
+            };
+            DragLeave += (_, _) => { _pathBox.DropHighlight = false; _pathBox.Invalidate(); };
+            DragDrop += (_, e) =>
+            {
+                _pathBox.DropHighlight = false;
+                _pathBox.Invalidate();
+                if (e.Data?.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
+                    SetFilePath(files[0]);
+            };
+
+            // ---- 选择文件 field ----
+            _pathLabel = MakeLabel("选择文件", Theme.Body, Theme.TextSecondary);
+
+            _pathBox = new ThemedTextBox(mono: true, password: false, placeholder: "未选择文件")
+            {
+                ReadOnly = true
+            };
+            _pathError = MakeLabel("请先选择要查询的文件", Theme.Small, Theme.Danger);
+            _pathError.Visible = false;
+
+            _browseButton = new ThemedButton("选择文件", ThemedButtonStyle.Secondary);
+            _browseButton.Click += (_, _) =>
+            {
+                using var dialog = new OpenFileDialog
+                {
+                    Filter = "WPS 文档 (*.docx;*.xlsx;*.pptx)|*.docx;*.xlsx;*.pptx|所有文件 (*.*)|*.*"
+                };
+                if (dialog.ShowDialog(this) == DialogResult.OK)
+                    SetFilePath(dialog.FileName);
+            };
+
+            _queryButton = new ThemedButton("查询", ThemedButtonStyle.Primary);
+            _queryButton.Click += QueryButton_Click;
+
+            // ---- 错误横幅 ----
+            _banner = new InfoBanner();
+
+            // ---- 元数据信息卡（原型 .card.tight：uid/EncodePassword/keyVersion/DecodePassword） ----
+            _metaCard = new InfoCard { KeyWidth = Theme.S(132) };
+            _metaCard.AddRow("uid", "", mono: true, empty: true, hasCopy: true);
+            _metaCard.AddRow("EncodePassword", "", mono: true, empty: true, hasCopy: true);
+            _metaCard.AddRow("keyVersion", "", mono: true, empty: true, hasCopy: true);
+            _metaCard.AddRow("DecodePassword", "", mono: true, empty: true, hasCopy: true);
+
+            // ---- 提示行（原型 .hint-line） ----
+            _hintLine = new Label
+            {
+                Text = "值过长时单行省略，悬停可见完整内容；点击「选择文件」或把文件拖拽到上方输入框即可查询。",
+                Font = Theme.Small,
+                ForeColor = Theme.TextTertiary,
+                AutoSize = false,
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent
+            };
+
+            // ---- 关闭按钮（原型 .dialog-actions 右对齐） ----
+            _closeButton = new ThemedButton("关闭", ThemedButtonStyle.Primary);
+            _closeButton.Click += (_, _) => Close();
+
+            Controls.AddRange(new Control[]
+            {
+                _pathLabel, _pathBox, _pathError, _browseButton, _queryButton,
+                _banner, _metaCard, _hintLine, _closeButton
+            });
+
+            ApplyLayout();
+        }
+
+        private static Label MakeLabel(string text, Font font, Color color)
+        {
+            return new Label
+            {
+                Text = text,
+                Font = font,
+                ForeColor = color,
+                AutoSize = false,
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent
             };
         }
 
-        private async void QueryButton_Click(object sender, EventArgs e)
+        private void SetFilePath(string path)
         {
-            string filePath = _filePathTextBox.Text.Trim();
+            _pathBox.Inner.Text = path;
+            _pathError.Visible = false;
+            _pathBox.HasError = false;
+            ApplyLayout();
+        }
 
+        private void ApplyLayout()
+        {
+            int y = TitleBarHeight + ContentPadding;
+
+            // 选择文件 field：label(18)+6 → query-row(36) [+error 4+16] + margin-bottom 16
+            _pathLabel.SetBounds(ContentX, y - Theme.S(2), ContentWidth, Theme.S(22)); y += Theme.S(18 + 6);
+            int rowH = ThemedTextBox.BoxHeight;
+            int btnW = Theme.S(96);
+            int gap = Theme.S(8);
+            int pathW = ContentWidth - btnW * 2 - gap * 2;
+            _pathBox.SetBounds(ContentX, y, pathW, rowH);
+            _browseButton.SetBounds(ContentX + pathW + gap, y, btnW, rowH);
+            _queryButton.SetBounds(ContentX + pathW + gap + btnW + gap, y, btnW, rowH);
+            y += rowH;
+            _pathError.SetBounds(ContentX, y + Theme.S(2), ContentWidth, Theme.S(20));
+            if (_pathBox.HasError) y += Theme.S(4 + 16);
+            y += Theme.S(16);
+
+            // banner（显示时插入：min-height 60 + margin-bottom 16）
+            if (_banner.IsShown)
+            {
+                _banner.SetBounds(ContentX, y, ContentWidth, Theme.S(60));
+                int bh = _banner.UpdateHeight();
+                _banner.Height = bh;
+                y += bh + Theme.S(16);
+            }
+            else
+            {
+                _banner.SetBounds(ContentX, -Theme.S(500), ContentWidth, Theme.S(60));
+            }
+
+            // 信息卡（原型 .card.tight：margin-top 4）
+            _metaCard.SetBounds(ContentX, y + Theme.S(4), ContentWidth, _metaCard.GetPreferredHeight());
+            y += Theme.S(4) + _metaCard.Height;
+
+            // 提示行（原型 .hint-line：margin 10 0 0）
+            y += Theme.S(10);
+            _hintLine.SetBounds(ContentX, y, ContentWidth, Theme.S(32));
+            y += Theme.S(32);
+
+            // 关闭按钮（原型 .dialog-actions：右对齐、margin-top 20）
+            y += Theme.S(20);
+            _closeButton.SetBounds(WinWidth - ContentX - Theme.S(96), y, Theme.S(96), ThemedButton.ButtonHeight);
+            y += ThemedButton.ButtonHeight;
+
+            ClientSize = new Size(WinWidth, y + ContentPadding);
+        }
+
+        // =====================================================================
+        // 查询 / 解密（业务逻辑与原版一致）
+        // =====================================================================
+        private async void QueryButton_Click(object? sender, EventArgs e)
+        {
+            if (_busy) return;
+
+            string filePath = _pathBox.Inner.Text.Trim();
             if (string.IsNullOrEmpty(filePath))
             {
-                ShowError("请输入文件路径");
+                _pathBox.HasError = true;
+                _pathError.Visible = true;
+                ApplyLayout();
                 return;
             }
 
             ClearResults();
-            ShowLoading(true);
+            SetBusy(true);
+            ApplyLayout();
 
             await QueryMetadataAsync(filePath);
 
-            ShowLoading(false);
+            SetBusy(false);
+            ApplyLayout();
+        }
+
+        private void SetBusy(bool busy)
+        {
+            _busy = busy;
+            _queryButton.Text = busy ? "查询中" : "查询";
+            _queryButton.Loading = busy;
+            _pathBox.Enabled = !busy;
+            _browseButton.Enabled = !busy;
         }
 
         private async Task QueryMetadataAsync(string filePath)
         {
             try
             {
-                ShowError("");
-
                 if (!File.Exists(filePath))
                 {
-                    ShowError("文件路径不存在或无法找到文件");
+                    _banner.Show("文件路径不存在或无法找到文件");
                     return;
                 }
 
                 string extension = Path.GetExtension(filePath).ToLower();
                 if (extension != ".docx" && extension != ".xlsx" && extension != ".pptx")
                 {
-                    ShowError("不支持的文件格式，请选择 .docx, .xlsx 或 .pptx 文件");
+                    _banner.Show("不支持的文件格式，请选择 .docx, .xlsx 或 .pptx 文件");
                     return;
                 }
 
@@ -329,14 +298,11 @@ namespace PasswordManager.UI
                     }
                 }
 
-                _uidTextBox.Text = uid ?? "";
-                _encodePasswordTextBox.Text = encodePassword ?? "";
-                _keyVersionTextBox.Text = keyVersion ?? "";
-                _decodePasswordTextBox.Text = decodePassword ?? "";
+                UpdateMetaCard("uid", uid, "EncodePassword", encodePassword, "keyVersion", keyVersion, "DecodePassword", decodePassword);
 
                 if (!string.IsNullOrEmpty(errorMessage))
                 {
-                    ShowError(errorMessage);
+                    _banner.Show(errorMessage);
                 }
 
                 Logger.Info("元数据查询完成");
@@ -344,8 +310,19 @@ namespace PasswordManager.UI
             catch (Exception ex)
             {
                 Logger.Error($"查询元数据时发生异常: {ex.Message}");
-                ShowError("查询元数据时发生异常: " + ex.Message);
+                _banner.Show("查询元数据时发生异常: " + ex.Message);
             }
+        }
+
+        /// <summary>把查询结果填入信息卡（有值显示等宽内容，无值显示 "—"）。</summary>
+        private void UpdateMetaCard(string k1, string? v1, string k2, string? v2, string k3, string? v3, string k4, string? v4)
+        {
+            _metaCard.Clear();
+            _metaCard.AddRow(k1, v1 ?? "", mono: true, empty: string.IsNullOrEmpty(v1), hasCopy: !string.IsNullOrEmpty(v1));
+            _metaCard.AddRow(k2, v2 ?? "", mono: true, empty: string.IsNullOrEmpty(v2), hasCopy: !string.IsNullOrEmpty(v2));
+            _metaCard.AddRow(k3, v3 ?? "", mono: true, empty: string.IsNullOrEmpty(v3), hasCopy: !string.IsNullOrEmpty(v3));
+            _metaCard.AddRow(k4, v4 ?? "", mono: true, empty: string.IsNullOrEmpty(v4), hasCopy: !string.IsNullOrEmpty(v4));
+            _metaCard.Invalidate();
         }
 
         private async Task<string> DecryptPasswordAsync(string uid, string encryPassword, string keyVersion)
@@ -397,29 +374,15 @@ namespace PasswordManager.UI
             }
         }
 
-        private void ShowLoading(bool isLoading)
-        {
-            _loadingLabel.Visible = isLoading;
-            _resultPanel.Visible = !isLoading;
-            _queryButton.Enabled = !isLoading;
-            _filePathTextBox.Enabled = !isLoading;
-        }
-
-        private void ShowError(string message)
-        {
-            _errorLabel.Text = message;
-        }
-
         private void ClearResults()
         {
-            _uidTextBox.Text = "";
-            _encodePasswordTextBox.Text = "";
-            _keyVersionTextBox.Text = "";
-            _decodePasswordTextBox.Text = "";
-            _errorLabel.Text = "";
+            _banner.Hide();
+            _pathError.Visible = false;
+            _pathBox.HasError = false;
+            UpdateMetaCard("uid", null, "EncodePassword", null, "keyVersion", null, "DecodePassword", null);
         }
 
-        private string AppendError(string existing, string newError)
+        private string AppendError(string? existing, string newError)
         {
             if (string.IsNullOrEmpty(existing))
             {

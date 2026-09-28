@@ -201,7 +201,7 @@ namespace PasswordManager.UI
             });
             _commandSignal.Set();
             
-            Logger.Debug($"已提交显示命令，对话框句柄: {dialogHandle}");
+            Logger.Info($"已提交显示命令，对话框句柄: {dialogHandle}");
         }
 
         public void HideButton()

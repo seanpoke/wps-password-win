@@ -30,34 +30,6 @@ namespace PasswordManager.Business
             CurrentKeyVersion = "default";
         }
 
-        public FileMeta(string filePath, string uid, string currentPassword, 
-                       SortedSet<string> pendingPasswordList, string ownerAccount, 
-                       string ownerName, bool readAuth, bool writeAuth, string currentKeyVersion = null)
-        {
-            FilePath = filePath;
-            Uid = uid;
-            CurrentPassword = currentPassword;
-            PendingPasswordList = pendingPasswordList ?? new SortedSet<string>();
-            OwnerAccount = ownerAccount;
-            OwnerName = ownerName;
-            ReadAuth = readAuth;
-            WriteAuth = writeAuth;
-            CurrentKeyVersion = currentKeyVersion ?? "default";
-        }
-
-        public void AddPendingPassword(string password)
-        {
-            if (!string.IsNullOrEmpty(password))
-            {
-                PendingPasswordList.Add(password);
-            }
-        }
-
-        public void ClearPendingPasswords()
-        {
-            PendingPasswordList.Clear();
-        }
-
         public bool HasPendingPasswords()
         {
             return PendingPasswordList.Count > 0;

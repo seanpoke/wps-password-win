@@ -27,50 +27,8 @@ namespace PasswordManager
     internal static class Program
     {
         // Win32 API 定义
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool SetForegroundWindow(IntPtr hWnd);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern IntPtr GetForegroundWindow();
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern IntPtr GetFocus();
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern IntPtr SetFocus(IntPtr hWnd);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern IntPtr GetParent(IntPtr hWnd);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool EnumChildWindows(IntPtr hWndParent, EnumChildWindowsProc lpEnumFunc, IntPtr lParam);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
-
-        // 枚举子窗口的委托
-        private delegate bool EnumChildWindowsProc(IntPtr hwnd, IntPtr lParam);
-
-        // Win32 API 定义：模拟键盘事件
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
-
-        // Win32 API 定义：查找子窗口
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern IntPtr FindWindowEx(IntPtr hwndParent, IntPtr hwndChildAfter, string lpszClass, string lpszWindow);
-
-        // Win32 API 定义：设置窗口文本
-        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-        private static extern bool SetWindowText(IntPtr hWnd, string lpString);
-
-        // Win32 API 定义：获取窗口文本
         [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
         private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr WindowFromPoint(POINT pt);
-
-
 
         [DllImport("user32.dll")]
         private static extern bool GetCursorPos(out POINT lpPoint);
@@ -84,18 +42,10 @@ namespace PasswordManager
         [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
         private static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
 
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool GetWindowRect(IntPtr hWnd, ref RECT lpRect);
-
         [DllImport("user32.dll")]
         private static extern bool IsWindow(IntPtr hWnd);
 
         private static readonly BlockingCollection<string> _filePathQueue = new BlockingCollection<string>();
-
-        public static BlockingCollection<string> GetFilePathQueue()
-        {
-            return _filePathQueue;
-        }
         private static Thread _filePathConsumerThread;
         private static volatile bool _isConsumerRunning = false;
         private static volatile string _lastPostedFilePath = null;
@@ -111,15 +61,6 @@ namespace PasswordManager
         {
             public int X;
             public int Y;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct RECT
-        {
-            public int Left;
-            public int Top;
-            public int Right;
-            public int Bottom;
         }
 
         // 监控文档关闭行为的线程
@@ -653,10 +594,7 @@ namespace PasswordManager
                                             FileStateManager.RegisterFile(documentPath);
                                         }
                                     }
-                                    else
-                                    {
-                                        Logger.Warning("未能获取到文档路径");
-                                    }
+                                    // 未获取到文档路径属于常态（未打开文档），不再打印警告刷屏
                                 }
                                 catch (Exception ex)
                                 {
@@ -691,12 +629,12 @@ namespace PasswordManager
                                     GetWindowText(encryptDialog, dialogTitle, dialogTitle.Capacity);
                                     string title = dialogTitle.ToString();
 
-                                    Logger.Debug($"找到对话框: {encryptDialog}, 标题: {title}");
+                                    Logger.Info($"找到对话框: {encryptDialog}, 标题: {title}");
 
                                     // 只有在加密窗口中显示悬浮按钮，解密窗口不显示
                                     if (title == "密码加密")
                                     {
-                                        Logger.Debug($"找到加密对话框: {encryptDialog}, 标题: {title}");
+                                        Logger.Info($"找到加密对话框: {encryptDialog}, 标题: {title}");
                                         
                                         FileMeta currentFileMeta = FileMetaFactory.Instance.GetFileMeta(currentDocumentPath);
                                         Logger.Info($"获取到文件元数据: Uid={currentFileMeta?.Uid}, WriteAuth={currentFileMeta?.WriteAuth}");
@@ -923,7 +861,8 @@ namespace PasswordManager
                                             }
                                             else
                                             {
-                                                Logger.Warning("未能获取到文档路径");
+                                                // 常态分支降级为 Debug（Release 下默认不打印），避免刷屏
+                                                Logger.Debug("未能获取到文档路径");
                                             }
                                         }
                                     }
@@ -3366,19 +3305,6 @@ namespace PasswordManager
             }
 
             return false;
-        }
-
-        // 检查是否为密码错误对话框
-        private static bool IsPasswordErrorDialog(IntPtr dialogHandle)
-        {
-            StringBuilder text = new StringBuilder(1024);
-            GetWindowText(dialogHandle, text, text.Capacity);
-
-            string dialogText = text.ToString();
-            return dialogText.Contains("密码错误") ||
-                   dialogText.Contains("错误") ||
-                   dialogText.Contains("不正确") ||
-                   dialogText.Contains("失败");
         }
 
         // 启动内核文件监视器

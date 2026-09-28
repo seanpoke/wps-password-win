@@ -122,16 +122,6 @@ namespace PasswordManager.Business
             }
         }
 
-        public static bool IsFileRegistered(string filePath)
-        {
-            return !string.IsNullOrEmpty(filePath) && _monitoredFiles.ContainsKey(filePath);
-        }
-
-        public static int GetRegisteredFileCount()
-        {
-            return _monitoredFiles.Count;
-        }
-
         public static void ClearAll()
         {
             _monitoredFiles.Clear();

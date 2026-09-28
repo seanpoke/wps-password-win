@@ -12,6 +12,7 @@ namespace PasswordManager.Utils
         private static readonly string _configFile = Path.Combine(_appDataPath, "config.json");
         private static readonly string _userFile = Path.Combine(_appDataPath, "user.json");
         private static readonly string _keyFile = Path.Combine(_appDataPath, "keyinfo.json");
+        private static readonly string _loginCacheFile = Path.Combine(_appDataPath, "login_cache.json");
         private static readonly string _encryptionKey = "PasswordManager_EncryptionKey";
 
         static StorageManager()
@@ -207,22 +208,56 @@ namespace PasswordManager.Utils
             return (null, null);
         }
 
+        #endregion
+
+        #region 登录缓存（记住密码）
+
         /// <summary>
-        /// 清除本地存储中的密钥信息
+        /// 保存登录缓存。remember 仅控制启动时是否预填账号密码；
+        /// 密码非空时总是加密保存（供已登录"账户信息"页明文展示）。
         /// </summary>
-        public static void ClearKeyInfo()
+        public static void SaveLoginCache(bool remember, string account, string password)
         {
             try
             {
-                if (File.Exists(_keyFile))
+                var cache = new
                 {
-                    File.Delete(_keyFile);
+                    remember,
+                    account = account ?? "",
+                    password = !string.IsNullOrEmpty(password) ? Encrypt(password) : ""
+                };
+                string jsonContent = JsonSerializer.Serialize(cache);
+                File.WriteAllText(_loginCacheFile, jsonContent, Encoding.UTF8);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"保存登录缓存失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 读取登录缓存。返回 (remember, account, password)；未保存时返回 (false, null, null)。
+        /// </summary>
+        public static (bool remember, string account, string password) LoadLoginCache()
+        {
+            try
+            {
+                if (File.Exists(_loginCacheFile))
+                {
+                    string jsonContent = File.ReadAllText(_loginCacheFile, Encoding.UTF8);
+                    var cache = JsonSerializer.Deserialize<JsonElement>(jsonContent);
+                    bool remember = cache.TryGetProperty("remember", out var r) && r.GetBoolean();
+                    string account = cache.TryGetProperty("account", out var a) ? a.GetString() : "";
+                    string encPwd = cache.TryGetProperty("password", out var p) ? p.GetString() : "";
+                    string password = !string.IsNullOrEmpty(encPwd) ? Decrypt(encPwd) : "";
+                    return (remember, account ?? "", password ?? "");
                 }
             }
             catch (Exception ex)
             {
-                Logger.Error($"清除密钥信息失败: {ex.Message}");
+                Logger.Error($"读取登录缓存失败: {ex.Message}");
             }
+            return (false, null, null);
         }
 
         #endregion

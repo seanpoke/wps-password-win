@@ -482,11 +482,6 @@ namespace PasswordManager.Business
             return true;
         }
 
-        public bool HasPasswordMetadata(string filePath)
-        {
-            return !string.IsNullOrEmpty(ReadPasswordFromFile(filePath));
-        }
-
         public bool HasUidMetadata(string filePath)
         {
             if (!File.Exists(filePath))
@@ -547,21 +542,6 @@ namespace PasswordManager.Business
             string newUid = GenerateUid();
             Logger.Info($"生成新的UID: {newUid}");
             return newUid;
-        }
-
-        public bool SaveDocumentUid(string filePath)
-        {
-            string uid = GetDocumentUid(filePath);
-            if (!string.IsNullOrEmpty(uid))
-            {
-                bool success = WriteUidToFile(filePath, uid);
-                if (success)
-                {
-                    Logger.Info($"UID已成功保存到 {filePath} 的元数据中");
-                }
-                return success;
-            }
-            return false;
         }
     }
 }

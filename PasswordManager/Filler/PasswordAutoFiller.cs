@@ -566,30 +566,5 @@ namespace PasswordManager.Filler
                 Logger.Error($"UI Automation点击按钮失败: {ex.Message}");
             }
         }
-
-        public bool IsDecryptDialogPresent()
-        {
-            IntPtr dialog = _monitor.FindPasswordDialog();
-            return dialog != IntPtr.Zero && _windowLocator.IsDecryptDialog(dialog);
-        }
-
-        public bool IsEncryptDialogPresent()
-        {
-            IntPtr dialog = _monitor.FindPasswordDialog();
-            return dialog != IntPtr.Zero && _windowLocator.IsEncryptDialog(dialog);
-        }
-
-        public void LogDialogInfo()
-        {
-            IntPtr dialog = _monitor.FindPasswordDialog();
-            if (dialog != IntPtr.Zero)
-            {
-                Logger.Debug($"找到对话框: {dialog}, 标题: {_windowLocator.GetWindowTitle(dialog)}");
-            }
-            else
-            {
-                Logger.Debug("未找到密码对话框");
-            }
-        }
     }
 }

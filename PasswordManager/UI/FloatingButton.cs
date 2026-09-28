@@ -57,7 +57,9 @@ namespace PasswordManager.UI
         private void InitializeComponent()
         {
             this.FormBorderStyle = FormBorderStyle.None;
-            this.TopMost = false;
+            // 置顶显示：Win10 上非置顶窗口插到 WPS 对话框 Z 序之后会被 WPS 主窗口盖住（前台激活被系统拦截），
+            // 模态对话框打开期间悬浮按钮需要始终可见，关闭时由监控循环 HideButton 收起
+            this.TopMost = true;
             this.ShowInTaskbar = false;
             this.TransparencyKey = Color.Magenta;
             this.BackColor = Color.Magenta;
@@ -638,15 +640,15 @@ namespace PasswordManager.UI
             // 只有在位置发生变化时才更新位置
             if (this.Location.X != x || this.Location.Y != y)
             {
-                Logger.Debug($"显示悬浮按钮在对话框左侧，位置: X={x}, Y={y}, DPI缩放: {dpiScale}");
+                Logger.Info($"显示悬浮按钮在对话框左侧，位置: X={x}, Y={y}, 宽高: {this.Width}x{this.Height}, DPI缩放: {dpiScale}");
                 this.Location = new System.Drawing.Point(x, y);
             }
 
-            // 设置按钮在对话框之后显示，确保层级同步
-            SetWindowPos(this.Handle, dialogHandle, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-            Logger.Debug($"设置悬浮按钮在对话框 {dialogHandle} 之后显示");
-
+            // 置顶显示：先 Show 再强制进入 TOPMOST band，确保 Win10 上不被 WPS 主窗口遮挡
             Show();
+
+            SetWindowPos(this.Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            Logger.Info($"悬浮按钮已显示，位置: ({this.Location.X},{this.Location.Y}), 尺寸: {this.Width}x{this.Height}, Visible: {this.Visible}");
         }
 
         public void HideButton()

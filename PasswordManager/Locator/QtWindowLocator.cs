@@ -248,13 +248,6 @@ namespace PasswordManager.Locator
             return sb.ToString();
         }
 
-        public string GetWindowClassName(IntPtr hWnd)
-        {
-            StringBuilder sb = new StringBuilder(256);
-            GetClassName(hWnd, sb, sb.Capacity);
-            return sb.ToString();
-        }
-
         public bool IsDecryptDialog(IntPtr hWnd)
         {
             string title = GetWindowTitle(hWnd);

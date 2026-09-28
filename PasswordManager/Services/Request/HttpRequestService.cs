@@ -140,54 +140,5 @@ namespace PasswordManager.Services.Request
                 throw;
             }
         }
-        
-        /// <summary>
-        /// 执行PUT请求
-        /// </summary>
-        /// <typeparam name="T">响应数据类型</typeparam>
-        /// <param name="endpoint">接口路径</param>
-        /// <param name="data">请求数据</param>
-        /// <param name="token">访问令牌</param>
-        /// <returns>响应结果</returns>
-        public async Task<ApiResponse<T>> PutAsync<T>(string endpoint, object data, string token = null)
-        {
-            try
-            {
-                string serverAddress = GlobalState.Instance.GetServerAddress();
-                string url = $"{serverAddress}{endpoint}";
-                
-                var request = new HttpRequestMessage(HttpMethod.Put, url);
-                
-                // 添加请求头
-                request.Content = new StringContent(JsonConvert.SerializeObject(data), Encoding.UTF8, "application/json");
-                
-                if (!string.IsNullOrEmpty(token))
-                {
-                    request.Headers.Add("token", token);
-                }
-                
-                Logger.Info($"发送PUT请求: {url}");
-                var response = await GetHttpClient().SendAsync(request);
-                
-                string responseContent = await response.Content.ReadAsStringAsync();
-                Logger.Debug($"PUT请求响应: {responseContent}");
-                
-                if (response.IsSuccessStatusCode)
-                {
-                    var result = JsonConvert.DeserializeObject<ApiResponse<T>>(responseContent);
-                    return result;
-                }
-                else
-                {
-                    Logger.Error($"PUT请求失败: {response.StatusCode}, {responseContent}");
-                    throw new HttpRequestException($"请求失败: {response.StatusCode}");
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"PUT请求异常: {ex.Message}");
-                throw;
-            }
-        }
     }
 }
