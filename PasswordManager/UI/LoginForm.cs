@@ -53,6 +53,12 @@ namespace PasswordManager.UI
 
         private bool _initialized;   // 构造期间抑制 CheckedChanged 回写
 
+        /// <summary>
+        /// 开发者模式：双击登录页大标题「密码管理」切换，运行时生效、不持久化。
+        /// 开启后域名允许显式 http:// 协议（无协议仍自动补 https://）。
+        /// </summary>
+        public static bool DeveloperMode { get; private set; }
+
         public LoginForm()
         {
             InitializeComponent();
@@ -105,6 +111,7 @@ namespace PasswordManager.UI
 
             // --- header ---
             _headerTitle = MakeLabel("密码管理", Theme.H1, Theme.TextPrimary);
+            _headerTitle.DoubleClick += HeaderTitle_DoubleClick;   // 双击切换开发者模式
             _headerSub = MakeLabel("请使用域账号登录", Theme.Body, Theme.TextSecondary);
 
             // --- 用户名 field ---
@@ -388,6 +395,13 @@ namespace PasswordManager.UI
         // =====================================================================
         // 交互 / 状态
         // =====================================================================
+        private void HeaderTitle_DoubleClick(object? sender, EventArgs e)
+        {
+            DeveloperMode = !DeveloperMode;
+            Logger.Info($"开发者模式已{(DeveloperMode ? "开启" : "关闭")}");
+            _headerSub.Text = DeveloperMode ? "请使用域账号登录（开发者模式）" : "请使用域账号登录";
+        }
+
         private void RememberBox_CheckedChanged(object? sender, EventArgs e)
         {
             if (!_initialized) return;
@@ -436,11 +450,6 @@ namespace PasswordManager.UI
         {
             if (GlobalState.Instance.IsLoggedIn) return;
             SetLoginLoading(isLoading);
-        }
-
-        private void DomainTextBox_DoubleClick(object? sender, EventArgs e)
-        {
-            // 域名输入框已不含协议前缀，双击切换协议功能移除；协议沿用 GlobalState 已保存配置
         }
 
         // =====================================================================
@@ -495,16 +504,22 @@ namespace PasswordManager.UI
                 return;
             }
 
+            // 域名协议解析：无协议自动补 https://；显式协议仅允许 https（开发者模式额外允许 http）
+            if (!UrlParser.TryResolveDomain(domain, allowHttp: DeveloperMode,
+                    out string host, out string protocol, out string domainError))
+            {
+                if (!_expander.IsOpen) _expander.Toggle();
+                SetExpanderBodyVisible();
+                _banner.Show(domainError);
+                ApplyLoginLayout();
+                return;
+            }
+
             SetLoginLoading(true);
 
             try
             {
-                // 域名仅含主机地址；协议沿用已保存配置（默认 https）
-                string cleanDomain = domain;
-                string protocol = GlobalState.Instance.Protocol;
-                if (string.IsNullOrEmpty(protocol)) protocol = "https";
-
-                GlobalState.Instance.ServerIp = cleanDomain;
+                GlobalState.Instance.ServerIp = host;
                 GlobalState.Instance.ServerPort = serverPort;
                 GlobalState.Instance.Protocol = protocol;
                 GlobalState.Instance.RawDomain = domain;
@@ -705,39 +720,6 @@ namespace PasswordManager.UI
                 SetLoginLoading(false);
                 ApplyLoginLayout();
             }
-        }
-
-        // =====================================================================
-        // 兼容：其他窗体（ChangePasswordForm）在密码框内嵌的"小眼睛"
-        // =====================================================================
-        [DllImport("user32.dll", EntryPoint = "SendMessage")]
-        private static extern IntPtr SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
-
-        private const int EM_SETMARGINS = 0x00D3;
-        private const int EC_RIGHTMARGIN = 0x2;
-
-        internal static Label CreatePasswordEyeLabel(TextBox textBox)
-        {
-            Action setMargin = () => SendMessage(textBox.Handle, EM_SETMARGINS, EC_RIGHTMARGIN, 30 << 16);
-            textBox.HandleCreated += (s, e) => setMargin();
-            setMargin();
-
-            Label eyeLabel = new Label
-            {
-                Text = "👁",
-                Size = new Size(24, textBox.Height - 2),
-                Location = new Point(textBox.Right - 28, textBox.Top + 1),
-                BackColor = textBox.BackColor,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Cursor = Cursors.Hand
-            };
-            eyeLabel.Click += (s, e) =>
-            {
-                bool hidden = textBox.PasswordChar != '\0';
-                textBox.PasswordChar = hidden ? '\0' : '*';
-                eyeLabel.Text = hidden ? "🙈" : "👁";
-            };
-            return eyeLabel;
         }
 
         // =====================================================================

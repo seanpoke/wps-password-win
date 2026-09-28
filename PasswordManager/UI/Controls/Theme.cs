@@ -63,7 +63,6 @@ namespace PasswordManager.UI.Controls
         public static readonly Color SuccessBg = Color.FromArgb(0xEA, 0xF6, 0xEA);      // --success-bg
         public static readonly Color Divider = Color.FromArgb(0xE0, 0xE0, 0xE0);        // --divider
         public static readonly Color SelBg = Color.FromArgb(0xFF, 0xF1, 0xA8);          // --sel-bg（关键词高亮）
-        public static readonly Color FocusOuter = Color.FromArgb(0x1A, 0x1A, 0x1A);     // --focus-outer
         public static readonly Color TitleBtnHover = Color.FromArgb(15, 0, 0, 6);       // rgba(0,0,0,.06)
         public static readonly Color LogInfoFg = Color.FromArgb(0x00, 0x47, 0x7F);      // 日志 INFO 前景
 

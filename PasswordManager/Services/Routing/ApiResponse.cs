@@ -57,70 +57,7 @@ namespace PasswordManager.Services.Routing
         /// </summary>
         public string password { get; set; }
     }
-    
-    /// <summary>
-    /// 登录响应信息
-    /// </summary>
-    public class LoginInfo
-    {
-        /// <summary>
-        /// 访问令牌
-        /// </summary>
-        public string token { get; set; }
-        
-        /// <summary>
-        /// 用户账号
-        /// </summary>
-        public string account { get; set; }
-        
-        /// <summary>
-        /// 用户姓名
-        /// </summary>
-        public string name { get; set; }
-    }
-    
-    /// <summary>
-    /// LDAP配置信息
-    /// </summary>
-    public class LdapConfig
-    {
-        /// <summary>
-        /// LDAP服务器地址
-        /// </summary>
-        public string url { get; set; }
-        
-        /// <summary>
-        /// LDAP基础DN
-        /// </summary>
-        public string @base { get; set; }
-        
-        /// <summary>
-        /// LDAP管理员账号
-        /// </summary>
-        public string username { get; set; }
-        
-        /// <summary>
-        /// LDAP组织树根节点列表
-        /// </summary>
-        public string[] trees { get; set; }
-    }
-    
-    /// <summary>
-    /// 加密响应信息
-    /// </summary>
-    public class EncryptInfo
-    {
-        /// <summary>
-        /// 原始明文
-        /// </summary>
-        public string original { get; set; }
-        
-        /// <summary>
-        /// ECC加密后的密文
-        /// </summary>
-        public string encrypted { get; set; }
-    }
-    
+
     /// <summary>
     /// 最新密钥信息
     /// </summary>

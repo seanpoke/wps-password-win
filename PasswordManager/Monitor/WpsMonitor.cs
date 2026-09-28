@@ -30,18 +30,6 @@ namespace PasswordManager.Monitor
         [DllImport("user32.dll")]
         private static extern IntPtr GetForegroundWindow();
 
-        [DllImport("user32.dll")]
-        private static extern IntPtr GetParent(IntPtr hWnd);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
-
-        [DllImport("shcore.dll")]
-        private static extern int GetDpiForMonitor(IntPtr hmonitor, MonitorDpiType dpiType, out uint dpiX, out uint dpiY);
-
         private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
         [DllImport("user32.dll")]
@@ -490,35 +478,6 @@ namespace PasswordManager.Monitor
             return null;
         }
 
-
-
-        private string ResolveShortcut(string lnkPath)
-        {
-            try
-            {
-                Type shellType = Type.GetTypeFromProgID("WScript.Shell");
-                object shell = Activator.CreateInstance(shellType);
-                object shortcut = shellType.InvokeMember("CreateShortcut", System.Reflection.BindingFlags.InvokeMethod, null, shell, new object[] { lnkPath });
-                string targetPath = shortcut.GetType().InvokeMember("TargetPath", System.Reflection.BindingFlags.GetProperty, null, shortcut, null) as string;
-                return targetPath;
-            }
-            catch { }
-            return string.Empty;
-        }
-
-        public float GetDpiScale()
-        {
-            IntPtr hWnd = Process.GetCurrentProcess().MainWindowHandle;
-            if (hWnd == IntPtr.Zero)
-            {
-                return 1.0f;
-            }
-
-            IntPtr hMonitor = MonitorFromWindow(hWnd, 0);
-            uint dpiX, dpiY;
-            GetDpiForMonitor(hMonitor, MonitorDpiType.MDT_EFFECTIVE_DPI, out dpiX, out dpiY);
-            return dpiX / 96.0f;
-        }
 
         public RECT GetWindowRect(IntPtr hWnd)
         {

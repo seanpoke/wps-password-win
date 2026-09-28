@@ -2,6 +2,9 @@ using System;
 
 namespace PasswordManager.Utils
 {
+    /// <summary>
+    /// 服务器地址解析工具（仅保留 ExtractHost 链路；协议/端口解析随功能移除已删除）。
+    /// </summary>
     public class UrlParser
     {
         public static Uri ParseUserAddress(string userInput)
@@ -22,21 +25,62 @@ namespace PasswordManager.Utils
             throw new ArgumentException("服务器地址格式输入有误，请重新输入。");
         }
 
-        public static string ExtractProtocol(string userInput)
+        /// <summary>
+        /// 解析用户输入的域名并确定请求协议。
+        /// 无协议 → 自动补 https://；显式协议 → 仅允许 https（allowHttp=true 时额外允许 http，开发者模式）；
+        /// 其他协议 → 报错。
+        /// </summary>
+        public static bool TryResolveDomain(string userInput, bool allowHttp, out string host, out string protocol, out string error)
         {
-            string address = userInput.Trim();
+            host = "";
+            protocol = "https";
+            error = null;
 
-            if (address.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            string address = (userInput ?? "").Trim();
+            if (address.Length == 0)
             {
-                return "https";
+                error = "请输入域名。";
+                return false;
             }
 
-            if (address.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+            int schemeIdx = address.IndexOf("://", StringComparison.Ordinal);
+            if (schemeIdx > 0)
             {
-                return "http";
+                string scheme = address.Substring(0, schemeIdx).ToLowerInvariant();
+                if (scheme == "https")
+                {
+                    protocol = "https";
+                }
+                else if (scheme == "http")
+                {
+                    if (!allowHttp)
+                    {
+                        error = "仅支持 https:// 协议。";
+                        return false;
+                    }
+                    protocol = "http";
+                }
+                else
+                {
+                    error = allowHttp ? "仅支持 http:// 或 https:// 协议。" : "仅支持 https:// 协议。";
+                    return false;
+                }
+                address = address.Substring(schemeIdx + 3);
             }
 
-            return "https";
+            // 端口由独立输入框提供：去掉路径与末尾端口，仅保留主机
+            int slash = address.IndexOf('/');
+            if (slash >= 0) address = address.Substring(0, slash);
+            int colon = address.LastIndexOf(':');
+            if (colon > 0) address = address.Substring(0, colon);
+
+            host = address.Trim();
+            if (host.Length == 0 || Uri.CheckHostName(host) == UriHostNameType.Unknown)
+            {
+                error = "服务器地址格式输入有误，请重新输入。";
+                return false;
+            }
+            return true;
         }
 
         public static string ExtractHost(string userInput)
@@ -49,56 +93,23 @@ namespace PasswordManager.Utils
             catch
             {
                 string address = userInput.Trim();
-                
+
                 address = address.Replace("http://", "", StringComparison.OrdinalIgnoreCase)
                                 .Replace("https://", "", StringComparison.OrdinalIgnoreCase);
-                
+
                 int colonIndex = address.IndexOf(':');
                 if (colonIndex > 0)
                 {
                     return address.Substring(0, colonIndex);
                 }
-                
+
                 int slashIndex = address.IndexOf('/');
                 if (slashIndex > 0)
                 {
                     return address.Substring(0, slashIndex);
                 }
-                
-                return address;
-            }
-        }
 
-        public static int ExtractPort(string userInput)
-        {
-            try
-            {
-                Uri uri = ParseUserAddress(userInput);
-                return uri.Port;
-            }
-            catch
-            {
-                string address = userInput.Trim();
-                
-                address = address.Replace("http://", "", StringComparison.OrdinalIgnoreCase)
-                                .Replace("https://", "", StringComparison.OrdinalIgnoreCase);
-                
-                int colonIndex = address.IndexOf(':');
-                if (colonIndex > 0 && colonIndex < address.Length - 1)
-                {
-                    string portPart = address.Substring(colonIndex + 1);
-                    int slashIndex = portPart.IndexOf('/');
-                    if (slashIndex > 0)
-                    {
-                        portPart = portPart.Substring(0, slashIndex);
-                    }
-                    if (int.TryParse(portPart, out int port))
-                    {
-                        return port;
-                    }
-                }
-                
-                return 8443;
+                return address;
             }
         }
     }

@@ -36,8 +36,6 @@ namespace PasswordManager.Utils
 
         private static float _dpiScale = 1.0f;
         private static bool _isInitialized = false;
-        
-        private static readonly HashSet<IntPtr> _scaledControls = new HashSet<IntPtr>();
 
         public enum MonitorDpiType
         {
@@ -138,51 +136,10 @@ namespace PasswordManager.Utils
             return new System.Drawing.Size(ScaleValue(size.Width), ScaleValue(size.Height));
         }
 
-        public static System.Drawing.Point ScalePoint(System.Drawing.Point point)
-        {
-            return new System.Drawing.Point(ScaleValue(point.X), ScaleValue(point.Y));
-        }
-
         public static System.Drawing.Font ScaleFont(System.Drawing.Font font)
         {
             float scaledSize = ScaleValue(font.Size);
             return new System.Drawing.Font(font.FontFamily, scaledSize, font.Style);
-        }
-
-        public static void ApplyDpiScale(Control control)
-        {
-            if (control == null || control.IsDisposed) 
-            {
-                Logger.Debug($"ApplyDpiScale: control is null or disposed");
-                return;
-            }
-            
-            IntPtr handle = control.Handle;
-            string controlName = control.GetType().Name;
-            
-            if (_scaledControls.Contains(handle)) 
-            {
-                Logger.Debug($"ApplyDpiScale: {controlName} (handle:{handle}) already scaled, skipping");
-                return;
-            }
-            
-            float scale = GetDpiScale();
-            Logger.Debug($"ApplyDpiScale: {controlName} (handle:{handle}), scale={scale:F2}, size before={control.Size}");
-            
-            if (Math.Abs(scale - 1.0f) < 0.01f) 
-            {
-                Logger.Debug($"ApplyDpiScale: {controlName} scale is 1.0, no scaling needed");
-                return;
-            }
-
-            control.Scale(new System.Drawing.SizeF(scale, scale));
-            _scaledControls.Add(handle);
-            Logger.Debug($"ApplyDpiScale: {controlName} scaled successfully, size after={control.Size}");
-        }
-        
-        public static void ClearScaledControl(IntPtr handle)
-        {
-            _scaledControls.Remove(handle);
         }
     }
 }

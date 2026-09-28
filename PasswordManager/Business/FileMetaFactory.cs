@@ -16,9 +16,6 @@ namespace PasswordManager.Business
         // 用于等待元数据初始化完成的事件字典
         private ConcurrentDictionary<string, AutoResetEvent> initWaitEvents;
 
-        private long pluginOperationTimestamp;
-        private const long PLUGIN_OPERATION_TIMEOUT = 1000L;
-        
         // 等待初始化的超时时间（5秒）
         private const int INIT_WAIT_TIMEOUT = 5000;
 
@@ -171,19 +168,6 @@ namespace PasswordManager.Business
             return currentPassword;
         }
 
-        public void UpdateCurrentPassword(string filePath, string password)
-        {
-            if (string.IsNullOrEmpty(filePath))
-            {
-                return;
-            }
-
-            var fileMeta = GetFileMeta(filePath);
-            fileMeta.CurrentPassword = password;
-            fileMeta.ClearPendingPasswords();
-            Logger.Info($"更新文件 {filePath} 的当前密码: {password}");
-        }
-
         public void CleanupFileMeta(string filePath)
         {
             if (string.IsNullOrEmpty(filePath))
@@ -310,11 +294,6 @@ namespace PasswordManager.Business
             return fileMetaMap.ContainsKey(normalizedPath);
         }
 
-        public int GetFileMetaCount()
-        {
-            return fileMetaMap.Count;
-        }
-
         public void AddFileMeta(FileMeta fileMeta)
         {
             if (fileMeta != null && !string.IsNullOrEmpty(fileMeta.FilePath))
@@ -337,36 +316,6 @@ namespace PasswordManager.Business
             string uid = $"{timestamp}_{guid}";
             Logger.Info($"创建新的uid: '{uid}'");
             return uid;
-        }
-
-        /// <summary>
-        /// 设置插件操作标志
-        /// 在执行插件写操作前调用，用于标记即将执行的操作为插件操作
-        /// </summary>
-        public void SetPluginOperation(bool operating)
-        {
-            if (operating)
-            {
-                pluginOperationTimestamp = DateTimeOffset.Now.ToUnixTimeMilliseconds();
-                Logger.Info($"[时间戳: {pluginOperationTimestamp}] SetPluginOperation: 设置插件操作标志");
-            }
-        }
-
-        /// <summary>
-        /// 检查是否为插件操作
-        /// 通过时间戳判断当前时间距离上次设置插件操作标志是否在超时时间内
-        /// </summary>
-        /// <returns>true表示当前事件是由插件操作引起的，应跳过处理</returns>
-        public bool IsPluginOperation()
-        {
-            long timestamp = pluginOperationTimestamp;
-            long currentTime = DateTimeOffset.Now.ToUnixTimeMilliseconds();
-            bool isPluginOp = currentTime - timestamp <= PLUGIN_OPERATION_TIMEOUT;
-            if (isPluginOp)
-            {
-                Logger.Info($"[时间戳: {currentTime}] IsPluginOperation: 检测到插件操作，时间戳差: {currentTime - timestamp}ms");
-            }
-            return isPluginOp;
         }
     }
 }

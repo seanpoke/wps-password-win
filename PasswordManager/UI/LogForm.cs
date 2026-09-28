@@ -273,7 +273,6 @@ namespace PasswordManager.UI
             List<LogEntry> list;
             lock (_lock) { list = _entries.ToList(); }
 
-            string? lastDate = null;
             foreach (var e in list)
             {
                 string group = LevelGroup(e.Level);

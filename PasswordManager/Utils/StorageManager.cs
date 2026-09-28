@@ -208,24 +208,6 @@ namespace PasswordManager.Utils
             return (null, null);
         }
 
-        /// <summary>
-        /// 清除本地存储中的密钥信息
-        /// </summary>
-        public static void ClearKeyInfo()
-        {
-            try
-            {
-                if (File.Exists(_keyFile))
-                {
-                    File.Delete(_keyFile);
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"清除密钥信息失败: {ex.Message}");
-            }
-        }
-
         #endregion
 
         #region 登录缓存（记住密码）
@@ -276,21 +258,6 @@ namespace PasswordManager.Utils
                 Logger.Error($"读取登录缓存失败: {ex.Message}");
             }
             return (false, null, null);
-        }
-
-        /// <summary>
-        /// 清除登录缓存文件。
-        /// </summary>
-        public static void ClearLoginCache()
-        {
-            try
-            {
-                if (File.Exists(_loginCacheFile)) File.Delete(_loginCacheFile);
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"清除登录缓存失败: {ex.Message}");
-            }
         }
 
         #endregion

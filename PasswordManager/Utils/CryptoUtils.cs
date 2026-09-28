@@ -75,10 +75,5 @@ namespace PasswordManager.Utils
                 return null;
             }
         }
-
-        public static string EncryptPasswordByPublicKey(string password)
-        {
-            return EncryptPasswordByPublicKey(password, GlobalState.Instance.PublicKey);
-        }
     }
 }

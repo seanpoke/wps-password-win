@@ -48,18 +48,6 @@ namespace PasswordManager.Utils
 #endif
         }
 
-        public static LogLevel MinLogLevel
-        {
-            get => _minLogLevel;
-            set => _minLogLevel = value;
-        }
-
-        public static void SetLogLevel(LogLevel level)
-        {
-            _minLogLevel = level;
-            Logger.Info($"日志级别已设置为: {level}");
-        }
-
         static Logger()
         {
             if (!Directory.Exists(LogDirectory))
@@ -91,17 +79,6 @@ namespace PasswordManager.Utils
             {
                 _windowWaitEvent.Set();
             }
-        }
-
-        public static void PauseLogWindow()
-        {
-            _windowPaused = true;
-        }
-
-        public static void ResumeLogWindow()
-        {
-            _windowPaused = false;
-            _windowWaitEvent.Set();
         }
 
         public static void Info(string message)
