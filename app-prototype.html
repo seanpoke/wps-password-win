@@ -1,0 +1,1171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>密码管理 · 界面原型（登录 / 账户 / 修改密码 / 重置密码 / 右键菜单 / 日志 / 元数据）</title>
+<style>
+  :root{
+    --canvas:#F3F3F3;
+    --field-rest:#FFFFFF;
+    --field-hover:#F5F5F5;
+    --field-disabled:#F5F5F5;
+    --stroke:#8A8A8A;
+    --stroke-hover:#616161;
+    --accent:#005FB8;
+    --accent-hover:#0067C0;
+    --accent-pressed:#1975C5;
+    --accent-disabled:#C5C5C5;
+    --text-primary:#1B1B1B;
+    --text-secondary:#606060;
+    --text-tertiary:#878787;
+    --text-link:#005FB8;
+    --danger:#C42B1C;
+    --danger-hover:#A8231A;
+    --danger-bg:#FDE7E9;
+    --warn:#9D5D00;
+    --warn-bg:#FFF4CE;
+    --info-bg:#E5F1FB;
+    --sel-bg:#FFF1A8;
+    --success:#0F7B0F;
+    --success-bg:#EAF6EA;
+    --divider:#E0E0E0;
+    --focus-outer:#1A1A1A;
+    --flyout-shadow:0 8px 16px rgba(0,0,0,.14), 0 0 2px rgba(0,0,0,.12);
+    --font-yahei:"Microsoft YaHei UI","Microsoft YaHei",-apple-system,"Segoe UI",sans-serif;
+    --font-mono:"Cascadia Mono","Consolas","Courier New",monospace;
+  }
+  *{box-sizing:border-box;}
+  [hidden]{display:none !important;}
+  body{
+    margin:0;font-family:var(--font-yahei);background:#ECECEC;color:var(--text-primary);
+    display:flex;flex-direction:column;align-items:center;padding:28px 16px 56px;
+    -webkit-font-smoothing:antialiased;
+  }
+  mark{background:var(--sel-bg);color:inherit;padding:0 1px;border-radius:2px;}
+
+  /* ===== Preview toolbar (not part of the app) ===== */
+  .toolbar{display:flex;flex-direction:column;gap:8px;margin-bottom:18px;align-items:center;}
+  .toolbar .hint{font-size:12px;line-height:16px;color:var(--text-tertiary);}
+  .tb-group{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center;}
+  .tb-label{font-size:12px;line-height:16px;color:var(--text-tertiary);margin-right:2px;}
+  .toolbar button{
+    font-family:var(--font-yahei);font-size:13px;line-height:18px;padding:7px 14px;
+    border:1px solid var(--stroke);background:var(--field-rest);color:var(--text-primary);
+    border-radius:4px;cursor:pointer;
+  }
+  .toolbar button:hover{background:var(--field-hover);border-color:var(--stroke-hover);}
+  .toolbar button.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+
+  /* ===== Window shell ===== */
+  .window{
+    width:min(420px,94vw);background:var(--canvas);border-radius:8px;overflow:hidden;
+    box-shadow:0 10px 30px rgba(0,0,0,.18),0 2px 6px rgba(0,0,0,.12);
+    transform-origin:top center;
+  }
+  .window[hidden]{display:none;}
+  .titlebar{height:34px;display:flex;align-items:center;padding:0 4px 0 12px;background:var(--canvas);border-bottom:1px solid var(--divider);user-select:none;}
+  .titlebar .title{font-size:12px;line-height:16px;color:var(--text-primary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .titlebar .controls{display:flex;}
+  .titlebar .controls .btn{width:40px;height:32px;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);cursor:pointer;}
+  .titlebar .controls .btn:hover{background:rgba(0,0,0,.06);}
+  .titlebar .controls .btn.close:hover{background:var(--danger);color:#fff;}
+  .content{padding:clamp(18px,5vw,32px);}
+
+  /* Header */
+  .header{margin-bottom:24px;}
+  .header h1{margin:0;font-size:18px;line-height:24px;font-weight:700;color:var(--text-primary);}
+  .header p{margin:4px 0 0;font-size:13px;line-height:18px;color:var(--text-secondary);}
+
+  /* Fields */
+  .field{margin-bottom:16px;}
+  .field > label{display:block;font-size:13px;line-height:18px;color:var(--text-secondary);margin-bottom:6px;}
+  .textbox{position:relative;}
+  .textbox input{
+    width:100%;height:36px;font-family:var(--font-yahei);font-size:14px;line-height:20px;
+    color:var(--text-primary);background:var(--field-rest);border:1px solid var(--stroke);
+    border-radius:4px;padding:0 12px;outline:none;
+  }
+  .textbox.mono input{font-family:var(--font-mono);font-size:13px;}
+  .textbox input:hover{border-color:var(--stroke-hover);}
+  .textbox input:focus{border-color:var(--accent);box-shadow:inset 0 -2px 0 0 var(--accent);}
+  .textbox input:disabled{background:var(--field-disabled);color:var(--text-tertiary);}
+  .textbox.has-error input{border-color:var(--danger);box-shadow:inset 0 -2px 0 0 var(--danger);}
+  .textbox input[type=password],.textbox input.has-eye{padding-right:40px;}
+
+  /* Eye toggle */
+  .eye{
+    position:absolute;right:4px;top:0;bottom:0;width:32px;display:flex;align-items:center;justify-content:center;
+    background:none;border:none;cursor:pointer;color:var(--text-secondary);
+  }
+  .eye:hover{color:var(--text-primary);}
+  .eye svg{width:18px;height:18px;}
+  .eye .i-hide{display:none;}
+  .eye.on .i-show{display:none;}
+  .eye.on .i-hide{display:block;}
+
+  .field-error{display:none;margin-top:4px;font-size:12px;line-height:16px;color:var(--danger);}
+  .field.has-error .field-error{display:block;}
+  .caps-hint{display:none;margin-top:4px;font-size:12px;line-height:16px;color:var(--text-tertiary);}
+  .field.show-caps .caps-hint{display:block;}
+
+  /* Banner (danger / success) */
+  .banner{display:none;min-height:60px;background:var(--danger-bg);border-radius:4px;align-items:center;padding:10px 12px;margin-bottom:16px;gap:10px;}
+  .banner.show{display:flex;}
+  .banner.success{background:var(--success-bg);}
+  .banner .b-icon{flex:none;color:var(--danger);}
+  .banner.success .b-icon{color:var(--success);}
+  .banner .b-icon svg{width:18px;height:18px;display:block;}
+  .banner .b-text{font-size:13px;line-height:18px;color:var(--text-primary);}
+
+  /* Expander */
+  .expander{border:1px solid var(--divider);border-radius:4px;margin-bottom:16px;overflow:hidden;}
+  .expander-summary{height:32px;display:flex;align-items:center;padding:0 12px;cursor:pointer;}
+  .expander-summary:hover{background:var(--field-hover);}
+  .expander-summary .label{flex:1;font-size:13px;line-height:18px;color:var(--text-secondary);}
+  .expander-summary .value{font-family:var(--font-mono);font-size:12px;color:var(--text-tertiary);margin-right:8px;}
+  .expander-summary .chev{flex:none;color:var(--text-secondary);transition:transform .15s ease;}
+  .expander.open .chev{transform:rotate(180deg);}
+  .expander-body{display:none;padding:12px;border-top:1px solid var(--divider);}
+  .expander.open .expander-body{display:block;}
+
+  /* Row: remember */
+  .row{display:flex;align-items:center;justify-content:flex-start;margin:16px 0 20px;}
+  .checkbox{display:flex;align-items:center;gap:8px;height:40px;cursor:pointer;font-size:13px;line-height:18px;color:var(--text-primary);}
+  .checkbox .box{width:20px;height:20px;border-radius:4px;border:1px solid var(--stroke);background:var(--field-rest);display:flex;align-items:center;justify-content:center;}
+  .checkbox.checked .box{background:var(--accent);border-color:var(--accent);}
+  .checkbox .box svg{width:14px;height:14px;color:#fff;display:none;}
+  .checkbox.checked .box svg{display:block;}
+  .checkbox:hover .box{border-color:var(--stroke-hover);}
+
+  /* Buttons */
+  .btn-primary{
+    width:100%;height:40px;font-family:var(--font-yahei);font-size:14px;line-height:20px;color:#fff;
+    background:var(--accent);border:none;border-radius:4px;cursor:pointer;
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  }
+  .btn-primary:hover:not(:disabled){background:var(--accent-hover);}
+  .btn-primary:active:not(:disabled){background:var(--accent-pressed);}
+  .btn-primary:disabled{background:var(--accent-disabled);cursor:default;}
+  .btn-primary .ring{width:16px;height:16px;border-radius:50%;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;animation:spin 1.5s linear infinite;display:none;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .btn-secondary{
+    width:100%;height:40px;font-family:var(--font-yahei);font-size:14px;line-height:20px;
+    color:var(--text-primary);background:var(--field-rest);border:1px solid var(--stroke);border-radius:4px;cursor:pointer;
+  }
+  .btn-secondary:hover{background:var(--field-hover);border-color:var(--stroke-hover);}
+  .btn-secondary.danger:hover{border-color:var(--danger);color:var(--danger);background:var(--danger-bg);}
+  .actions{margin-top:8px;display:flex;flex-direction:column;gap:10px;}
+  .link-center{display:block;text-align:center;margin-top:16px;font-size:13px;line-height:18px;color:var(--text-link);text-decoration:none;}
+  .link-center:hover{text-decoration:underline;}
+
+  /* Inline button (shrink-to-content, keeps row height) */
+  .btn-inline{width:auto;flex:none;min-width:88px;padding:0 18px;}
+
+  /* Dialog action bar (right-aligned) */
+  .dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;}
+  .dialog-actions .btn-primary,.dialog-actions .btn-secondary{
+    width:auto;min-width:96px;padding:0 20px;
+    display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  }
+  /* 动作条内的图标必须显式约束尺寸，否则 SVG 会在按钮内被拉伸成巨型图形 */
+  .dialog-actions .btn-primary svg,.dialog-actions .btn-secondary svg{width:16px;height:16px;flex:none;}
+  .dialog-actions .btn-secondary.done{color:var(--success);border-color:var(--success);}
+
+  /* Account info card */
+  .card{background:var(--field-rest);border:1px solid var(--divider);border-radius:4px;overflow:hidden;margin:16px 0 20px;}
+  .info-row{display:flex;align-items:center;min-height:44px;padding:0 12px;border-bottom:1px solid var(--divider);gap:12px;}
+  .info-row:last-child{border-bottom:none;}
+  .info-row .k{width:60px;flex:none;font-size:13px;line-height:18px;color:var(--text-secondary);}
+  .info-row .k.mono{width:132px;font-family:var(--font-mono);font-size:12px;}
+  .info-row .v{flex:1;min-width:0;font-size:14px;line-height:20px;color:var(--text-primary);}
+  .info-row .v.mono{font-family:var(--font-mono);font-size:13px;}
+  .info-row .v.masked{letter-spacing:3px;font-size:16px;line-height:20px;}
+  .info-row .v.ellip{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .info-row .v.empty{color:var(--text-tertiary);}
+  .eye-static{background:none;border:none;cursor:pointer;color:var(--text-secondary);width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:4px;flex:none;}
+  .eye-static:hover{background:var(--field-hover);color:var(--text-primary);}
+  .eye-static svg{width:18px;height:18px;}
+  .eye-static .i-hide{display:none;}
+  .eye-static.on .i-show{display:none;}
+  .eye-static.on .i-hide{display:block;}
+
+  .icon-btn{width:28px;height:28px;flex:none;display:flex;align-items:center;justify-content:center;background:none;border:none;border-radius:4px;color:var(--text-secondary);cursor:pointer;}
+  .icon-btn:hover{background:var(--field-hover);color:var(--text-primary);}
+  .icon-btn svg{width:15px;height:15px;}
+  .icon-btn.done{color:var(--success);}
+
+  /* Purpose note (why this dialog appeared) */
+  .note{display:flex;gap:10px;align-items:flex-start;margin:0 0 16px;}
+  .note .n-icon{flex:none;color:var(--accent);margin-top:1px;}
+  .note .n-icon svg{width:18px;height:18px;display:block;}
+  .note .n-text{font-size:13px;line-height:18px;color:var(--text-secondary);}
+  .note .n-text b{color:var(--text-primary);font-weight:700;}
+
+  /* Read-only account line */
+  .acct-line{margin:0 0 16px;font-size:13px;line-height:18px;color:var(--text-secondary);}
+  .acct-line .v{font-family:var(--font-mono);font-size:13px;color:var(--text-primary);}
+
+  /* Inline confirm (sign out) */
+  .confirm{border:1px solid var(--divider);background:var(--field-rest);border-radius:4px;padding:12px;margin-bottom:12px;}
+  .confirm-head{display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;}
+  .confirm-head .c-icon{flex:none;color:var(--danger);margin-top:1px;}
+  .confirm-head .c-icon svg{width:18px;height:18px;display:block;}
+  .confirm-head .t{font-size:13px;line-height:18px;color:var(--text-primary);}
+  .confirm-head .s{margin-top:2px;font-size:12px;line-height:16px;color:var(--text-secondary);}
+  .confirm .row-btns{display:flex;gap:8px;}
+  .confirm .row-btns .btn-danger,
+  .confirm .row-btns .btn-secondary{flex:1 1 0;min-width:0;width:auto;white-space:nowrap;padding:0 12px;height:40px;border-radius:4px;font-family:var(--font-yahei);font-size:14px;line-height:20px;}
+  .confirm .row-btns .btn-danger{background:var(--danger);border:none;color:#fff;cursor:pointer;}
+  .confirm .row-btns .btn-danger:hover{background:var(--danger-hover);}
+
+  /* Checklist */
+  .checklist{list-style:none;margin:8px 0 0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;}
+  .checklist li{display:flex;align-items:center;gap:6px;font-size:12px;line-height:16px;color:var(--text-tertiary);}
+  .checklist li .dot{width:14px;height:14px;flex:none;display:flex;align-items:center;justify-content:center;border:1px solid var(--stroke);border-radius:50%;}
+  .checklist li.ok{color:var(--success);}
+  .checklist li.ok .dot{background:var(--success);border-color:var(--success);}
+  .checklist li.ok .dot::after{content:"";width:6px;height:3px;border-left:1.5px solid #fff;border-bottom:1.5px solid #fff;transform:rotate(-45deg) translateY(-1px);}
+
+  /* ===== Context menu (MenuFlyout) ===== */
+  .tray-stage{position:relative;height:320px;background:#ECECEC;display:flex;flex-direction:column;justify-content:flex-end;}
+  .stage-note{position:absolute;left:12px;top:12px;font-size:12px;line-height:16px;color:var(--text-tertiary);}
+  .stage-note b{color:var(--text-secondary);font-weight:700;}
+  .taskbar{height:48px;background:var(--canvas);border-top:1px solid var(--divider);display:flex;align-items:center;justify-content:flex-end;padding:0 12px;gap:8px;}
+  .tray-icon{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;background:var(--field-rest);border:1px solid var(--divider);color:var(--accent);}
+  .tray-icon svg{width:16px;height:16px;}
+  .tray-icon.active{background:rgba(0,0,0,.07);border-color:var(--stroke-hover);}
+  .flyout{
+    position:absolute;right:12px;bottom:58px;width:240px;background:var(--field-rest);
+    border:1px solid var(--divider);border-radius:8px;padding:4px;box-shadow:var(--flyout-shadow);
+  }
+  .mi{height:32px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:4px;font-size:14px;line-height:20px;color:var(--text-primary);cursor:default;user-select:none;}
+  .mi svg{width:16px;height:16px;flex:none;color:var(--text-secondary);}
+  .mi .sp{flex:1;}
+  .mi .ck{color:var(--accent);display:flex;}
+  .mi:hover,.mi.forced-hover{background:var(--field-hover);}
+  .mi.kbd{background:var(--field-hover);outline:2px solid var(--focus-outer);outline-offset:-2px;}
+  .mi.danger:hover,.mi.danger.forced-hover{background:var(--danger-bg);color:var(--danger);}
+  .mi.danger:hover svg,.mi.danger.forced-hover svg{color:var(--danger);}
+  .sep{height:1px;background:var(--divider);margin:4px 0;}
+
+  /* ===== Log screen ===== */
+  .logwrap{display:flex;flex-direction:column;}
+  .logbar{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--divider);background:var(--canvas);flex-wrap:wrap;}
+  .searchbox{display:flex;align-items:center;gap:6px;height:32px;padding:0 10px;border:1px solid var(--stroke);border-radius:4px;background:var(--field-rest);flex:1;min-width:150px;max-width:240px;}
+  .searchbox svg{width:14px;height:14px;color:var(--text-tertiary);flex:none;}
+  .searchbox input{border:none;outline:none;font-family:var(--font-yahei);font-size:13px;color:var(--text-primary);background:none;width:100%;min-width:0;}
+  .searchbox:focus-within{border-color:var(--accent);box-shadow:inset 0 -2px 0 0 var(--accent);}
+  .seg{display:flex;border:1px solid var(--divider);border-radius:4px;overflow:hidden;background:var(--field-rest);}
+  .seg button{font-family:var(--font-yahei);font-size:12px;line-height:16px;padding:0 12px;height:30px;border:none;border-right:1px solid var(--divider);background:none;color:var(--text-secondary);cursor:pointer;white-space:nowrap;}
+  .seg button:last-child{border-right:none;}
+  .seg button:hover{background:var(--field-hover);}
+  .seg button.active{background:var(--accent);color:#fff;}
+  .logbar-right{margin-left:auto;display:flex;align-items:center;gap:12px;}
+  .switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;line-height:16px;color:var(--text-secondary);white-space:nowrap;}
+  .switch input{position:absolute;opacity:0;width:0;height:0;}
+  .switch .track{width:36px;height:20px;border-radius:10px;background:#C7C7C7;position:relative;transition:background .15s;flex:none;}
+  .switch .knob{position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#fff;transition:left .15s;}
+  .switch input:checked+.track{background:var(--accent);}
+  .switch input:checked+.track .knob{left:19px;}
+  .btn-mini{font-family:var(--font-yahei);font-size:12px;line-height:16px;height:32px;padding:0 12px;border:1px solid var(--stroke);border-radius:4px;background:var(--field-rest);color:var(--text-primary);cursor:pointer;white-space:nowrap;}
+  .btn-mini:hover{background:var(--field-hover);border-color:var(--stroke-hover);}
+  .logview{height:340px;overflow-y:auto;background:var(--field-rest);}
+  .logview::-webkit-scrollbar{width:10px;}
+  .logview::-webkit-scrollbar-thumb{background:#C7C7C7;border-radius:5px;border:3px solid transparent;background-clip:padding-box;}
+  .logview::-webkit-scrollbar-thumb:hover{background:#A6A6A6;border:3px solid transparent;background-clip:padding-box;}
+  .logview::-webkit-scrollbar-track{background:transparent;}
+  .log-date{display:flex;align-items:center;gap:10px;padding:10px 12px 6px;font-size:12px;line-height:16px;color:var(--text-tertiary);}
+  .log-date::after{content:"";flex:1;height:1px;background:var(--divider);}
+  .log-row{display:flex;align-items:center;gap:10px;height:28px;padding:0 12px;font-size:13px;line-height:18px;}
+  .log-row:hover{background:var(--field-hover);}
+  .log-row .lt{font-family:var(--font-mono);font-size:12px;color:var(--text-tertiary);flex:none;}
+  .lv{flex:none;display:inline-flex;align-items:center;justify-content:center;min-width:52px;height:18px;padding:0 6px;border-radius:9px;font-family:var(--font-mono);font-size:11px;font-weight:700;letter-spacing:.4px;}
+  .lv.info{background:var(--info-bg);color:#00477F;}
+  .lv.warn{background:var(--warn-bg);color:var(--warn);}
+  .lv.error{background:var(--danger-bg);color:var(--danger);}
+  .log-row .lm{flex:1;min-width:0;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .log-row .src{color:var(--text-secondary);}
+  .log-hint{position:sticky;bottom:10px;margin:0 10px;height:36px;display:flex;align-items:center;gap:10px;padding:0 12px;background:#2B2B2B;color:#fff;border-radius:6px;font-size:12px;line-height:16px;box-shadow:0 4px 10px rgba(0,0,0,.2);}
+  .log-hint .hint-btn{margin-left:auto;background:none;border:none;color:#8CC8FF;font-family:var(--font-yahei);font-size:12px;cursor:pointer;padding:6px 8px;border-radius:4px;}
+  .log-hint .hint-btn:hover{background:rgba(255,255,255,.12);text-decoration:underline;}
+  .log-empty{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--text-tertiary);}
+  .log-empty svg{width:32px;height:32px;color:#C7C7C7;}
+  .log-empty .e-t{font-size:14px;line-height:20px;color:var(--text-secondary);}
+  .log-empty .e-s{font-size:12px;line-height:16px;}
+
+  /* ===== Metadata screen ===== */
+  .query-row{display:flex;gap:8px;align-items:stretch;}
+  .query-row .textbox{flex:1;min-width:0;}
+  .hint-line{margin:10px 0 0;font-size:12px;line-height:16px;color:var(--text-tertiary);}
+  .card.tight{margin:4px 0 0;}
+  .textbox.read input{cursor:default;color:var(--text-primary);}
+  .textbox.read.drop{outline:2px dashed var(--accent);outline-offset:-2px;}
+
+  .legend{max-width:640px;margin-top:18px;font-size:12px;line-height:18px;color:var(--text-tertiary);text-align:center;}
+
+  /* Adaptive: touch */
+  @media (pointer:coarse){
+    .btn-primary,.btn-secondary,.checkbox,.expander-summary,.eye-static,.eye,.info-row,.mi,.seg button,.btn-mini,.switch,.icon-btn{min-height:44px;}
+    .checkbox{height:44px;}
+    .textbox input{height:44px;font-size:16px;}
+    .textbox input[type=password],.textbox input.has-eye{padding-right:52px;}
+    .eye{width:44px;}
+    .expander-summary{height:44px;}
+    .mi{height:44px;}
+    .log-row{height:36px;}
+  }
+  @media (max-width:380px){
+    .tb-label{width:100%;text-align:center;margin-bottom:2px;}
+    .toolbar button{padding:8px 10px;}
+  }
+</style>
+</head>
+<body>
+
+  <div class="toolbar">
+    <div class="hint">预览控制条（仅用于切换界面 / 状态 / 分辨率，不属于应用本身）</div>
+    <div class="tb-group">
+      <span class="tb-label">界面</span>
+      <button data-screen="login" class="active">登录</button>
+      <button data-screen="home">账户信息</button>
+      <button data-screen="pwd">修改密码</button>
+      <button data-screen="reset">重置密码</button>
+      <button data-screen="menu">右键菜单</button>
+      <button data-screen="log">日志</button>
+      <button data-screen="meta">查询元数据</button>
+    </div>
+    <div class="tb-group" id="state-group">
+      <span class="tb-label">状态</span>
+    </div>
+    <div class="tb-group">
+      <span class="tb-label">分辨率 / DPI</span>
+      <button data-dpi="1" class="active">100%</button>
+      <button data-dpi="1.25">125%</button>
+      <button data-dpi="1.5">150%</button>
+      <button data-dpi="2">200%</button>
+    </div>
+  </div>
+
+  <!-- ============ SCREEN 1: 登录 ============ -->
+  <div class="window" id="win-login" role="dialog" aria-label="密码管理 登录">
+    <div class="titlebar">
+      <div class="title">密码管理</div>
+      <div class="controls">
+        <div class="btn" title="最小化"><svg width="10" height="10" viewBox="0 0 10 10"><rect x="1" y="8" width="8" height="1.5" fill="currentColor"/></svg></div>
+        <div class="btn" title="最大化"><svg width="10" height="10" viewBox="0 0 10 10"><rect x="1" y="1" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></div>
+        <div class="btn close" title="关闭"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.2"/></svg></div>
+      </div>
+    </div>
+    <div class="content">
+      <div class="header">
+        <h1>密码管理</h1>
+        <p>使用账号登录以继续</p>
+      </div>
+
+      <div class="field" id="f-user">
+        <label for="user">用户名</label>
+        <div class="textbox"><input id="user" type="text" autocomplete="username" placeholder="请输入用户名" value="xiaosn" /></div>
+        <div class="field-error">请输入用户名</div>
+      </div>
+
+      <div class="field" id="f-pass">
+        <label for="pass">密码</label>
+        <div class="textbox">
+          <input id="pass" type="password" autocomplete="current-password" placeholder="请输入密码" value="Abcd1234" />
+          <button class="eye" type="button" data-target="pass" aria-label="显示密码" title="显示密码">
+            <svg class="i-show" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="i-hide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><path d="M4 4l16 16"/></svg>
+          </button>
+        </div>
+        <div class="field-error">请输入密码</div>
+        <div class="caps-hint">大写锁定已开启</div>
+      </div>
+
+      <div class="expander" id="expander">
+        <div class="expander-summary" id="expander-summary">
+          <span class="label">服务器设置</span>
+          <span class="value">10.8.2.83:8081</span>
+          <svg class="chev" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 5l4 4 4-4"/></svg>
+        </div>
+        <div class="expander-body">
+          <div class="field" style="margin-bottom:12px;">
+            <label for="domain">域名</label>
+            <div class="textbox mono"><input id="domain" type="text" placeholder="http://" value="http://" /></div>
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label for="port">端口</label>
+            <div class="textbox mono"><input id="port" type="text" placeholder="8080" value="8081" /></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="banner" id="banner" role="alert">
+        <span class="b-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v6"/><circle cx="12" cy="16.5" r="1" fill="currentColor" stroke="none"/></svg></span>
+        <span class="b-text">账号或密码错误，请检查后重试。</span>
+      </div>
+
+      <div class="row">
+        <label class="checkbox" id="remember">
+          <span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5 9-10"/></svg></span>
+          <span>记住密码</span>
+        </label>
+      </div>
+
+      <button class="btn-primary" id="login"><span class="ring" id="ring"></span><span id="login-text">登录</span></button>
+      <a class="link-center" href="#" id="go-pwd-from-login">修改密码</a>
+    </div>
+  </div>
+
+  <!-- ============ SCREEN 2: 登录成功后 · 账户信息 ============ -->
+  <div class="window" id="win-home" hidden role="dialog" aria-label="密码管理 账户信息">
+    <div class="titlebar">
+      <div class="title">密码管理</div>
+      <div class="controls">
+        <div class="btn" title="最小化"><svg width="10" height="10" viewBox="0 0 10 10"><rect x="1" y="8" width="8" height="1.5" fill="currentColor"/></svg></div>
+        <div class="btn" title="最大化"><svg width="10" height="10" viewBox="0 0 10 10"><rect x="1" y="1" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></div>
+        <div class="btn close" title="关闭"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.2"/></svg></div>
+      </div>
+    </div>
+    <div class="content">
+      <div class="header" style="margin-bottom:8px;">
+        <h1>你好，肖少南</h1>
+        <p>已登录 · 账号 xiaosn</p>
+      </div>
+
+      <div class="card">
+        <div class="info-row"><span class="k">用户名</span><span class="v">xiaosn</span></div>
+        <div class="info-row">
+          <span class="k">密码</span>
+          <span class="v masked" id="home-pass">••••••••</span>
+          <button class="eye-static" type="button" data-target="home-pass" aria-label="显示密码" title="显示密码">
+            <svg class="i-show" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="i-hide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><path d="M4 4l16 16"/></svg>
+          </button>
+        </div>
+        <div class="info-row"><span class="k">域名</span><span class="v mono">http://10.8.2.83</span></div>
+        <div class="info-row"><span class="k">端口</span><span class="v mono">8081</span></div>
+      </div>
+
+      <div class="confirm" id="signout-confirm" hidden>
+        <div class="confirm-head">
+          <span class="c-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3.5 21 19H3l9-15.5Z"/><path d="M12 10v4"/><circle cx="12" cy="16.6" r="1" fill="currentColor" stroke="none"/></svg></span>
+          <div>
+            <div class="t">确定要注销当前账号吗？</div>
+            <div class="s">注销后需重新登录才能继续使用。</div>
+          </div>
+        </div>
+        <div class="row-btns">
+          <button class="btn-secondary" id="signout-no">取消</button>
+          <button class="btn-danger" id="signout-yes">确认注销</button>
+        </div>
+      </div>
+
+      <div class="actions" id="home-actions">
+        <button class="btn-primary" id="go-pwd">修改密码</button>
+        <button class="btn-secondary danger" id="signout">注销</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SCREEN 3: 修改密码 ============ -->
+  <div class="window" id="win-pwd" hidden role="dialog" aria-label="修改密码">
+    <div class="titlebar">
+      <div class="title">修改密码</div>
+      <div class="controls">
+        <div class="btn close" title="关闭"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.2"/></svg></div>
+      </div>
+    </div>
+    <div class="content">
+      <p style="margin:0 0 16px;font-size:13px;line-height:18px;color:var(--text-secondary);">账号：xiaosn</p>
+
+      <div class="banner" id="pwd-banner" role="alert">
+        <span class="b-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v6"/><circle cx="12" cy="16.5" r="1" fill="currentColor" stroke="none"/></svg></span>
+        <span class="b-text" id="pwd-banner-text">原密码不正确，请重新输入。</span>
+      </div>
+
+      <div class="field" id="f-old">
+        <label for="old-pass">原密码</label>
+        <div class="textbox">
+          <input id="old-pass" type="password" value="Abcd1234" />
+          <button class="eye" type="button" data-target="old-pass" aria-label="显示密码" title="显示密码">
+            <svg class="i-show" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="i-hide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><path d="M4 4l16 16"/></svg>
+          </button>
+        </div>
+        <div class="field-error">请输入原密码</div>
+      </div>
+
+      <div class="field" id="f-new">
+        <label for="new-pass">新密码</label>
+        <div class="textbox">
+          <input id="new-pass" type="password" value="Newpass1" />
+          <button class="eye" type="button" data-target="new-pass" aria-label="显示密码" title="显示密码">
+            <svg class="i-show" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="i-hide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><path d="M4 4l16 16"/></svg>
+          </button>
+        </div>
+        <ul class="checklist" id="checklist">
+          <li data-rule="len"><span class="dot"></span>至少 8 位</li>
+          <li data-rule="upper"><span class="dot"></span>包含大写字母</li>
+          <li data-rule="lower"><span class="dot"></span>包含小写字母</li>
+          <li data-rule="digit"><span class="dot"></span>包含数字</li>
+        </ul>
+        <div class="field-error">新密码不符合要求</div>
+        <div class="caps-hint">大写锁定已开启</div>
+      </div>
+
+      <div class="field" id="f-confirm" style="margin-bottom:0;">
+        <label for="confirm-pass">确认密码</label>
+        <div class="textbox">
+          <input id="confirm-pass" type="password" value="Newpass1" />
+          <button class="eye" type="button" data-target="confirm-pass" aria-label="显示密码" title="显示密码">
+            <svg class="i-show" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="i-hide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><path d="M4 4l16 16"/></svg>
+          </button>
+        </div>
+        <div class="field-error">两次输入的密码不一致</div>
+      </div>
+
+      <div class="dialog-actions">
+        <button class="btn-secondary" id="pwd-cancel">取消</button>
+        <button class="btn-primary" id="pwd-save">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SCREEN 3b: 重置密码（首次登录 · 强制） ============ -->
+  <div class="window" id="win-reset" hidden role="dialog" aria-label="重置密码">
+    <div class="titlebar">
+      <div class="title">重置密码</div>
+      <div class="controls">
+        <div class="btn close" title="关闭"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.2"/></svg></div>
+      </div>
+    </div>
+    <div class="content">
+      <div class="note">
+        <span class="n-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="7.5" r="1" fill="currentColor" stroke="none"/></svg></span>
+        <span class="n-text"><b>这是首次登录</b>，需先设置新密码才能继续使用。</span>
+      </div>
+
+      <div class="banner" id="reset-banner" role="alert">
+        <span class="b-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v6"/><circle cx="12" cy="16.5" r="1" fill="currentColor" stroke="none"/></svg></span>
+        <span class="b-text" id="reset-banner-text">新密码不符合要求，请按下方规则修改。</span>
+      </div>
+
+      <p class="acct-line">账号 <span class="v" id="reset-acct">bob</span></p>
+
+      <div class="field" id="rf-new">
+        <label for="reset-new">新密码</label>
+        <div class="textbox">
+          <input id="reset-new" type="password" autocomplete="new-password" placeholder="请输入新密码" value="" />
+          <button class="eye" type="button" data-target="reset-new" aria-label="显示密码" title="显示密码">
+            <svg class="i-show" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="i-hide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><path d="M4 4l16 16"/></svg>
+          </button>
+        </div>
+        <ul class="checklist" id="reset-checklist">
+          <li data-rule="len"><span class="dot"></span>至少 8 位</li>
+          <li data-rule="upper"><span class="dot"></span>包含大写字母</li>
+          <li data-rule="lower"><span class="dot"></span>包含小写字母</li>
+          <li data-rule="digit"><span class="dot"></span>包含数字</li>
+        </ul>
+        <div class="field-error">新密码不符合要求</div>
+        <div class="caps-hint">大写锁定已开启</div>
+      </div>
+
+      <div class="field" id="rf-confirm" style="margin-bottom:0;">
+        <label for="reset-confirm">确认密码</label>
+        <div class="textbox">
+          <input id="reset-confirm" type="password" autocomplete="new-password" placeholder="请再次输入新密码" value="" />
+          <button class="eye" type="button" data-target="reset-confirm" aria-label="显示密码" title="显示密码">
+            <svg class="i-show" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="i-hide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><path d="M4 4l16 16"/></svg>
+          </button>
+        </div>
+        <div class="field-error">两次输入的密码不一致</div>
+        <div class="caps-hint">大写锁定已开启</div>
+      </div>
+
+      <div class="dialog-actions">
+        <button class="btn-secondary" id="reset-cancel">取消</button>
+        <button class="btn-primary" id="reset-save">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SCREEN 4: 通知区域右键菜单 ============ -->
+  <div class="window" id="win-menu" hidden role="dialog" aria-label="密码管理 通知区域菜单">
+    <div class="titlebar">
+      <div class="title">密码管理 · 通知区域菜单</div>
+      <div class="controls">
+        <div class="btn close" title="关闭"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.2"/></svg></div>
+      </div>
+    </div>
+    <div class="tray-stage">
+      <div class="stage-note">在通知区域（托盘）图标上<b>右键</b>唤出菜单 · 菜单向上弹出，贴近图标下缘对齐</div>
+
+      <div class="flyout" role="menu" aria-label="密码管理菜单">
+        <div class="mi" role="menuitem" tabindex="0">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 11 12 4l8 7"/><path d="M6 10v9h12v-9"/></svg>
+          <span>主页</span>
+        </div>
+        <div class="mi" role="menuitemcheckbox" aria-checked="true" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 4h14v16H5z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>
+          <span>显示日志</span>
+          <span class="sp"></span>
+          <span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M5 12.5l4.5 4.5L19 7"/></svg></span>
+        </div>
+        <div class="mi" role="menuitem" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="6"/><path d="M15.5 15.5 20 20"/></svg>
+          <span>查询元数据</span>
+        </div>
+        <div class="sep"></div>
+        <div class="mi" role="menuitem" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7V5h6l2 2h10v12H3z"/></svg>
+          <span>打开安装目录</span>
+        </div>
+        <div class="sep"></div>
+        <div class="mi danger" role="menuitem" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v8"/><path d="M7 7a7 7 0 1 0 10 0"/></svg>
+          <span>退出</span>
+        </div>
+      </div>
+
+      <div class="taskbar">
+        <span class="stage-note" style="position:static;margin-right:auto;">任务栏 · 通知区域</span>
+        <div class="tray-icon active" id="tray-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V8a4 4 0 0 1 8 0v2"/></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SCREEN 5: 日志 ============ -->
+  <div class="window" id="win-log" hidden role="dialog" aria-label="密码管理 日志" style="width:min(720px,94vw)">
+    <div class="titlebar">
+      <div class="title">密码管理 · 日志</div>
+      <div class="controls">
+        <div class="btn" title="最小化"><svg width="10" height="10" viewBox="0 0 10 10"><rect x="1" y="8" width="8" height="1.5" fill="currentColor"/></svg></div>
+        <div class="btn" title="最大化"><svg width="10" height="10" viewBox="0 0 10 10"><rect x="1" y="1" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></div>
+        <div class="btn close" title="关闭"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.2"/></svg></div>
+      </div>
+    </div>
+    <div class="logwrap">
+      <div class="logbar">
+        <div class="searchbox">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="6"/><path d="M15.5 15.5 20 20"/></svg>
+          <input id="log-search" type="text" placeholder="搜索日志内容" aria-label="搜索日志内容" />
+        </div>
+        <div class="seg" id="log-seg" role="tablist" aria-label="按等级筛选">
+          <button data-lv="all" class="active">全部</button>
+          <button data-lv="info">信息</button>
+          <button data-lv="warn">警告</button>
+          <button data-lv="error">错误</button>
+        </div>
+        <div class="logbar-right">
+          <label class="switch">
+            <input type="checkbox" id="autoscroll" checked />
+            <span class="track"><span class="knob"></span></span>
+            <span>自动滚动</span>
+          </label>
+          <button class="btn-mini" id="log-clear">清空</button>
+        </div>
+      </div>
+
+      <div class="logview" id="logview"></div>
+    </div>
+  </div>
+
+  <!-- ============ SCREEN 6: 查询元数据 ============ -->
+  <div class="window" id="win-meta" hidden role="dialog" aria-label="查询元数据" style="width:min(480px,94vw)">
+    <div class="titlebar">
+      <div class="title">查询元数据</div>
+      <div class="controls">
+        <div class="btn close" title="关闭"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.2"/></svg></div>
+      </div>
+    </div>
+    <div class="content">
+      <div class="field" id="f-path" style="margin-bottom:16px;">
+        <label for="meta-browse">选择文件</label>
+        <div class="query-row">
+          <div class="textbox mono read" id="meta-drop"><input id="meta-path" type="text" readonly placeholder="未选择文件" /></div>
+          <button class="btn-secondary btn-inline" id="meta-browse" type="button">选择文件</button>
+          <button class="btn-primary btn-inline" id="meta-query"><span class="ring" id="meta-ring"></span><span id="meta-query-text">查询</span></button>
+        </div>
+        <div class="field-error">请先选择要查询的文件</div>
+        <input type="file" id="meta-file-input" hidden />
+      </div>
+
+      <div class="banner" id="meta-banner" role="alert">
+        <span class="b-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v6"/><circle cx="12" cy="16.5" r="1" fill="currentColor" stroke="none"/></svg></span>
+        <span class="b-text" id="meta-banner-text">未找到该文件的元数据，请确认路径是否正确。</span>
+      </div>
+
+      <div class="card tight">
+        <div class="info-row">
+          <span class="k mono">uid</span>
+          <span class="v mono ellip empty" id="m-uid" title="">—</span>
+          <button class="icon-btn" data-copy="m-uid" title="复制" aria-label="复制 uid">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>
+          </button>
+        </div>
+        <div class="info-row">
+          <span class="k mono">EncodePassword</span>
+          <span class="v mono ellip empty" id="m-enc" title="">—</span>
+          <button class="icon-btn" data-copy="m-enc" title="复制" aria-label="复制 EncodePassword">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>
+          </button>
+        </div>
+        <div class="info-row">
+          <span class="k mono">keyVersion</span>
+          <span class="v mono ellip empty" id="m-key" title="">—</span>
+          <button class="icon-btn" data-copy="m-key" title="复制" aria-label="复制 keyVersion">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>
+          </button>
+        </div>
+        <div class="info-row">
+          <span class="k mono">DecodePassword</span>
+          <span class="v mono ellip empty" id="m-dec" title="">—</span>
+          <button class="icon-btn" data-copy="m-dec" title="复制" aria-label="复制 DecodePassword">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <p class="hint-line">值过长时单行省略，悬停可见完整内容；点击「选择文件」或把文件拖拽到上方输入框即可查询。</p>
+
+      <div class="dialog-actions">
+        <button class="btn-primary" id="meta-close">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    七屏可切换（登录 / 账户信息 / 修改密码 / 重置密码 / 右键菜单 / 日志 / 查询元数据）。「状态」随当前界面变化；「分辨率 / DPI」模拟 100%–200% 按监控器缩放（逻辑宽度不变，整体等比放大）。窗口宽度随视口收缩，触屏下热区自动放大到 44px。修改密码保存成功后自动执行注销并返回登录页；重置密码（首次登录）保存成功后直接进入账户信息页。
+  </div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const screenBtns = document.querySelectorAll('.toolbar button[data-screen]');
+  const stateGroup = $('state-group');
+  const windows = { login:$('win-login'), home:$('win-home'), pwd:$('win-pwd'), reset:$('win-reset'), menu:$('win-menu'), log:$('win-log'), meta:$('win-meta') };
+
+  const STATES = {
+    login:[['default','默认'],['error','错误'],['loading','加载中'],['server','展开服务器']],
+    home:[['default','默认'],['signout','注销确认']],
+    pwd:[['default','默认'],['invalid','校验失败'],['wrongold','原密码错误'],['success','保存成功']],
+    reset:[['default','默认'],['invalid','新密码不合规'],['mismatch','两次不一致'],['success','重置成功']],
+    menu:[['default','默认'],['danger','悬停「退出」'],['kbd','键盘高亮']],
+    log:[['default','默认'],['filter','筛选：错误'],['search','搜索'],['paused','滚动暂停'],['empty','空状态']],
+    meta:[['default','未查询'],['loading','查询中'],['done','查询成功'],['notfound','未找到']]
+  };
+
+  let activeScreen = 'login';
+  let currentDpi = 1;
+
+  /* ---------- Screen switching ---------- */
+  function buildStateButtons(screen){
+    stateGroup.querySelectorAll('button').forEach(b=>b.remove());
+    STATES[screen].forEach(([key,label],i)=>{
+      const b=document.createElement('button');
+      b.textContent=label; b.dataset.state=key;
+      if(i===0) b.classList.add('active');
+      b.addEventListener('click',()=>applyState(screen,key,b));
+      stateGroup.appendChild(b);
+    });
+  }
+  function showScreen(screen){
+    activeScreen=screen;
+    Object.keys(windows).forEach(k=>{ windows[k].hidden = (k!==screen); });
+    screenBtns.forEach(b=>b.classList.toggle('active', b.dataset.screen===screen));
+    buildStateButtons(screen);
+    applyState(screen, STATES[screen][0][0]);
+  }
+  screenBtns.forEach(b=> b.addEventListener('click',()=>showScreen(b.dataset.screen)));
+
+  /* ---------- DPI scaling ---------- */
+  function setDpi(scale){
+    currentDpi=scale;
+    Object.values(windows).forEach(w=>{ w.style.zoom = scale; });
+    document.querySelectorAll('.toolbar button[data-dpi]').forEach(b=>{
+      b.classList.toggle('active', parseFloat(b.dataset.dpi)===scale);
+    });
+  }
+  document.querySelectorAll('.toolbar button[data-dpi]').forEach(b=>{
+    b.addEventListener('click',()=>setDpi(parseFloat(b.dataset.dpi)));
+  });
+
+  /* ---------- Login screen ---------- */
+  const fUser=$('f-user'), fPass=$('f-pass'), banner=$('banner');
+  const loginBtn=$('login'), loginText=$('login-text'), ring=$('ring');
+  const expander=$('expander'), expanderSummary=$('expander-summary');
+
+  expanderSummary.addEventListener('click',()=>expander.classList.toggle('open'));
+  $('remember').addEventListener('click',(e)=>{ e.preventDefault(); $('remember').classList.toggle('checked'); });
+  $('go-pwd-from-login').addEventListener('click',(e)=>{ e.preventDefault(); showScreen('pwd'); });
+  $('go-pwd').addEventListener('click',()=>showScreen('pwd'));
+
+  function loginReset(){
+    banner.classList.remove('show');
+    fUser.classList.remove('has-error'); fPass.classList.remove('has-error');
+    loginBtn.disabled=false; loginText.textContent='登录'; ring.style.display='none';
+    $('user').disabled=false; $('pass').disabled=false;
+  }
+  function logout(){
+    $('signout-confirm').hidden=true; $('home-actions').hidden=false;
+    $('pass').value='';
+    showScreen('login');
+  }
+  loginBtn.addEventListener('click',()=>{
+    if(loginBtn.disabled) return;
+    loginReset();
+    loginBtn.disabled=true; loginText.textContent='正在登录…'; ring.style.display='inline-block';
+    $('user').disabled=true; $('pass').disabled=true;
+    setTimeout(()=>{
+      loginReset();
+      if($('user').value.trim() && $('pass').value){ showScreen('home'); }
+      else { banner.classList.add('show'); fUser.classList.add('has-error'); fPass.classList.add('has-error'); }
+    },1200);
+  });
+
+  /* ---------- Home screen ---------- */
+  const signoutConfirm=$('signout-confirm'), homeActions=$('home-actions');
+  $('signout').addEventListener('click',()=>{ signoutConfirm.hidden=false; homeActions.hidden=true; });
+  $('signout-no').addEventListener('click',()=>{ signoutConfirm.hidden=true; homeActions.hidden=false; });
+  $('signout-yes').addEventListener('click',()=>{ logout(); });
+
+  /* ---------- Change password screen ---------- */
+  const newPass=$('new-pass'), confirmPass=$('confirm-pass');
+  const pwdBanner=$('pwd-banner'), pwdBannerText=$('pwd-banner-text');
+  const fOld=$('f-old'), fNew=$('f-new'), fConfirm=$('f-confirm');
+  const RULES={ len:v=>v.length>=8, upper:v=>/[A-Z]/.test(v), lower:v=>/[a-z]/.test(v), digit:v=>/[0-9]/.test(v) };
+  /* 通用：按 li[data-rule] 实时勾选规则清单（修改密码 / 重置密码共用同一策略） */
+  function renderList(listEl,v){
+    let all=true;
+    listEl.querySelectorAll('li[data-rule]').forEach(li=>{
+      const ok=RULES[li.dataset.rule](v);
+      li.classList.toggle('ok',ok);
+      if(!ok) all=false;
+    });
+    return all;
+  }
+  function renderChecklist(v){ return renderList($('checklist'), v); }
+  newPass.addEventListener('input',()=>renderChecklist(newPass.value));
+  renderChecklist(newPass.value);
+
+  function pwdReset(){
+    pwdBanner.classList.remove('show','success');
+    fOld.classList.remove('has-error'); fNew.classList.remove('has-error'); fConfirm.classList.remove('has-error');
+    document.querySelector('#pwd-banner .b-icon').innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v6"/><circle cx="12" cy="16.5" r="1" fill="currentColor" stroke="none"/></svg>';
+    pwdBannerText.textContent='原密码不正确，请重新输入。';
+  }
+  $('pwd-cancel').addEventListener('click',()=>showScreen('home'));
+  $('pwd-save').addEventListener('click',()=>{
+    pwdReset();
+    const oldOk=$('old-pass').value.trim().length>0;
+    const rulesOk=renderChecklist(newPass.value);
+    const matchOk=newPass.value===confirmPass.value && confirmPass.value.length>0;
+    if(!rulesOk){ fNew.classList.add('has-error'); pwdBanner.classList.add('show'); pwdBannerText.textContent='新密码不符合要求，请按下方规则修改。'; return; }
+    if(!matchOk){ fConfirm.classList.add('has-error'); pwdBanner.classList.add('show'); pwdBannerText.textContent='两次输入的密码不一致。'; return; }
+    if(!oldOk){ fOld.classList.add('has-error'); pwdBanner.classList.add('show'); pwdBannerText.textContent='请输入原密码。'; return; }
+    pwdBanner.classList.add('show','success');
+    document.querySelector('#pwd-banner .b-icon').innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M7.5 12l3 3 6-6"/></svg>';
+    pwdBannerText.textContent='密码已更新，正在注销并返回登录页…';
+    setTimeout(()=>{ logout(); },1400);
+  });
+
+  /* ---------- Log screen ---------- */
+  const LOGS=[
+    {date:'2026-09-24',t:'14:11:50.015',lv:'info', msg:'应用启动完成，版本 2.4.1'},
+    {date:'2026-09-24',t:'14:11:50.108',lv:'info', msg:'已加载配置文件 config.json'},
+    {date:'2026-09-24',t:'14:11:51.024',lv:'info', msg:'[文件特征管理] 已清除 4 项文件特征'},
+    {date:'2026-09-24',t:'14:11:51.402',lv:'warn', msg:'服务器 10.8.2.83:8081 响应较慢（1240 ms）'},
+    {date:'2026-09-24',t:'14:11:52.037',lv:'info', msg:'检测机制处于未登录状态，每 5 秒检查一次'},
+    {date:'2026-09-24',t:'14:11:52.610',lv:'info', msg:'用户 xiaosn 点击「显示日志」'},
+    {date:'2026-09-24',t:'14:11:53.038',lv:'error',msg:'连接服务器失败：Connection refused (10.8.2.83:8081)'},
+    {date:'2026-09-24',t:'14:11:53.512',lv:'info', msg:'已发起第 1 次重试，等待 500 ms'},
+    {date:'2026-09-24',t:'14:11:54.046',lv:'info', msg:'重试后服务器连接已恢复，会话保持有效'},
+    {date:'2026-09-24',t:'14:11:55.057',lv:'warn', msg:'[自动填充] 存在 2 条过期记录，已跳过'},
+    {date:'2026-09-24',t:'14:11:56.068',lv:'info', msg:'[文件特征管理] 清理完成，耗时 231 ms'},
+    {date:'2026-09-24',t:'14:11:57.100',lv:'error',msg:'保存元数据失败：目标文件被占用 (0x20)'}
+  ];
+  const LVL={info:'INFO',warn:'WARN',error:'ERROR'};
+  const logSearch=$('log-search'), logView=$('logview'), logSeg=$('log-seg'), autoScroll=$('autoscroll'), logHint=null;
+  let logLv='all', logEmptied=false;
+
+  const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const escRe = s => s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+
+  function renderLogs(){
+    const q=(logSearch.value||'').trim();
+    const list = logEmptied ? [] : LOGS.filter(r=>(logLv==='all'||r.lv===logLv)&&(!q||r.msg.toLowerCase().indexOf(q.toLowerCase())>=0));
+    let html='';
+    if(!list.length){
+      const title = logEmptied ? '暂无日志记录' : '未找到匹配的日志';
+      const sub = logEmptied ? '程序运行后的操作与异常会记录在这里。' : '试试更换关键词，或把等级筛选切回「全部」。';
+      html='<div class="log-empty">'
+        + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 4h14v16H5z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>'
+        + '<div class="e-t">'+title+'</div><div class="e-s">'+sub+'</div></div>';
+    } else {
+      let lastDate=null;
+      list.forEach(r=>{
+        if(r.date!==lastDate){ lastDate=r.date; html+='<div class="log-date">'+r.date+'</div>'; }
+        let m=esc(r.msg);
+        if(q) m=m.replace(new RegExp('('+escRe(q)+')','ig'),'<mark>$1</mark>');
+        m=m.replace(/\[([^\]]+)\]/g,'<span class="src">[$1]</span>');
+        html+='<div class="log-row"><span class="lt">'+r.t+'</span><span class="lv '+r.lv+'">'+LVL[r.lv]+'</span><span class="lm">'+m+'</span></div>';
+      });
+    }
+    if(!autoScroll.checked){
+      html+='<div class="log-hint"><span>已暂停自动滚动</span><button class="hint-btn" id="log-resume">恢复跟随</button></div>';
+    }
+    logView.innerHTML=html;
+    const resume=$('log-resume');
+    if(resume) resume.addEventListener('click',()=>{ autoScroll.checked=true; renderLogs(); scrollToBottom(); });
+  }
+  function scrollToBottom(){ logView.scrollTop = logView.scrollHeight; }
+  function setSeg(lv){
+    logLv=lv;
+    logSeg.querySelectorAll('button').forEach(b=>b.classList.toggle('active', b.dataset.lv===lv));
+  }
+  logSeg.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{ setSeg(b.dataset.lv); renderLogs(); }));
+  logSearch.addEventListener('input',renderLogs);
+  autoScroll.addEventListener('change',()=>{ renderLogs(); if(autoScroll.checked) scrollToBottom(); });
+  $('log-clear').addEventListener('click',()=>{ logEmptied=true; renderLogs(); });
+  // 标题栏关闭按钮（右上角 X）：从右上角关闭当前窗口，符合 Windows 桌面交互规范。
+  // 此前这些 X 仅为装饰（点了无反应），现统一接管为「关闭当前窗口并回到登录界面」。
+  Object.values(windows).forEach(win=>{
+    const cb = win.querySelector('.controls .btn.close');
+    if(cb) cb.addEventListener('click', ()=> showScreen('login'));
+  });
+
+  function applyLogState(state){
+    logSearch.value=''; autoScroll.checked=true; logEmptied=false; setSeg('all');
+    if(state==='filter'){ setSeg('error'); }
+    if(state==='search'){ logSearch.value='服务器'; }
+    if(state==='paused'){ autoScroll.checked=false; }
+    if(state==='empty'){ logEmptied=true; }
+    renderLogs();
+    if(autoScroll.checked && !logEmptied) scrollToBottom();
+  }
+
+  /* ---------- Metadata screen ---------- */
+  const META={ uid:'1001', enc:'U2FsdGVkX1+9mK3pQ7vR2xLd8ZbN4tYwC0aFhVjEuMo=', key:'2', dec:'QkFTRTY0Ok1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBU0N4eU5LM3A=' };
+  const metaFields={ uid:$('m-uid'), enc:$('m-enc'), key:$('m-key'), dec:$('m-dec') };
+  const metaBanner=$('meta-banner'), metaBannerText=$('meta-banner-text');
+  const metaPath=$('meta-path'), fPath=$('f-path');
+  const metaBtn=$('meta-query'), metaBtnText=$('meta-query-text'), metaRing=$('meta-ring');
+  const metaFileInput=$('meta-file-input'), metaBrowse=$('meta-browse'), metaDrop=$('meta-drop');
+
+  function setMetaValues(vals){
+    Object.keys(metaFields).forEach(k=>{
+      const el=metaFields[k], v=vals?vals[k]:null;
+      el.textContent = v ? v : '—';
+      el.title = v ? v : '';
+      el.classList.toggle('empty', !v);
+    });
+  }
+  function metaReset(){
+    metaBanner.classList.remove('show');
+    fPath.classList.remove('has-error');
+    metaBtn.disabled=false; metaBtnText.textContent='查询'; metaRing.style.display='none';
+    metaBrowse.disabled=false;
+    metaPath.disabled=false; metaPath.readOnly=true;
+    updateQueryState();
+  }
+  function updateQueryState(){ metaBtn.disabled = !metaPath.value.trim(); }
+  function copyText(t){
+    if(navigator.clipboard) navigator.clipboard.writeText(t).catch(()=>{});
+  }
+  function flashDone(btn,withText){
+    if(btn.dataset.flashing) return;
+    btn.dataset.flashing='1';
+    const old=btn.innerHTML;
+    btn.classList.add('done');
+    btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M5 12.5l4.5 4.5L19 7"/></svg>'+(withText?'<span>已复制</span>':'');
+    setTimeout(()=>{ btn.classList.remove('done'); btn.innerHTML=old; delete btn.dataset.flashing; },1200);
+  }
+  document.querySelectorAll('.icon-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const el=$(btn.dataset.copy);
+      if(el.classList.contains('empty')) return;
+      copyText(el.textContent);
+      flashDone(btn);
+    });
+  });
+  function selectFile(name){
+    metaPath.value = name;
+    metaPath.title = name;
+    metaPath.scrollLeft = metaPath.scrollWidth;   /* 长路径时显示末尾，保证文件名可见 */
+    fPath.classList.remove('has-error');
+    updateQueryState();
+  }
+  metaBrowse.addEventListener('click',()=>{ metaFileInput.click(); });
+  metaFileInput.addEventListener('change',()=>{
+    if(metaFileInput.files && metaFileInput.files[0]){
+      // 真实桌面应用中 OpenFileDialog.FileName 返回完整路径；浏览器原型仅能取到文件名，此处以文件名模拟
+      selectFile(metaFileInput.files[0].name);
+    }
+  });
+  ['dragover','dragenter'].forEach(ev=>metaDrop.addEventListener(ev,e=>{ e.preventDefault(); metaDrop.classList.add('drop'); }));
+  ['dragleave','dragend'].forEach(ev=>metaDrop.addEventListener(ev,e=>{ e.preventDefault(); metaDrop.classList.remove('drop'); }));
+  metaDrop.addEventListener('drop',e=>{
+    e.preventDefault(); metaDrop.classList.remove('drop');
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if(f) selectFile(f.name);
+  });
+  metaBtn.addEventListener('click',()=>{
+    if(metaBtn.disabled) return;
+    metaReset();
+    if(!metaPath.value.trim()){ fPath.classList.add('has-error'); return; }
+    metaBtn.disabled=true; metaBtnText.textContent='查询中'; metaRing.style.display='inline-block'; metaPath.disabled=true; metaBrowse.disabled=true;
+    setTimeout(()=>{
+      metaReset();
+      if(metaPath.value.trim().length>6){ setMetaValues(META); }
+      else { setMetaValues(null); metaBanner.classList.add('show'); fPath.classList.add('has-error'); }
+    },1000);
+  });
+  $('meta-close').addEventListener('click',()=>showScreen('login'));
+
+  const META_SAMPLE='C:\\Program Files\\密码管理\\data\\profile.dat';
+  function applyMetaState(state){
+    metaReset();
+    if(state==='default'){ setMetaValues(null); metaPath.value=''; metaPath.title=''; updateQueryState(); }
+    if(state==='loading'){
+      selectFile(META_SAMPLE);
+      setMetaValues(null); metaBtn.disabled=true; metaBtnText.textContent='查询中'; metaRing.style.display='inline-block';
+      metaPath.disabled=true; metaBrowse.disabled=true;
+    }
+    if(state==='done'){ selectFile(META_SAMPLE); setMetaValues(META); }
+    if(state==='notfound'){
+      selectFile('C:\\Users\\xiaosn\\Desktop\\missing-profile.dat');
+      setMetaValues(null); metaBanner.classList.add('show'); fPath.classList.add('has-error');
+    }
+  }
+
+  /* ---------- Reset password screen (first sign-in, forced) ---------- */
+  const ICO_WARN='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v6"/><circle cx="12" cy="16.5" r="1" fill="currentColor" stroke="none"/></svg>';
+  const ICO_OK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M7.5 12l3 3 6-6"/></svg>';
+  const rNew=$('reset-new'), rConfirm=$('reset-confirm');
+  const rBanner=$('reset-banner'), rBannerText=$('reset-banner-text');
+  const rfNew=$('rf-new'), rfConfirm=$('rf-confirm');
+
+  function resetReset(){
+    rBanner.classList.remove('show','success');
+    rfNew.classList.remove('has-error'); rfConfirm.classList.remove('has-error');
+    document.querySelector('#reset-banner .b-icon').innerHTML=ICO_WARN;
+    rBannerText.textContent='新密码不符合要求，请按下方规则修改。';
+  }
+  rNew.addEventListener('input',()=>renderList($('reset-checklist'), rNew.value));
+  rConfirm.addEventListener('input',()=>{ if(rConfirm.value===rNew.value) rfConfirm.classList.remove('has-error'); });
+  $('reset-cancel').addEventListener('click',()=>showScreen('login'));
+  $('reset-save').addEventListener('click',()=>{
+    resetReset();
+    const rulesOk=renderList($('reset-checklist'), rNew.value);
+    const matchOk=rNew.value===rConfirm.value && rConfirm.value.length>0;
+    if(!rulesOk){ rfNew.classList.add('has-error'); rBanner.classList.add('show'); rBannerText.textContent='新密码不符合要求，请按下方规则修改。'; return; }
+    if(!matchOk){ rfConfirm.classList.add('has-error'); rBanner.classList.add('show'); rBannerText.textContent='两次输入的密码不一致，请重新输入。'; return; }
+    rBanner.classList.add('show','success');
+    document.querySelector('#reset-banner .b-icon').innerHTML=ICO_OK;
+    rBannerText.textContent='密码已重置，请使用新密码重新登录。';
+    setTimeout(()=>{ showScreen('login'); },1200);
+  });
+  function applyResetState(state){
+    resetReset();
+    if(state==='default'){ rNew.value=''; rConfirm.value=''; renderList($('reset-checklist'),''); return; }
+    if(state==='invalid'){
+      rNew.value='Abc123'; rConfirm.value='Abc123'; renderList($('reset-checklist'),rNew.value);
+      rfNew.classList.add('has-error'); rBanner.classList.add('show');
+      rBannerText.textContent='新密码不符合要求，请按下方规则修改。'; return;
+    }
+    if(state==='mismatch'){
+      rNew.value='Newpass1'; rConfirm.value='Newpass2'; renderList($('reset-checklist'),rNew.value);
+      rfConfirm.classList.add('has-error'); rBanner.classList.add('show');
+      rBannerText.textContent='两次输入的密码不一致，请重新输入。'; return;
+    }
+    if(state==='success'){
+      rNew.value='Newpass1'; rConfirm.value='Newpass1'; renderList($('reset-checklist'),rNew.value);
+      rBanner.classList.add('show','success');
+      document.querySelector('#reset-banner .b-icon').innerHTML=ICO_OK;
+      rBannerText.textContent='密码已重置，请使用新密码重新登录。';
+    }
+  }
+
+  /* ---------- Menu screen ---------- */
+  function applyMenuState(state){
+    document.querySelectorAll('#win-menu .mi').forEach(m=>m.classList.remove('forced-hover','kbd'));
+    if(state==='danger'){ const d=document.querySelector('#win-menu .mi.danger'); if(d) d.classList.add('forced-hover'); }
+    if(state==='kbd'){ const items=document.querySelectorAll('#win-menu .mi'); if(items[1]) items[1].classList.add('kbd'); }
+  }
+  document.querySelectorAll('#win-menu .mi').forEach(item=>{
+    item.addEventListener('mouseenter',()=>{ document.querySelectorAll('#win-menu .mi').forEach(m=>m.classList.remove('kbd','forced-hover')); });
+  });
+
+  /* ---------- Eye toggles (inputs + static) ---------- */
+  document.querySelectorAll('.eye').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const input=$(btn.dataset.target);
+      const show=input.type==='password';
+      input.type=show?'text':'password';
+      btn.classList.toggle('on',show);
+      const label=show?'隐藏密码':'显示密码';
+      btn.setAttribute('aria-label',label); btn.title=label;
+      input.focus();
+    });
+  });
+  document.querySelectorAll('.eye-static').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const el=$(btn.dataset.target);
+      const masked=el.classList.toggle('masked');
+      el.textContent = masked ? '••••••••' : 'Abcd1234';
+      btn.classList.toggle('on',!masked);
+    });
+  });
+
+  /* ---------- CapsLock hint ---------- */
+  document.querySelectorAll('.textbox').forEach(tb=>{
+    const field=tb.parentElement;
+    const hint=field.querySelector('.caps-hint');
+    if(!hint) return;
+    const inp=tb.querySelector('input');
+    const upd=(e)=>{ if(e.getModifierState) field.classList.toggle('show-caps', e.getModifierState('CapsLock')); };
+    inp.addEventListener('keyup',upd);
+    inp.addEventListener('click',upd);
+    inp.addEventListener('blur',()=>field.classList.remove('show-caps'));
+  });
+
+  /* ---------- Per-screen state application ---------- */
+  function applyState(screen,state,btn){
+    stateGroup.querySelectorAll('button').forEach(b=>b.classList.toggle('active', b===btn || (btn===undefined && b.dataset.state===state)));
+    if(screen==='login'){
+      loginReset();
+      if(state==='error'){ banner.classList.add('show'); fUser.classList.add('has-error'); fPass.classList.add('has-error'); }
+      if(state==='loading'){ loginBtn.disabled=true; loginText.textContent='正在登录…'; ring.style.display='inline-block'; $('user').disabled=true; $('pass').disabled=true; }
+      if(state==='server'){ expander.classList.add('open'); }
+    }
+    if(screen==='home'){
+      signoutConfirm.hidden = state!=='signout';
+      homeActions.hidden = state==='signout';
+    }
+    if(screen==='pwd'){
+      pwdReset();
+      if(state==='invalid'){ fNew.classList.add('has-error'); pwdBanner.classList.add('show'); pwdBannerText.textContent='新密码不符合要求，请按下方规则修改。'; }
+      if(state==='wrongold'){ fOld.classList.add('has-error'); pwdBanner.classList.add('show'); pwdBannerText.textContent='原密码不正确，请重新输入。'; }
+      if(state==='success'){
+        pwdBanner.classList.add('show','success');
+        document.querySelector('#pwd-banner .b-icon').innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M7.5 12l3 3 6-6"/></svg>';
+        pwdBannerText.textContent='密码已更新，正在注销并返回登录页…';
+      }
+    }
+    if(screen==='reset'){ applyResetState(state); }
+    if(screen==='menu'){ applyMenuState(state); }
+    if(screen==='log'){ applyLogState(state); }
+    if(screen==='meta'){ applyMetaState(state); }
+  }
+
+  /* ---------- Init ---------- */
+  showScreen('login');
+</script>
+</body>
+</html>

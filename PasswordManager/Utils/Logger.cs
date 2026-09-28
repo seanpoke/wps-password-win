@@ -17,7 +17,7 @@ namespace PasswordManager.Utils
     public static class Logger
     {
         private static readonly string LogDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "log");
-        private static readonly string LogFilePath = Path.Combine(LogDirectory, "wps_password_manager.log");
+        private static string _lastCleanupDate = "";
         private static readonly ConcurrentQueue<string> _fileWriteQueue = new ConcurrentQueue<string>();
         private static readonly AutoResetEvent _fileWaitEvent = new AutoResetEvent(false);
         private static Thread _fileWorkerThread;
@@ -223,24 +223,63 @@ namespace PasswordManager.Utils
             }
         }
 
+        /// <summary>当前日志文件：按天分文件（log_yyyy-MM-dd.log）。</summary>
+        private static string CurrentLogFile => Path.Combine(LogDirectory, $"log_{DateTime.Now:yyyy-MM-dd}.log");
+
         private static void WriteToFile(string content)
         {
             try
             {
-                const long maxLogFileSize = 10 * 1024 * 1024;
-                
-                if (File.Exists(LogFilePath))
+                string logFile = CurrentLogFile;
+
+                // 每天首次写入时清理过期日志（保留最近 5 天）
+                string today = DateTime.Today.ToString("yyyy-MM-dd");
+                if (_lastCleanupDate != today)
                 {
-                    FileInfo fileInfo = new FileInfo(LogFilePath);
+                    _lastCleanupDate = today;
+                    CleanupOldLogs();
+                }
+
+                // 单文件超 10MB 滚动为 .bak（避免单日超大文件）
+                const long maxLogFileSize = 10 * 1024 * 1024;
+                if (File.Exists(logFile))
+                {
+                    var fileInfo = new FileInfo(logFile);
                     if (fileInfo.Length > maxLogFileSize)
                     {
                         string timestamp = DateTime.Now.ToString("yyyyMMddHHmmssfff");
-                        string backupPath = Path.Combine(LogDirectory, $"log_{timestamp}.bak");
-                        File.Move(LogFilePath, backupPath);
+                        string backupPath = Path.Combine(LogDirectory, $"log_{DateTime.Now:yyyy-MM-dd}_{timestamp}.bak");
+                        File.Move(logFile, backupPath);
                     }
                 }
-                
-                File.AppendAllText(LogFilePath, content, Encoding.UTF8);
+
+                File.AppendAllText(logFile, content, Encoding.UTF8);
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// 日志清理（按天分文件 + 保留 5 天）：删除 5 天前的 .log 与 .bak 日志文件。
+        /// </summary>
+        private static void CleanupOldLogs()
+        {
+            try
+            {
+                DateTime keepAfter = DateTime.Today.AddDays(-4);   // 保留今天+前4天共 5 天
+                foreach (string file in Directory.GetFiles(LogDirectory, "log_*.log"))
+                {
+                    if (File.GetLastWriteTime(file).Date < keepAfter)
+                    {
+                        try { File.Delete(file); } catch { }
+                    }
+                }
+                foreach (string file in Directory.GetFiles(LogDirectory, "log_*.bak"))
+                {
+                    if (File.GetLastWriteTime(file).Date < keepAfter)
+                    {
+                        try { File.Delete(file); } catch { }
+                    }
+                }
             }
             catch { }
         }

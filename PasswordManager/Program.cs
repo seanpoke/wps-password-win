@@ -653,10 +653,7 @@ namespace PasswordManager
                                             FileStateManager.RegisterFile(documentPath);
                                         }
                                     }
-                                    else
-                                    {
-                                        Logger.Warning("未能获取到文档路径");
-                                    }
+                                    // 未获取到文档路径属于常态（未打开文档），不再打印警告刷屏
                                 }
                                 catch (Exception ex)
                                 {
@@ -923,7 +920,8 @@ namespace PasswordManager
                                             }
                                             else
                                             {
-                                                Logger.Warning("未能获取到文档路径");
+                                                // 常态分支降级为 Debug（Release 下默认不打印），避免刷屏
+                                                Logger.Debug("未能获取到文档路径");
                                             }
                                         }
                                     }
