@@ -557,8 +557,9 @@ namespace PasswordManager.UI.Controls
             if (Kind == BannerKind.Success) Theme.DrawSuccessCircle(g, icon, Theme.Success);
             else Theme.DrawInfoCircle(g, icon, Theme.Danger);
 
-            var textRect = new RectangleF(Theme.S(40), 0, 2000, Height);
-            using var fmt = new StringFormat { LineAlignment = StringAlignment.Center, FormatFlags = StringFormatFlags.NoWrap };
+            // 文本从图标右侧 40px 开始，右侧留 12px；允许自动换行（UpdateHeight 已按换行测量高度）
+            var textRect = new RectangleF(Theme.S(40), 0, Math.Max(10, Width - Theme.S(52)), Height);
+            using var fmt = new StringFormat { LineAlignment = StringAlignment.Center };
             using var brush = new SolidBrush(Theme.TextPrimary);
             g.DrawString(_message, Theme.Body, brush, textRect, fmt);
         }

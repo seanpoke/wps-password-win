@@ -69,5 +69,10 @@ namespace PasswordManager.Services.Routing
         /// 获取最新密钥信息接口
         /// </summary>
         public const string ConfigLatestKey = "/config/latest-key";
+
+        /// <summary>
+        /// 客户端版本检查接口（免 token）
+        /// </summary>
+        public const string ConfigVersionCheck = "/config/version/check";
     }
 }

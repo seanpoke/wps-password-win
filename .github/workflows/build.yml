@@ -1,12 +1,10 @@
 name: Build and Package
 
 on:
-  # 保留原有的 push/pull_request 触发方式
+  # 仅主分支 push 时自动构建，其他分支不执行
   push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main, develop ]
-  # 新增手动触发（核心！）
+    branches: [ main ]
+  # 保留手动触发（仅限在 main 分支上手动运行）
   workflow_dispatch:
     # 可选：手动触发时可配置输入参数，这里给你加个示例
     inputs:
@@ -54,24 +52,27 @@ jobs:
 
     - name: Create archive with version and timestamp
       run: |
-        $version = "1.0.0"
+        # 版本号取自 csproj（单一来源，改 csproj 的 <Version> 即可）
+        [xml]$csproj = Get-Content "PasswordManager/PasswordManager.csproj" -Encoding UTF8
+        $version = $csproj.Project.PropertyGroup.Version
         $timestamp = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId((Get-Date), "China Standard Time") | Get-Date -Format "yyyyMMddHHmm"
         $archiveName = "文档密码管理_${version}_${timestamp}"
         $publishDir = "PasswordManager/bin/Release/net6.0-windows/win-x64/publish"
         Push-Location $publishDir
         Compress-Archive -Path .\* -DestinationPath "${env:GITHUB_WORKSPACE}\${archiveName}.zip" -Force
         Pop-Location
-        Write-Output "::set-output name=archiveName::$archiveName"
         Write-Output "Archive created: ${archiveName}.zip"
+        "archiveName=$archiveName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
       working-directory: ${{ github.workspace }}
       id: create-archive
 
     - name: Upload publish artifacts
       uses: actions/upload-artifact@v4
       with:
+        # artifact 名 = 下载时得到的 zip 名；直接上传 publish 目录，
+        # 下载解压一层即是 exe 本体（避免 zip 套 zip）
         name: ${{ steps.create-archive.outputs.archiveName }}
-        path: |
-          *.zip
+        path: PasswordManager/bin/Release/net6.0-windows/win-x64/publish/*
         if-no-files-found: error
       id: upload-artifact
 

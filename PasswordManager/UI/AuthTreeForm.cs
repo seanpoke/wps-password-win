@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Windows.Forms;
-using System.Threading.Tasks;
 using System.Linq;
+using System.Threading.Tasks;
+using System.Windows.Forms;
 using PasswordManager.Services.Request;
 using PasswordManager.Services.Routing;
 using PasswordManager.Utils;
@@ -11,58 +11,70 @@ using PasswordManager.UI.Controls;
 
 namespace PasswordManager.UI
 {
-    public class AuthTreeForm : Form
+    /// <summary>
+    /// 文档权限窗口（严格还原原型 app-prototype.html SCREEN 7「文档权限」）：
+    /// 顶部命令条（搜索框 + 搜索 + ◀ n/N ▶ 定位 + 「有未保存的改动 / 权限已保存」旗标 + 重置 / 保存）+
+    /// 左「选择部门或人员」树（twisty / 复选框 on·mixed / 部门·人员图标、勾选部门＝整部门授权、
+    /// 被上级覆盖整行置灰、搜索命中词高亮与逐条定位）+
+    /// 右「已选择的部门 / 已选择的员工」两清单（只保留最上层授权、路径展示、移除按钮、空状态）+
+    /// 底部富文本提示行。
+    /// 业务逻辑保留：GET /doc/auth/tree 加载 + POST /doc/auth/update 保存。
+    /// </summary>
+    public class AuthTreeForm : ThemedWindow
     {
         public static bool IsOpen { get; private set; } = false;
 
-        private Panel _topPanel;
-        private TextBox _searchTextBox;
-        private Button _searchButton;
-        private AuthTreeView _authTreeView;
-        private Panel _loadingPanel;
-        private Label _loadingLabel;
-        private Label _errorLabel;
-        private HttpRequestService _httpRequestService;
-        private string _docId;
+        private const string LockedTip = "已包含在上级部门的授权范围内，如需单独调整请先取消上级部门授权";
 
-        private Panel _leftPanel;
-        private Panel _rightPanel;
-        private Label _leftTitleLabel;
+        private readonly string _docId;
+        private readonly HttpRequestService _httpRequestService = new();
 
-        private Label _deptTitleLabel;
-        private Label _empTitleLabel;
-        private ListBox _selectedDeptListBox;
-        private ListBox _selectedEmpListBox;
-        private Label _deptCountLabel;
-        private Label _empCountLabel;
+        // ===== 模型 =====
+        private readonly List<PermNodeModel> _roots = new();
+        private readonly Dictionary<string, PermNodeModel> _byId = new();
+        private readonly List<PermNodeModel> _order = new();
 
-        private Button _saveButton;
-        private Button _resetButton;
+        // ===== 授权状态（原型 permDeptOn / permUserOn / permSaved / permExpanded）=====
+        private readonly HashSet<string> _deptOn = new();
+        private readonly HashSet<string> _userOn = new();
+        private HashSet<string> _savedDept = new();
+        private HashSet<string> _savedUser = new();
+        private readonly HashSet<string> _expanded = new();
 
-        private List<LdapNodeDTO> _selectedDepts = new List<LdapNodeDTO>();
-        private List<LdapNodeDTO> _selectedEmps = new List<LdapNodeDTO>();
-        private HashSet<string> _autoCheckedEmpDns = new HashSet<string>();
-        private HashSet<string> _autoCheckedDeptDns = new HashSet<string>();
-        private bool _isUpdatingCheckState = false;
+        // ===== 搜索（原型 permQuery / permMatches / permCursor）=====
+        private string _query = "";
+        private List<string> _matches = new();
+        private int _cursor = -1;
 
-        private Button _searchUpButton;
-        private Button _searchDownButton;
-        private Label _searchCountLabel;
-        private List<TreeNode> _matchedNodes = new List<TreeNode>();
-        private int _currentMatchIndex = -1;
+        private bool _loaded;
+        private bool _saving;
+        private List<SelItem> _deptItems = new();
+        private List<SelItem> _userItems = new();
+
+        // ===== 控件 =====
+        private SearchBox _searchBox = null!;
+        private SmallButton _searchBtn = null!;
+        private NavArrow _prevBtn = null!;
+        private NavArrow _nextBtn = null!;
+        private Label _countLabel = null!;
+        private BarFlag _dirtyFlag = null!;
+        private BarFlag _okFlag = null!;
+        private SmallButton _resetBtn = null!;
+        private SmallButton _saveBtn = null!;
+        private PermPane _treePane = null!;
+        private PermPane _deptPane = null!;
+        private PermPane _userPane = null!;
+        private PermTreeView _tree = null!;
+        private PermSelList _deptList = null!;
+        private PermSelList _userList = null!;
+        private readonly System.Windows.Forms.Timer _okFlagTimer = new() { Interval = 2400 };
 
         public AuthTreeForm(string docId)
         {
             _docId = docId;
-            _httpRequestService = new HttpRequestService();
             InitializeComponent();
             IsOpen = true;
             LoadAuthTreeAsync();
-        }
-
-        protected override void OnShown(EventArgs e)
-        {
-            base.OnShown(e);
         }
 
         protected override void OnClosed(EventArgs e)
@@ -73,772 +85,395 @@ namespace PasswordManager.UI
 
         private void InitializeComponent()
         {
-            float dpiScale = DpiHelper.GetDpiScale();
-            
-            int windowWidth = (int)(700 * dpiScale);
-            int windowHeight = (int)(580 * dpiScale);
-            
-            int buttonWidth = (int)(80 * dpiScale);
-            int buttonHeight = (int)(30 * dpiScale);
-            int buttonSpacing = (int)(10 * dpiScale);
-            int bottomMargin = (int)(20 * dpiScale);
-            
-            this.Text = "文档权限";
-            this.FormBorderStyle = FormBorderStyle.FixedSingle;
-            this.ClientSize = new Size(windowWidth, windowHeight);
-            this.StartPosition = FormStartPosition.CenterScreen;
-            this.BackColor = Color.White;
-            this.MaximizeBox = false;
-            this.MinimizeBox = false;
-            this.ShowIcon = false;
-            this.TopMost = true;
-            this.AutoScaleMode = AutoScaleMode.None;
+            Text = "文档权限";
+            ShowMinimizeButton = false;
+            ShowMaximizeButton = false;
+            Resizable = false;
+            TopMost = true;   // 悬浮于 WPS 之上（保留原实现行为）
 
-            Font regularFont = new Font("微软雅黑", 9F);
-            Font boldFont9 = new Font("微软雅黑", 9F, FontStyle.Bold);
-            Font boldFont10 = new Font("微软雅黑", 10F, FontStyle.Bold);
-
-            _topPanel = new Panel
+            _searchBox = new SearchBox("搜索部门或人员")
             {
-                Size = new Size(windowWidth, (int)(40 * dpiScale)),
-                Location = new Point(0, 0),
-                BackColor = Color.FromArgb(245, 245, 245),
-                BorderStyle = BorderStyle.FixedSingle
+                Inner = { Enabled = false }
+            };
+            _searchBox.Inner.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; RunSearch(); } };
+            _searchBox.TextChanged += (_, _) =>
+            {
+                // 清空输入即恢复完整组织树（原型 input 事件）
+                if (string.IsNullOrEmpty(_searchBox.Inner.Text) && _query.Length > 0)
+                {
+                    _query = "";
+                    _matches = new List<string>();
+                    _cursor = -1;
+                    UpdateNav();
+                    _tree.SetCurrentKey(null);
+                    _tree.Invalidate();
+                }
             };
 
-            _searchTextBox = new TextBox
+            _searchBtn = new SmallButton("搜索", SmallButtonStyle.Primary) { Enabled = false };
+            _searchBtn.Click += (_, _) => RunSearch();
+
+            _prevBtn = new NavArrow(left: true) { Enabled = false };
+            _prevBtn.Click += (_, _) => MoveCursor(-1);
+            _nextBtn = new NavArrow(left: false) { Enabled = false };
+            _nextBtn.Click += (_, _) => MoveCursor(1);
+
+            _countLabel = new Label
             {
-                Size = new Size((int)(180 * dpiScale), (int)(28 * dpiScale)),
-                Location = new Point((int)(10 * dpiScale), (int)(6 * dpiScale)),
-                Font = regularFont,
-                PlaceholderText = "搜索部门或人员..."
-            };
-            _searchTextBox.KeyDown += SearchTextBox_KeyDown;
-
-            _searchButton = new Button
-            {
-                Text = "搜索",
-                Font = boldFont9,
-                ForeColor = Color.White,
-                BackColor = Color.FromArgb(0, 120, 212),
-                Size = new Size((int)(60 * dpiScale), (int)(28 * dpiScale)),
-                Location = new Point((int)(195 * dpiScale), (int)(6 * dpiScale)),
-                FlatStyle = FlatStyle.Flat,
-                Cursor = Cursors.Hand,
-                TabStop = false
-            };
-            _searchButton.FlatAppearance.BorderSize = 0;
-            _searchButton.Click += SearchButton_Click;
-            _searchButton.MouseEnter += (sender, e) => _searchButton.BackColor = Color.FromArgb(0, 100, 180);
-            _searchButton.MouseLeave += (sender, e) => _searchButton.BackColor = Color.FromArgb(0, 120, 212);
-
-            _searchUpButton = new Button
-            {
-                Text = "◀",
-                Font = boldFont10,
-                ForeColor = Color.Black,
-                BackColor = Color.White,
-                Size = new Size((int)(28 * dpiScale), (int)(28 * dpiScale)),
-                Location = new Point((int)(260 * dpiScale), (int)(6 * dpiScale)),
-                FlatStyle = FlatStyle.Flat,
-                Cursor = Cursors.Hand,
-                TabStop = false,
-                Enabled = false
-            };
-            _searchUpButton.FlatAppearance.BorderSize = 0;
-            _searchUpButton.Click += SearchUpButton_Click;
-
-            _searchDownButton = new Button
-            {
-                Text = "▶",
-                Font = boldFont10,
-                ForeColor = Color.Black,
-                BackColor = Color.White,
-                Size = new Size((int)(28 * dpiScale), (int)(28 * dpiScale)),
-                Location = new Point((int)(290 * dpiScale), (int)(6 * dpiScale)),
-                FlatStyle = FlatStyle.Flat,
-                Cursor = Cursors.Hand,
-                TabStop = false,
-                Enabled = false
-            };
-            _searchDownButton.FlatAppearance.BorderSize = 0;
-            _searchDownButton.Click += SearchDownButton_Click;
-
-            _searchCountLabel = new Label
-            {
-                Text = "",
-                Font = regularFont,
-                ForeColor = Color.Gray,
-                Size = new Size((int)(50 * dpiScale), (int)(28 * dpiScale)),
-                Location = new Point((int)(322 * dpiScale), (int)(6 * dpiScale)),
-                TextAlign = ContentAlignment.MiddleLeft
-            };
-
-            _saveButton = new Button
-            {
-                Text = "保存",
-                Font = boldFont10,
-                ForeColor = Color.White,
-                BackColor = Color.FromArgb(156, 39, 176),
-                Size = new Size((int)(65 * dpiScale), (int)(28 * dpiScale)),
-                Location = new Point(windowWidth - (int)(70 * dpiScale) - (int)(75 * dpiScale) - (int)(15 * dpiScale), (int)(6 * dpiScale)),
-                FlatStyle = FlatStyle.Flat,
-                Cursor = Cursors.Hand,
-                TabStop = false
-            };
-            _saveButton.FlatAppearance.BorderSize = 0;
-            _saveButton.Click += SaveButton_Click;
-            _saveButton.MouseEnter += (sender, e) => _saveButton.BackColor = Color.FromArgb(136, 39, 156);
-            _saveButton.MouseLeave += (sender, e) => _saveButton.BackColor = Color.FromArgb(156, 39, 176);
-
-            _resetButton = new Button
-            {
-                Text = "重置",
-                Font = boldFont10,
-                ForeColor = Color.White,
-                BackColor = Color.FromArgb(156, 39, 176),
-                Size = new Size((int)(65 * dpiScale), (int)(28 * dpiScale)),
-                Location = new Point(windowWidth - (int)(70 * dpiScale) - (int)(75 * dpiScale) - (int)(85 * dpiScale) - (int)(15 * dpiScale), (int)(6 * dpiScale)),
-                FlatStyle = FlatStyle.Flat,
-                Cursor = Cursors.Hand,
-                TabStop = false
-            };
-            _resetButton.FlatAppearance.BorderSize = 0;
-            _resetButton.Click += ResetButton_Click;
-            _resetButton.MouseEnter += (sender, e) => _resetButton.BackColor = Color.FromArgb(136, 39, 156);
-            _resetButton.MouseLeave += (sender, e) => _resetButton.BackColor = Color.FromArgb(156, 39, 176);
-
-            _topPanel.Controls.Add(_searchTextBox);
-            _topPanel.Controls.Add(_searchButton);
-            _topPanel.Controls.Add(_searchUpButton);
-            _topPanel.Controls.Add(_searchDownButton);
-            _topPanel.Controls.Add(_searchCountLabel);
-            _topPanel.Controls.Add(_resetButton);
-            _topPanel.Controls.Add(_saveButton);
-
-            int leftPanelWidth = (int)(330 * dpiScale);
-            int rightPanelWidth = (int)(330 * dpiScale);
-            int panelHeight = windowHeight - (int)(50 * dpiScale) - buttonHeight - bottomMargin - (int)(5 * dpiScale);
-            int panelTop = (int)(45 * dpiScale);
-            
-            _leftPanel = new Panel
-            {
-                Size = new Size(leftPanelWidth, panelHeight),
-                Location = new Point((int)(10 * dpiScale), panelTop),
-                BorderStyle = BorderStyle.FixedSingle
-            };
-
-            _leftTitleLabel = new Label
-            {
-                Text = "选择部门或人员",
-                Font = boldFont9,
-                ForeColor = Color.Black,
-                Size = new Size(leftPanelWidth, (int)(25 * dpiScale)),
-                Location = new Point(0, 0),
-                TextAlign = ContentAlignment.MiddleLeft,
-                Padding = new Padding((int)(5 * dpiScale), 0, 0, 0)
-            };
-            _leftPanel.Controls.Add(_leftTitleLabel);
-
-            _authTreeView = new AuthTreeView
-            {
-                Size = new Size(leftPanelWidth - 4, panelHeight - (int)(30 * dpiScale)),
-                Location = new Point(2, (int)(25 * dpiScale)),
-                ShowLines = true,
-                ShowPlusMinus = true,
-                ShowRootLines = true,
-                Font = regularFont,
-                LineColor = Color.LightGray,
-                CheckBoxes = true
-            };
-            _authTreeView.AfterCheck += AuthTreeView_AfterCheck;
-            _authTreeView.BeforeCheck += AuthTreeView_BeforeCheck;
-            _leftPanel.Controls.Add(_authTreeView);
-
-            _rightPanel = new Panel
-            {
-                Size = new Size(rightPanelWidth, panelHeight),
-                Location = new Point((int)(10 * dpiScale) + leftPanelWidth + (int)(10 * dpiScale), panelTop),
-                BorderStyle = BorderStyle.FixedSingle
-            };
-
-            _deptTitleLabel = new Label
-            {
-                Text = "已选择的部门",
-                Font = boldFont9,
-                ForeColor = Color.Black,
-                Size = new Size(rightPanelWidth - (int)(50 * dpiScale), (int)(25 * dpiScale)),
-                Location = new Point(0, 0),
-                TextAlign = ContentAlignment.MiddleLeft,
-                Padding = new Padding((int)(5 * dpiScale), 0, 0, 0)
-            };
-
-            _deptCountLabel = new Label
-            {
-                Text = "",
-                Font = regularFont,
-                ForeColor = Color.Gray,
-                Size = new Size((int)(50 * dpiScale), (int)(25 * dpiScale)),
-                Location = new Point(rightPanelWidth - (int)(55 * dpiScale), 0),
-                TextAlign = ContentAlignment.MiddleRight,
-                Padding = new Padding(0, 0, (int)(5 * dpiScale), 0)
-            };
-
-            _selectedDeptListBox = new ListBox
-            {
-                Size = new Size(rightPanelWidth - (int)(25 * dpiScale), (int)(160 * dpiScale)),
-                Location = new Point(2, (int)(25 * dpiScale)),
-                Font = regularFont,
-                BorderStyle = BorderStyle.None,
-                DrawMode = DrawMode.OwnerDrawFixed,
-                ItemHeight = (int)(22 * dpiScale)
-            };
-            _selectedDeptListBox.DrawItem += SelectedDeptListBox_DrawItem;
-            _selectedDeptListBox.MouseClick += SelectedListBox_MouseClick;
-
-            _empTitleLabel = new Label
-            {
-                Text = "已选择的员工",
-                Font = boldFont9,
-                ForeColor = Color.Black,
-                Size = new Size(rightPanelWidth - (int)(50 * dpiScale), (int)(25 * dpiScale)),
-                Location = new Point(0, (int)(190 * dpiScale)),
-                TextAlign = ContentAlignment.MiddleLeft,
-                Padding = new Padding((int)(5 * dpiScale), 0, 0, 0)
-            };
-
-            _empCountLabel = new Label
-            {
-                Text = "",
-                Font = regularFont,
-                ForeColor = Color.Gray,
-                Size = new Size((int)(50 * dpiScale), (int)(25 * dpiScale)),
-                Location = new Point(rightPanelWidth - (int)(55 * dpiScale), (int)(190 * dpiScale)),
-                TextAlign = ContentAlignment.MiddleRight,
-                Padding = new Padding(0, 0, (int)(5 * dpiScale), 0)
-            };
-
-            int deptSectionHeight = (int)(190 * dpiScale);
-            int empListTop = (int)(215 * dpiScale);
-            
-            _selectedEmpListBox = new ListBox
-            {
-                Size = new Size(rightPanelWidth - (int)(25 * dpiScale), panelHeight - empListTop),
-                Location = new Point(2, empListTop),
-                Font = regularFont,
-                BorderStyle = BorderStyle.None,
-                DrawMode = DrawMode.OwnerDrawFixed,
-                ItemHeight = (int)(22 * dpiScale)
-            };
-            _selectedEmpListBox.DrawItem += SelectedEmpListBox_DrawItem;
-            _selectedEmpListBox.MouseClick += SelectedListBox_MouseClick;
-
-            _rightPanel.Controls.Add(_deptTitleLabel);
-            _rightPanel.Controls.Add(_deptCountLabel);
-            _rightPanel.Controls.Add(_selectedDeptListBox);
-            _rightPanel.Controls.Add(_empTitleLabel);
-            _rightPanel.Controls.Add(_empCountLabel);
-            _rightPanel.Controls.Add(_selectedEmpListBox);
-
-            
-
-            _loadingPanel = new Panel
-            {
-                Size = new Size(windowWidth, panelHeight + (int)(5 * dpiScale)),
-                Location = new Point(0, panelTop),
-                BackColor = Color.White
-            };
-
-            _loadingLabel = new Label
-            {
-                Text = "正在加载权限树...",
-                Font = new Font("微软雅黑", 10F * dpiScale),
-                ForeColor = Color.Gray,
-                Size = new Size(windowWidth, (int)(20 * dpiScale)),
-                Location = new Point(0, (panelHeight - (int)(20 * dpiScale)) / 2),
-                TextAlign = ContentAlignment.MiddleCenter
-            };
-            _loadingPanel.Controls.Add(_loadingLabel);
-
-            _errorLabel = new Label
-            {
-                Text = "",
-                Font = new Font("微软雅黑", 10F * dpiScale),
-                ForeColor = Color.Red,
-                Size = new Size(windowWidth, (int)(40 * dpiScale)),
-                Location = new Point(0, (panelHeight - (int)(40 * dpiScale)) / 2),
+                Text = "—",
+                Font = Theme.MonoSmall,
+                ForeColor = Theme.TextTertiary,
                 TextAlign = ContentAlignment.MiddleCenter,
-                Visible = false
+                BackColor = Color.Transparent,
+                AutoSize = false
             };
-            _loadingPanel.Controls.Add(_errorLabel);
 
-            this.Controls.Add(_topPanel);
-            this.Controls.Add(_loadingPanel);
+            _dirtyFlag = new BarFlag { Text = "有未保存的改动", Visible = false };
+            _okFlag = new BarFlag { Text = "权限已保存", Ok = true, Visible = false };
+            _okFlagTimer.Tick += (_, _) => { _okFlagTimer.Stop(); _okFlag.Visible = false; };
 
-            this.Controls.Add(_leftPanel);
-            this.Controls.Add(_rightPanel);
-            _leftPanel.Visible = false;
-            _rightPanel.Visible = false;
-            _saveButton.Visible = false;
-            _resetButton.Visible = false;
+            _resetBtn = new SmallButton("重置", SmallButtonStyle.Ghost) { Enabled = false };
+            _resetBtn.Click += (_, _) => ResetToSaved();
+
+            _saveBtn = new SmallButton("保存", SmallButtonStyle.Primary) { Enabled = false };
+            _saveBtn.Click += (_, _) => SaveAsync();
+
+            _treePane = new PermPane { HeadTitle = "选择部门或人员", HeadRule = "勾选部门 ＝ 整部门授权" };
+            _deptPane = new PermPane { HeadTitle = "已选择的部门", HeadRule = "只保留最上层授权" };
+            _userPane = new PermPane { HeadTitle = "已选择的员工", HeadRule = "不含部门已覆盖人员" };
+
+            _tree = new PermTreeView
+            {
+                GetRows = BuildRows,
+                GetState = StateOf,
+                GetLocked = Covered,
+                GetExpanded = n => _expanded.Contains(n.Key),
+                GetHighlight = MatchRange,
+                EmptyTitle = "未找到匹配的部门或人员",
+                EmptySub = "试试更换关键词，或清空搜索框查看全部组织。"
+            };
+            _tree.ToggleRequested = Toggle;
+            _tree.ExpandToggled = ToggleExpand;
+
+            _deptList = new PermSelList
+            {
+                DeptKind = true,
+                GetItems = () => _deptItems,
+                EmptyTitle = "尚未选择部门",
+                EmptySub = "勾选左侧部门，即授权该部门及其全部下级。"
+            };
+            _deptList.RemoveRequested = RemoveNode;
+
+            _userList = new PermSelList
+            {
+                DeptKind = false,
+                GetItems = () => _userItems,
+                EmptyTitle = "尚未选择员工",
+                EmptySub = "勾选左侧人员可单独授权；已含在部门授权内的人员不在此重复列出。"
+            };
+            _userList.RemoveRequested = RemoveNode;
+
+            _treePane.Controls.Add(_tree);
+            _deptPane.Controls.Add(_deptList);
+            _userPane.Controls.Add(_userList);
+
+            Controls.AddRange(new Control[]
+            {
+                _searchBox, _searchBtn, _prevBtn, _countLabel, _nextBtn,
+                _dirtyFlag, _okFlag, _resetBtn, _saveBtn,
+                _treePane, _deptPane, _userPane
+            });
+
+            ApplyLayout();
+            SyncDirty();
         }
 
-        private void AuthTreeView_BeforeCheck(object sender, TreeViewCancelEventArgs e)
+        protected override void OnPaint(PaintEventArgs e)
         {
-            var nodeDto = e.Node.Tag as LdapNodeDTO;
-            if (nodeDto != null)
+            base.OnPaint(e);
+            // 命令条底部分隔线（原型 .perm-bar{border-bottom:1px solid var(--divider)}）
+            int y = TitleBarHeight + Theme.S(52);
+            using var pen = new Pen(Theme.Divider, 1f);
+            e.Graphics.DrawLine(pen, 0, y, Width, y);
+        }
+
+        private void ApplyLayout()
+        {
+            int winW = Theme.S(800);
+            int barY = TitleBarHeight;
+            int cy = barY + Theme.S(10);
+            int ch = Theme.S(32);
+            int btnW = Theme.S(64);
+            int gap = Theme.S(8);
+
+            _searchBox.SetBounds(Theme.S(12), cy, Theme.S(240), ch);
+            _searchBtn.SetBounds(Theme.S(12) + Theme.S(240) + gap, cy, btnW, ch);
+            _prevBtn.SetBounds(Theme.S(12) + Theme.S(240) + gap + btnW + gap, cy, ch, ch);
+            _countLabel.SetBounds(_prevBtn.Right + Theme.S(4), cy, Theme.S(38), ch);
+            _nextBtn.SetBounds(_countLabel.Right + Theme.S(4), cy, ch, ch);
+
+            _saveBtn.SetBounds(winW - Theme.S(12) - btnW, cy, btnW, ch);
+            _resetBtn.SetBounds(_saveBtn.Left - gap - btnW, cy, btnW, ch);
+            int flagRight = _resetBtn.Left - gap;
+            _dirtyFlag.SetBounds(flagRight - Theme.S(130), cy, Theme.S(130), ch);
+            _okFlag.SetBounds(flagRight - Theme.S(130), cy, Theme.S(130), ch);
+
+            int top = barY + Theme.S(53) + Theme.S(12);
+            int paneW = Theme.S(383);
+            _treePane.SetBounds(Theme.S(12), top, paneW, Theme.S(440));
+            int rx = Theme.S(12) + paneW + Theme.S(10);
+            _deptPane.SetBounds(rx, top, paneW, Theme.S(181));
+            _userPane.SetBounds(rx, top + Theme.S(181) + Theme.S(10), paneW, Theme.S(249));
+
+            // 面板内容区（.pane-body{padding:4px 0}）
+            PositionBody(_treePane, _tree);
+            PositionBody(_deptPane, _deptList);
+            PositionBody(_userPane, _userList);
+
+            ClientSize = new Size(winW, top + Theme.S(440) + Theme.S(12));
+        }
+
+        private static void PositionBody(PermPane pane, Control body)
+        {
+            var r = pane.BodyRect;
+            body.SetBounds(r.X, r.Y + Theme.S(4), Math.Max(4, r.Width - 1), Math.Max(4, r.Height - Theme.S(8) - 1));
+        }
+
+        // =====================================================================
+        // 授权推导（与原型 JS 逻辑一致）
+        // =====================================================================
+
+        /// <summary>祖先部门一旦被授权，其下全部节点即被「覆盖」——整行置灰且不可单独操作。</summary>
+        private bool Covered(PermNodeModel n)
+        {
+            var p = n.Parent;
+            while (p != null)
             {
-                if (e.Node.Checked && nodeDto.type == 1 && nodeDto.dn != null && _autoCheckedEmpDns.Contains(nodeDto.dn))
-                {
-                    e.Cancel = true;
-                }
-                else if (e.Node.Checked && nodeDto.type == 0 && nodeDto.dn != null && _autoCheckedDeptDns.Contains(nodeDto.dn))
-                {
-                    e.Cancel = true;
-                }
+                if (p.IsDept && _deptOn.Contains(p.Key)) return true;
+                p = p.Parent;
+            }
+            return false;
+        }
+
+        /// <summary>显示态：被覆盖或显式授权 → on；部门自下而上推导（下级全选＝on，部分＝mixed）。</summary>
+        private string StateOf(PermNodeModel n)
+        {
+            if (Covered(n)) return "on";
+            if (!n.IsDept) return _userOn.Contains(n.Key) ? "on" : "off";
+            if (_deptOn.Contains(n.Key)) return "on";
+            if (!n.HasChildren) return "off";
+            var states = n.Children.Select(StateOf).ToList();
+            if (states.All(s => s == "on")) return "on";
+            return states.Any(s => s != "off") ? "mixed" : "off";
+        }
+
+        /// <summary>撤销该节点及其下全部授权（原型 permClearSubtree）。</summary>
+        private void ClearSubtree(PermNodeModel node)
+        {
+            if (node.IsDept) _deptOn.Remove(node.Key);
+            foreach (var c in node.Children)
+            {
+                if (c.IsDept) ClearSubtree(c);
+                else _userOn.Remove(c.Key);
             }
         }
 
-        private void AuthTreeView_AfterCheck(object sender, TreeViewEventArgs e)
+        private void Toggle(PermNodeModel node)
         {
-            if (_isUpdatingCheckState) return;
-
-            var node = e.Node.Tag as LdapNodeDTO;
-            if (node == null) return;
-
-            if (node.type == 0)
+            if (Covered(node)) return;   // 置灰行不可单独操作
+            if (node.IsDept)
             {
-                HandleDeptNodeCheck(e.Node, e.Node.Checked);
+                bool wasOn = StateOf(node) == "on";
+                ClearSubtree(node);      // 先清掉下级零散授权
+                if (!wasOn) _deptOn.Add(node.Key);   // 未勾选/半选 → 转为整部门授权
             }
             else
             {
-                HandleEmpNodeCheck(e.Node, e.Node.Checked);
+                if (!_userOn.Remove(node.Key)) _userOn.Add(node.Key);
             }
-            UpdateSelectedCount();
+            SyncDirty();
+            RenderAll();
         }
 
-        private void HandleDeptNodeCheck(TreeNode deptNode, bool isChecked)
+        private void ToggleExpand(PermNodeModel node)
         {
-            var deptDto = deptNode.Tag as LdapNodeDTO;
-            if (deptDto == null) return;
-
-            _isUpdatingCheckState = true;
-            try
-            {
-                if (isChecked)
-                {
-                    deptNode.Checked = true;
-                    
-                    string deptDn = deptDto.dn;
-                    if (!string.IsNullOrEmpty(deptDn))
-                    {
-                        // 勾选父部门：移除所有 dn 前缀命中该部门的子孙，由父部门统一代表
-                        _selectedEmps.RemoveAll(emp => emp.dn != null && emp.dn.StartsWith(deptDn));
-                        _selectedDepts.RemoveAll(d => d.dn != null && d.dn.StartsWith(deptDn) && d.dn != deptDn);
-                    }
-                    
-                    AutoCheckChildEmps(deptNode, true);
-                    
-                    if (!_selectedDepts.Exists(n => n.dn == deptDto.dn))
-                    {
-                        _selectedDepts.Add(deptDto);
-                    }
-                }
-                else
-                {
-                    deptNode.Checked = false;
-                    AutoUncheckChildEmps(deptNode);
-                    _selectedDepts.RemoveAll(n => n.dn == deptDto.dn);
-                }
-            }
-            finally
-            {
-                _isUpdatingCheckState = false;
-            }
-            UpdateSelectedListBoxes();
+            if (!_expanded.Remove(node.Key)) _expanded.Add(node.Key);
+            _tree.Invalidate();
         }
 
-        private void HandleEmpNodeCheck(TreeNode empNode, bool isChecked)
+        private void RemoveNode(PermNodeModel node)
         {
-            var empDto = empNode.Tag as LdapNodeDTO;
-            if (empDto == null) return;
+            if (node.IsDept) ClearSubtree(node);
+            else _userOn.Remove(node.Key);
+            SyncDirty();
+            RenderAll();
+        }
 
-            if (empDto.dn != null && _autoCheckedEmpDns.Contains(empDto.dn))
+        /// <summary>右侧清单＝授权的「最上层」：被上层已授权节点包含的下级不再单独列出。</summary>
+        private bool IsTop(PermNodeModel n)
+        {
+            var p = n.Parent;
+            while (p != null)
             {
-                if (!isChecked)
+                if (StateOf(p) == "on") return false;
+                p = p.Parent;
+            }
+            return true;
+        }
+
+        private string PathOf(PermNodeModel n)
+        {
+            var parts = new List<string>();
+            var p = n.Parent;
+            while (p != null) { parts.Insert(0, p.Name); p = p.Parent; }
+            return string.Join(" / ", parts);
+        }
+
+        // =====================================================================
+        // 搜索（与原型 permRows / permMatch / permRunSearch 一致）
+        // =====================================================================
+
+        private bool Match(PermNodeModel n) =>
+            _query.Length > 0 &&
+            ((n.Name != null && n.Name.IndexOf(_query, StringComparison.OrdinalIgnoreCase) >= 0) ||
+             (n.Account != null && n.Account.IndexOf(_query, StringComparison.OrdinalIgnoreCase) >= 0));
+
+        private bool HasMatchDesc(PermNodeModel n) => n.Children.Any(c => Match(c) || HasMatchDesc(c));
+
+        private (int start, int len)? MatchRange(PermNodeModel n)
+        {
+            if (_query.Length == 0 || n.Name == null) return null;
+            int i = n.Name.IndexOf(_query, StringComparison.OrdinalIgnoreCase);
+            return i < 0 ? null : (i, _query.Length);
+        }
+
+        private List<PermRow> BuildRows()
+        {
+            var rows = new List<PermRow>();
+
+            void PushSubtree(PermNodeModel n, int d)
+            {
+                rows.Add(new PermRow(n, d));
+                foreach (var c in n.Children) PushSubtree(c, d + 1);
+            }
+
+            void Walk(PermNodeModel n, int d)
+            {
+                if (_query.Length == 0)
                 {
-                    _autoCheckedEmpDns.Remove(empDto.dn);
-                    bool isMatched = _matchedNodes.Contains(empNode);
-                    empNode.ForeColor = isMatched ? Color.Red : Color.Black;
-                }
-                else
-                {
+                    rows.Add(new PermRow(n, d));
+                    if (_expanded.Contains(n.Key))
+                        foreach (var c in n.Children) Walk(c, d + 1);
                     return;
                 }
-            }
-
-            if (isChecked)
-            {
-                if (!_selectedEmps.Exists(n => n.dn == empDto.dn))
+                if (Match(n)) { PushSubtree(n, d); return; }
+                if (HasMatchDesc(n))
                 {
-                    _selectedEmps.Add(empDto);
+                    rows.Add(new PermRow(n, d));
+                    foreach (var c in n.Children) Walk(c, d + 1);
                 }
             }
-            else
-            {
-                _selectedEmps.RemoveAll(n => n.dn == empDto.dn);
-            }
-            UpdateSelectedListBoxes();
+
+            foreach (var r in _roots) Walk(r, 0);
+            return rows;
         }
 
-        private void AutoCheckChildEmps(TreeNode parentNode, bool check)
+        private void RunSearch()
         {
-            foreach (TreeNode childNode in parentNode.Nodes)
-            {
-                var childDto = childNode.Tag as LdapNodeDTO;
-                if (childDto != null)
-                {
-                    if (childDto.type == 1)
-                    {
-                        if (check)
-                        {
-                            childNode.Checked = true;
-                            
-                            if (childDto.dn != null && !_autoCheckedEmpDns.Contains(childDto.dn))
-                            {
-                                _autoCheckedEmpDns.Add(childDto.dn);
-                            }
-                            bool isMatched = _matchedNodes.Contains(childNode);
-                            childNode.ForeColor = isMatched ? Color.Red : Color.Gray;
-                            
-                            _selectedEmps.RemoveAll(n => n.dn == childDto.dn);
-                        }
-                    }
-                    else
-                    {
-                        if (check)
-                        {
-                            childNode.Checked = true;
-                            
-                            if (childDto.dn != null && !_autoCheckedDeptDns.Contains(childDto.dn))
-                            {
-                                _autoCheckedDeptDns.Add(childDto.dn);
-                            }
-                            bool isMatched = _matchedNodes.Contains(childNode);
-                            childNode.ForeColor = isMatched ? Color.Red : Color.Gray;
-                            
-                            _selectedDepts.RemoveAll(n => n.dn == childDto.dn);
-                            _selectedEmps.RemoveAll(emp => emp.dn != null && childDto.dn != null && emp.dn.StartsWith(childDto.dn));
-                        }
-                    }
-                }
-                AutoCheckChildEmps(childNode, check);
-            }
+            _query = (_searchBox.Inner.Text ?? "").Trim();
+            _matches = _order.Where(Match).Select(n => n.Key).ToList();
+            _cursor = _matches.Count > 0 ? 0 : -1;
+            UpdateNav();
+            _tree.SetCurrentKey(_cursor >= 0 ? _matches[_cursor] : null);
+            _tree.Invalidate();
         }
 
-        private void AutoUncheckChildEmps(TreeNode parentNode)
+        private void MoveCursor(int delta)
         {
-            foreach (TreeNode childNode in parentNode.Nodes)
-            {
-                var childDto = childNode.Tag as LdapNodeDTO;
-                if (childDto != null)
-                {
-                    if (childDto.type == 1)
-                    {
-                        if (childDto.dn != null && _autoCheckedEmpDns.Contains(childDto.dn))
-                        {
-                            _autoCheckedEmpDns.Remove(childDto.dn);
-                            bool isMatched = _matchedNodes.Contains(childNode);
-                            childNode.ForeColor = isMatched ? Color.Red : Color.Black;
-                            
-                            bool isManuallyChecked = _selectedEmps.Exists(n => n.dn == childDto.dn);
-                            
-                            if (!IsParentDeptChecked(childNode.Parent) && !isManuallyChecked)
-                            {
-                                childNode.Checked = false;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        if (childDto.dn != null && _autoCheckedDeptDns.Contains(childDto.dn))
-                        {
-                            _autoCheckedDeptDns.Remove(childDto.dn);
-                            bool isMatched = _matchedNodes.Contains(childNode);
-                            childNode.ForeColor = isMatched ? Color.Red : Color.Black;
-                            
-                            bool isManuallyChecked = _selectedDepts.Exists(n => n.dn == childDto.dn);
-                            
-                            if (!IsParentDeptChecked(childNode.Parent) && !isManuallyChecked)
-                            {
-                                childNode.Checked = false;
-                            }
-                        }
-                    }
-                }
-                AutoUncheckChildEmps(childNode);
-            }
+            if (_matches.Count == 0) return;
+            _cursor = (_cursor + delta + _matches.Count) % _matches.Count;
+            UpdateNav();
+            _tree.SetCurrentKey(_matches[_cursor]);
         }
 
-        private bool IsParentDeptChecked(TreeNode node)
+        private void UpdateNav()
         {
-            if (node == null) return false;
-            
-            var nodeDto = node.Tag as LdapNodeDTO;
-            if (nodeDto != null && nodeDto.type == 0 && node.Checked)
-            {
-                if (nodeDto.dn != null && _autoCheckedDeptDns.Contains(nodeDto.dn))
-                {
-                    return IsParentDeptChecked(node.Parent);
-                }
-                return true;
-            }
-            
-            return IsParentDeptChecked(node.Parent);
+            _countLabel.Text = _matches.Count > 0 ? $"{_cursor + 1}/{_matches.Count}" : "—";
+            bool has = _matches.Count > 0;
+            _prevBtn.Enabled = has;
+            _nextBtn.Enabled = has;
         }
 
-        private void UpdateParentCheckState(TreeNode parentNode)
+        // =====================================================================
+        // 渲染联动
+        // =====================================================================
+
+        private bool IsDirty()
         {
-            if (parentNode == null) return;
+            return !_deptOn.SetEquals(_savedDept) || !_userOn.SetEquals(_savedUser);
+        }
 
-            var parentDto = parentNode.Tag as LdapNodeDTO;
-            if (parentDto == null || parentDto.type == 1) return;
+        private void SyncDirty()
+        {
+            bool dirty = IsDirty();
+            _dirtyFlag.Visible = dirty;
+            _okFlag.Visible = false;                     // 与「权限已保存」互斥
+            _resetBtn.Enabled = dirty && _loaded;
+            _saveBtn.Enabled = dirty && _loaded && !_saving;
+            _saveBtn.Text = "保存";
+            _saveBtn.SetLoading(false);
+        }
 
-            int checkedCount = 0;
-            int totalCount = 0;
+        private void RenderAll()
+        {
+            // 右侧清单＝最上层授权（State=on 且无上层 on 祖先）
+            var shown = _order.Where(n => StateOf(n) == "on" && IsTop(n)).ToList();
+            var depts = shown.Where(n => n.IsDept).ToList();
+            var users = shown.Where(n => !n.IsDept).ToList();
 
-            foreach (TreeNode childNode in parentNode.Nodes)
-            {
-                var childDto = childNode.Tag as LdapNodeDTO;
-                if (childDto != null && childDto.type == 1)
-                {
-                    totalCount++;
-                    if (childNode.Checked)
-                    {
-                        checkedCount++;
-                    }
-                }
-            }
+            _deptItems = depts.Select(n => new SelItem(n, PathOf(n))).ToList();
+            _userItems = users.Select(n => new SelItem(n, PathOf(n))).ToList();
 
-            _isUpdatingCheckState = true;
+            _deptPane.HeadCount = $"({depts.Count})";
+            _userPane.HeadCount = $"({users.Count})";
+
+            _tree.Invalidate();
+            _deptPane.Invalidate();
+            _userPane.Invalidate();
+            _deptList.Invalidate();
+            _userList.Invalidate();
+        }
+
+        // =====================================================================
+        // 重置 / 保存（业务逻辑与原版一致）
+        // =====================================================================
+
+        private void ResetToSaved()
+        {
+            // 重置 = 回退到上次保存的状态
+            _deptOn.Clear();
+            foreach (var k in _savedDept) _deptOn.Add(k);
+            _userOn.Clear();
+            foreach (var k in _savedUser) _userOn.Add(k);
+            SyncDirty();
+            RenderAll();
+            Logger.Info("已重置为上次保存的授权状态");
+        }
+
+        private async void SaveAsync()
+        {
+            if (_saving) return;
+            _saving = true;
+            _saveBtn.Enabled = false;
+            _resetBtn.Enabled = false;
+            _saveBtn.Text = "保存中";
+            _saveBtn.SetLoading(true);
+
+            bool ok = false;
             try
             {
-                if (checkedCount == 0)
-                {
-                    parentNode.Checked = false;
-                    _selectedDepts.RemoveAll(n => n.dn == parentDto.dn);
-                }
-                else if (checkedCount == totalCount)
-                {
-                    parentNode.Checked = true;
-                    if (!_selectedDepts.Exists(n => n.dn == parentDto.dn))
-                    {
-                        _selectedDepts.Add(parentDto);
-                    }
-                }
-                else
-                {
-                    parentNode.Checked = false;
-                }
-            }
-            finally
-            {
-                _isUpdatingCheckState = false;
-            }
-
-            UpdateParentCheckState(parentNode.Parent);
-        }
-
-        private void UpdateSelectedListBoxes()
-        {
-            _selectedDeptListBox.Items.Clear();
-            foreach (var dept in _selectedDepts)
-            {
-                string displayText = $"[{dept.name}]";
-                _selectedDeptListBox.Items.Add(new { Id = dept.id, DisplayText = displayText, Node = dept, IsDept = true });
-            }
-
-            _selectedEmpListBox.Items.Clear();
-            foreach (var emp in _selectedEmps)
-            {
-                string displayText = emp.name;
-                _selectedEmpListBox.Items.Add(new { Id = emp.id, DisplayText = displayText, Node = emp, IsDept = false });
-            }
-            UpdateSelectedCount();
-        }
-
-        private void UpdateSelectedCount()
-        {
-            _deptCountLabel.Text = $"({_selectedDepts.Count})";
-            _empCountLabel.Text = $"({_selectedEmps.Count})";
-        }
-
-        private void SelectedDeptListBox_DrawItem(object sender, DrawItemEventArgs e)
-        {
-            if (e.Index < 0) return;
-
-            var item = _selectedDeptListBox.Items[e.Index] as dynamic;
-            string displayText = item.DisplayText;
-
-            e.DrawBackground();
-
-            int paddingLeft = 5;
-            int paddingTop = 2;
-            int xOffset = 18;
-
-            using (Brush textBrush = new SolidBrush(Color.Black))
-            {
-                e.Graphics.DrawString(displayText, e.Font, textBrush, e.Bounds.X + paddingLeft, e.Bounds.Y + paddingTop);
-            }
-
-            using (Brush xBrush = new SolidBrush(Color.Gray))
-            {
-                Font xFont = new Font("微软雅黑", 10F, FontStyle.Bold);
-                e.Graphics.DrawString("×", xFont, xBrush, e.Bounds.Right - xOffset, e.Bounds.Y + paddingTop);
-            }
-
-            e.DrawFocusRectangle();
-        }
-
-        private void SelectedEmpListBox_DrawItem(object sender, DrawItemEventArgs e)
-        {
-            if (e.Index < 0) return;
-
-            var item = _selectedEmpListBox.Items[e.Index] as dynamic;
-            string displayText = item.DisplayText;
-
-            e.DrawBackground();
-
-            int paddingLeft = 5;
-            int paddingTop = 2;
-            int xOffset = 18;
-
-            using (Brush textBrush = new SolidBrush(Color.Black))
-            {
-                e.Graphics.DrawString(displayText, e.Font, textBrush, e.Bounds.X + paddingLeft, e.Bounds.Y + paddingTop);
-            }
-
-            using (Brush xBrush = new SolidBrush(Color.Gray))
-            {
-                Font xFont = new Font("微软雅黑", 10F, FontStyle.Bold);
-                e.Graphics.DrawString("×", xFont, xBrush, e.Bounds.Right - xOffset, e.Bounds.Y + paddingTop);
-            }
-
-            e.DrawFocusRectangle();
-        }
-
-        private void SelectedListBox_MouseClick(object sender, MouseEventArgs e)
-        {
-            ListBox listBox = sender as ListBox;
-            if (listBox == null) return;
-
-            int index = listBox.IndexFromPoint(e.Location);
-            if (index < 0) return;
-
-            var item = listBox.Items[index] as dynamic;
-            if (item == null) return;
-
-            int itemWidth = listBox.GetItemRectangle(index).Width;
-            int deleteButtonWidth = 20;
-            if (e.X > itemWidth - deleteButtonWidth)
-            {
-                LdapNodeDTO node = item.Node;
-                bool isDept = item.IsDept;
-
-                if (isDept)
-                {
-                    TreeNode treeNode = FindTreeNodeById(_authTreeView.Nodes, node.id);
-                    if (treeNode != null)
-                    {
-                        HandleDeptNodeCheck(treeNode, false);
-                    }
-                }
-                else
-                {
-                    TreeNode treeNode = FindTreeNodeById(_authTreeView.Nodes, node.id);
-                    if (treeNode != null)
-                    {
-                        _isUpdatingCheckState = true;
-                        try
-                        {
-                            treeNode.Checked = false;
-                        }
-                        finally
-                        {
-                            _isUpdatingCheckState = false;
-                        }
-                        HandleEmpNodeCheck(treeNode, false);
-                    }
-                }
-            }
-        }
-
-        private TreeNode FindTreeNodeById(TreeNodeCollection nodes, long id)
-        {
-            foreach (TreeNode node in nodes)
-            {
-                var nodeDto = node.Tag as LdapNodeDTO;
-                if (nodeDto != null && nodeDto.id == id)
-                {
-                    return node;
-                }
-                TreeNode found = FindTreeNodeById(node.Nodes, id);
-                if (found != null)
-                {
-                    return found;
-                }
-            }
-            return null;
-        }
-
-        private void ResetButton_Click(object sender, EventArgs e)
-        {
-            try
-            {
-                _autoCheckedEmpDns.Clear();
-                _autoCheckedDeptDns.Clear();
-
-                _isUpdatingCheckState = true;
-                foreach (TreeNode node in _authTreeView.Nodes)
-                {
-                    UncheckAllNodes(node);
-                }
-                _isUpdatingCheckState = false;
-
-                _selectedDepts.Clear();
-                _selectedEmps.Clear();
-
-                UpdateSelectedListBoxes();
-
-                Logger.Info("已重置所有选择的部门和员工");
-                ShowNotification("已重置所有选择项");
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"重置操作失败: {ex.Message}");
-                ShowNotification("重置失败");
-            }
-        }
-
-        private void UncheckAllNodes(TreeNode parentNode)
-        {
-            parentNode.Checked = false;
-            parentNode.ForeColor = Color.Black;
-
-            foreach (TreeNode childNode in parentNode.Nodes)
-            {
-                UncheckAllNodes(childNode);
-            }
-        }
-
-        private async void SaveButton_Click(object sender, EventArgs e)
-        {
-            try
-            {
-                _saveButton.Enabled = false;
-
-                var userIdList = _selectedEmps.Select(emp => emp.id).ToList();
-                var deptIdList = _selectedDepts.Select(dept => dept.id).ToList();
+                var userIdList = _userOn.Select(k => long.Parse(k.Substring(2))).ToList();
+                var deptIdList = _deptOn.Select(k => long.Parse(k.Substring(2))).ToList();
 
                 Logger.Info($"准备保存权限，部门数: {deptIdList.Count}，员工数: {userIdList.Count}");
 
@@ -857,38 +492,56 @@ namespace PasswordManager.UI
 
                 if (response != null && response.status == 200)
                 {
+                    ok = true;
+                    // 保存成功 → 快照回写（原型 permSaveBtn：先 syncDirty 再亮「权限已保存」2.4s）
+                    _savedDept = new HashSet<string>(_deptOn);
+                    _savedUser = new HashSet<string>(_userOn);
+                    SyncDirty();
+                    _okFlag.Visible = true;
+                    _okFlagTimer.Stop();
+                    _okFlagTimer.Start();
                     Logger.Info("权限更新成功");
-                    ShowNotification("权限保存成功");
                 }
                 else
                 {
                     Logger.Warning($"权限更新失败: {response?.message ?? "未知错误"}");
-                    ShowNotification($"保存失败: {response?.message ?? "未知错误"}");
+                    MessageBox.Show($"保存失败: {response?.message ?? "未知错误"}", "提示",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
             }
             catch (Exception ex)
             {
                 Logger.Error($"保存权限时出错: {ex.Message}");
-                ShowNotification($"保存失败: {ex.Message}");
+                MessageBox.Show($"保存失败: {ex.Message}", "提示",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             finally
             {
-                _saveButton.Enabled = true;
+                _saving = false;
+                if (ok)
+                {
+                    _saveBtn.Text = "保存";
+                    _saveBtn.SetLoading(false);
+                }
+                else
+                {
+                    SyncDirty();   // 失败：按当前 dirty 状态恢复按钮可用性
+                }
             }
         }
 
-        private void ShowNotification(string message)
-        {
-            MessageBox.Show(message, "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }
+        // =====================================================================
+        // 数据加载（业务逻辑与原版一致）
+        // =====================================================================
 
         private async void LoadAuthTreeAsync()
         {
             try
             {
-                _errorLabel.Visible = false;
-                _loadingLabel.Text = "正在加载权限树...";
-                _loadingLabel.Visible = true;
+                _tree.ShowStatus = true;
+                _tree.StatusIsError = false;
+                _tree.StatusText = "正在加载权限树...";
+                _tree.Invalidate();
 
                 Logger.Info($"开始加载文档权限树，docId: {_docId}");
                 var response = await _httpRequestService.GetAsync<LdapNodeDTO[]>(
@@ -900,269 +553,105 @@ namespace PasswordManager.UI
                 if (response != null && response.data != null)
                 {
                     Logger.Info("权限树数据加载成功");
-                    PopulateTreeView(response.data);
-                    _loadingPanel.Visible = false;
-                    _leftPanel.Visible = true;
-                    _rightPanel.Visible = true;
-                    _saveButton.Visible = true;
-                    _resetButton.Visible = true;
+                    BuildModel(response.data);
+                    _loaded = true;
+                    _tree.ShowStatus = false;   // 关闭加载提示，开始渲染组织树
+                    _searchBox.Inner.Enabled = true;
+                    _searchBtn.Enabled = true;
+                    SyncDirty();
+                    RenderAll();
                 }
                 else
                 {
-                    ShowError("未获取到权限树数据");
+                    ShowLoadError("未获取到权限树数据");
                 }
             }
             catch (Exception ex)
             {
                 Logger.Error($"加载权限树时出错: {ex.Message}");
-                ShowError($"加载失败: {ex.Message}");
+                ShowLoadError($"加载失败: {ex.Message}");
             }
         }
 
-        private void ShowError(string message)
+        private void ShowLoadError(string message)
         {
-            _loadingLabel.Visible = false;
-            _errorLabel.Text = message;
-            _errorLabel.Visible = true;
+            _tree.ShowStatus = true;
+            _tree.StatusIsError = true;
+            _tree.StatusText = message;
+            _tree.Invalidate();
         }
 
-        private void PopulateTreeView(LdapNodeDTO[] nodes)
+        private void BuildModel(LdapNodeDTO[] nodes)
         {
-            _authTreeView.Nodes.Clear();
-            _selectedDepts.Clear();
-            _selectedEmps.Clear();
-            _autoCheckedEmpDns.Clear();
-            _autoCheckedDeptDns.Clear();
+            _roots.Clear();
+            _byId.Clear();
+            _order.Clear();
+            _deptOn.Clear();
+            _userOn.Clear();
+            _expanded.Clear();
+            _matches = new List<string>();
+            _cursor = -1;
+            _query = "";
 
-            foreach (var node in nodes)
+            PermNodeModel? Build(LdapNodeDTO dto, PermNodeModel? parent, int depth)
             {
-                var treeNode = CreateTreeNode(node);
-                _authTreeView.Nodes.Add(treeNode);
-            }
-
-            UpdateSelectedListBoxes();
-        }
-
-        private TreeNode CreateTreeNode(LdapNodeDTO node)
-        {
-            string nodeText = node.type == 0
-                ? $"[{node.name}]"
-                : node.name;
-
-            var treeNode = new TreeNode(nodeText)
-            {
-                Tag = node,
-                Checked = node.hasAuth
-            };
-
-            if (node.deptList != null && node.deptList.Length > 0)
-            {
-                foreach (var dept in node.deptList)
+                var m = new PermNodeModel
                 {
-                    treeNode.Nodes.Add(CreateTreeNode(dept));
-                }
-            }
-
-            if (node.employList != null && node.employList.Length > 0)
-            {
-                foreach (var employ in node.employList)
-                {
-                    var empNode = CreateTreeNode(employ);
-                    treeNode.Nodes.Add(empNode);
-                }
-            }
-
-            if (node.hasAuth)
-            {
-                if (node.type == 0)
-                {
-                    _selectedDepts.Add(node);
-                    AutoCheckChildEmps(treeNode, true);
-                }
-                else
-                {
-                    _selectedEmps.Add(node);
-                }
-            }
-
-            return treeNode;
-        }
-
-        private void SearchButton_Click(object sender, EventArgs e)
-        {
-            PerformSearch();
-        }
-
-        private void SearchTextBox_KeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.KeyCode == Keys.Enter)
-            {
-                PerformSearch();
-            }
-        }
-
-        private void PerformSearch()
-        {
-            string searchText = _searchTextBox.Text.Trim();
-            
-            if (string.IsNullOrEmpty(searchText))
-            {
-                ResetSearchHighlight();
-                return;
-            }
-
-            _matchedNodes.Clear();
-            _currentMatchIndex = -1;
-
-            bool firstMatchFound = false;
-            HighlightMatchingNodes(_authTreeView.Nodes, searchText, false, ref firstMatchFound);
-
-            UpdateSearchNavigation();
-        }
-
-        private void HighlightMatchingNodes(TreeNodeCollection nodes, string searchText, bool parentMatched)
-        {
-            bool firstMatchFound = false;
-            HighlightMatchingNodes(nodes, searchText, parentMatched, ref firstMatchFound);
-        }
-
-        private void HighlightMatchingNodes(TreeNodeCollection nodes, string searchText, bool parentMatched, ref bool firstMatchFound)
-        {
-            foreach (TreeNode node in nodes)
-            {
-                var nodeDto = node.Tag as LdapNodeDTO;
-                bool isMatch = false;
-
-                if (nodeDto != null)
-                {
-                    if (!string.IsNullOrEmpty(nodeDto.name) && 
-                        nodeDto.name.IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0)
+                    Id = dto.id,
+                    IsDept = dto.type == 0,
+                    Name = dto.name ?? "",
+                    Account = dto.account ?? "",
+                    Dn = dto.dn ?? "",
+                    HasAuth = dto.hasAuth,
+                    Parent = parent,
+                    Depth = depth
+                };
+                if (dto.deptList != null)
+                    foreach (var c in dto.deptList)
                     {
-                        isMatch = true;
+                        var cm = Build(c, m, depth + 1);
+                        if (cm != null) m.Children.Add(cm);
                     }
-                    else if (!string.IsNullOrEmpty(nodeDto.account) && 
-                             nodeDto.account.IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0)
+                if (dto.employList != null)
+                    foreach (var c in dto.employList)
                     {
-                        isMatch = true;
+                        var cm = Build(c, m, depth + 1);
+                        if (cm != null) m.Children.Add(cm);
                     }
-                }
 
-                bool shouldShow = isMatch || parentMatched;
-                
-                if (shouldShow)
+                _byId[m.Key] = m;
+                _order.Add(m);
+                if (m.HasAuth)
                 {
-                    if (isMatch)
-                    {
-                        node.ForeColor = Color.Red;
-                        _matchedNodes.Add(node);
-                    }
-                    else
-                    {
-                        bool isAutoChecked = nodeDto?.dn != null && (_autoCheckedEmpDns.Contains(nodeDto.dn) || _autoCheckedDeptDns.Contains(nodeDto.dn));
-                        node.ForeColor = isAutoChecked ? Color.Gray : Color.Black;
-                    }
-                    
-                    node.EnsureVisible();
-                    if (isMatch && !firstMatchFound)
-                    {
-                        firstMatchFound = true;
-                    }
+                    // 服务端既有授权 = 已保存状态（重置 / dirty 判定的基准）
+                    if (m.IsDept) _deptOn.Add(m.Key);
+                    else _userOn.Add(m.Key);
                 }
-                else
-                {
-                    bool isAutoChecked = nodeDto?.dn != null && (_autoCheckedEmpDns.Contains(nodeDto.dn) || _autoCheckedDeptDns.Contains(nodeDto.dn));
-                    
-                    node.ForeColor = isAutoChecked ? Color.Gray : Color.Black;
-                }
-
-                HighlightMatchingNodes(node.Nodes, searchText, shouldShow, ref firstMatchFound);
+                return m;
             }
-        }
 
-        private void ResetSearchHighlight()
-        {
-            ResetHighlight(_authTreeView.Nodes);
-            _matchedNodes.Clear();
-            _currentMatchIndex = -1;
-            UpdateSearchNavigation();
-        }
-
-        private void ResetHighlight(TreeNodeCollection nodes)
-        {
-            foreach (TreeNode node in nodes)
+            foreach (var n in nodes)
             {
-                var hlDto = (LdapNodeDTO)node.Tag;
-                node.ForeColor = hlDto.dn != null && (_autoCheckedEmpDns.Contains(hlDto.dn) || _autoCheckedDeptDns.Contains(hlDto.dn)) ? Color.Gray : Color.Black;
-                ResetHighlight(node.Nodes);
+                var m = Build(n, null, 0);
+                if (m != null) _roots.Add(m);
             }
-        }
 
-        private void UpdateSearchNavigation()
-        {
-            if (_matchedNodes.Count == 0)
+            // 默认展开根级 + 既有授权节点的全部祖先（便于直接看到已授权内容）
+            foreach (var r in _roots) _expanded.Add(r.Key);
+            foreach (var n in _order.Where(n => n.HasAuth))
             {
-                _searchCountLabel.Text = "";
-                _searchUpButton.Enabled = false;
-                _searchDownButton.Enabled = false;
-                _searchUpButton.Visible = false;
-                _searchDownButton.Visible = false;
-                _searchCountLabel.Visible = false;
+                var p = n.Parent;
+                while (p != null) { _expanded.Add(p.Key); p = p.Parent; }
             }
-            else
-            {
-                if (_currentMatchIndex < 0)
-                {
-                    _currentMatchIndex = 0;
-                    NavigateToMatch();
-                }
-                _searchCountLabel.Text = $"{_currentMatchIndex + 1}/{_matchedNodes.Count}";
-                _searchUpButton.Enabled = _matchedNodes.Count > 1;
-                _searchDownButton.Enabled = _matchedNodes.Count > 1;
-                _searchUpButton.Visible = true;
-                _searchDownButton.Visible = true;
-                _searchCountLabel.Visible = true;
-            }
-        }
 
-        private void SearchUpButton_Click(object sender, EventArgs e)
-        {
-            if (_matchedNodes.Count == 0) return;
-            
-            _currentMatchIndex--;
-            if (_currentMatchIndex < 0)
-            {
-                _currentMatchIndex = _matchedNodes.Count - 1;
-            }
-            
-            NavigateToMatch();
-        }
-
-        private void SearchDownButton_Click(object sender, EventArgs e)
-        {
-            if (_matchedNodes.Count == 0) return;
-            
-            _currentMatchIndex++;
-            if (_currentMatchIndex >= _matchedNodes.Count)
-            {
-                _currentMatchIndex = 0;
-            }
-            
-            NavigateToMatch();
-        }
-
-        private void NavigateToMatch()
-        {
-            if (_matchedNodes.Count > 0 && _currentMatchIndex >= 0 && _currentMatchIndex < _matchedNodes.Count)
-            {
-                TreeNode node = _matchedNodes[_currentMatchIndex];
-                node.TreeView.TopNode = node;
-                node.TreeView.SelectedNode = node;
-                node.EnsureVisible();
-                _searchCountLabel.Text = $"{_currentMatchIndex + 1}/{_matchedNodes.Count}";
-            }
+            _savedDept = new HashSet<string>(_deptOn);
+            _savedUser = new HashSet<string>(_userOn);
         }
     }
 
+    /// <summary>
+    /// LDAP 节点数据结构（接口 /doc/auth/tree 返回）。
+    /// </summary>
     public class LdapNodeDTO
     {
         /// <summary>

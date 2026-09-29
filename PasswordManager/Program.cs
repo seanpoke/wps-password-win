@@ -14,6 +14,7 @@ using PasswordManager.Monitor;
 using PasswordManager.Business;
 using PasswordManager.UI;
 using PasswordManager.Utils;
+using PasswordManager.Services;
 using PasswordManager.Services.Request;
 using PasswordManager.Services.Routing;
 using PasswordManager.Services.Report;
@@ -78,6 +79,50 @@ namespace PasswordManager
             }
 
             MainAsync().GetAwaiter().GetResult();
+        }
+
+        /// <summary>UI 线程上的隐藏控件，用于把跨线程调用（如弹窗）封送到 UI 线程。</summary>
+        private static System.Windows.Forms.Control _uiMarshalControl;
+
+        /// <summary>登录窗引用，用于在更新弹窗关闭后关闭登录窗、切换到主界面。</summary>
+        private static System.Windows.Forms.Form _loginForm;
+
+        /// <summary>在 UI 线程显示版本更新弹窗；FORCE 时关闭后退出程序。
+        /// 弹窗置顶（TopMost）并禁用其它窗口，必须先处理弹窗才能进行其它操作。
+        /// 使用无模态 Show（而非 ShowDialog），避免模态 DialogResult 语义把
+        /// DialogResult 设为 Cancel 导致弹窗被自动关闭。</summary>
+        private static void ShowUpdateDialog(VersionCheckInfo info)
+        {
+            Logger.Info($"显示更新弹窗（updateType={info.updateType}）");
+            var dlg = new UpdateDialog(info, info.updateType == "FORCE");
+
+            // 禁用当前所有已打开窗口：必须先处理更新弹窗（关闭或退出）才能操作其它界面
+            int count = System.Windows.Forms.Application.OpenForms.Count;
+            var others = new System.Windows.Forms.Form[count];
+            for (int i = 0; i < count; i++) others[i] = System.Windows.Forms.Application.OpenForms[i];
+            foreach (var f in others) f.Enabled = false;
+
+            dlg.FormClosing += (s, e) =>
+            {
+                // 排除 Application.Exit 引发的重入关闭
+                if (info.updateType == "FORCE" && e.CloseReason != System.Windows.Forms.CloseReason.ApplicationExitCall)
+                {
+                    Logger.Info("强制更新：关闭更新弹窗，退出程序");
+                    Application.Exit();
+                }
+            };
+            dlg.FormClosed += (s, e) =>
+            {
+                // 非强制更新：关闭弹窗即“暂不更新”，恢复其它窗口可用
+                foreach (var f in others) if (!f.IsDisposed) f.Enabled = true;
+            };
+            dlg.Show();
+
+            // 非强制更新：弹窗展示后关闭登录窗，切换到主界面
+            if (info.updateType != "FORCE" && _loginForm != null && !_loginForm.IsDisposed)
+            {
+                _loginForm.Invoke((Action)(() => _loginForm.Close()));
+            }
         }
 
         private static bool IsRunningAsAdmin()
@@ -145,6 +190,10 @@ namespace PasswordManager
 
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
+
+                // 在 UI 线程创建一个隐藏控件，作为后续跨线程封送（弹窗等）的目标
+                _uiMarshalControl = new System.Windows.Forms.Control();
+                _uiMarshalControl.CreateControl();
 
                 Logger.Info("密码管理插件启动");
 
@@ -218,6 +267,18 @@ namespace PasswordManager
                 {
                     Logger.Info("接收到登录成功事件，更新托盘菜单");
                     trayIcon.UpdateMenuItems();
+
+                    // 登录成功后补做一次版本检查（首启未配服务器时也能覆盖）
+                    Task.Run(async () =>
+                    {
+                        try
+                        {
+                            var info = await VersionCheckService.CheckAsync();
+                            if (info == null || info.updateType == "NONE") return;
+                            _uiMarshalControl.Invoke((Action)(() => ShowUpdateDialog(info)));
+                        }
+                        catch (Exception ex) { Logger.Error($"版本检查异常: {ex.Message}"); }
+                    });
                 };
 
                 PasswordManager.UI.LoginForm.LogoutSuccess += (sender, e) =>
@@ -228,6 +289,7 @@ namespace PasswordManager
 
                 // 创建登录窗口
                 PasswordManager.UI.LoginForm loginForm = new PasswordManager.UI.LoginForm();
+                _loginForm = loginForm;
                 
                 if (PasswordManager.UI.LoginForm.IsLoggedIn())
                 {
@@ -488,6 +550,23 @@ namespace PasswordManager
                     catch (Exception ex)
                     {
                         Logger.Error($"调用 /config/latest-key 接口失败: {ex.Message}，使用默认值");
+                    }
+                });
+
+                // 客户端版本检查（免 token，依赖已配置服务器）：NONE / OPTIONAL / FORCE
+                Logger.Info("调用 /config/version/check 检查客户端版本");
+                Task.Run(async () =>
+                {
+                    try
+                    {
+                        var info = await VersionCheckService.CheckAsync();
+                        if (info == null || info.updateType == "NONE") return;
+
+                        _uiMarshalControl.Invoke((Action)(() => ShowUpdateDialog(info)));
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"版本检查异常: {ex.Message}");
                     }
                 });
 
