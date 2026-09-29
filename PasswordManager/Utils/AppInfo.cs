@@ -8,7 +8,7 @@ namespace PasswordManager.Utils
     /// </summary>
     public static class AppInfo
     {
-        public const string Version = "0.0.1";   // 语义化 x.y.z，与文档 current 对应（临时测试 FORCE 弹窗，验证后改回 1.0.0）
+        public const string Version = "1.0.0";   // 语义化 x.y.z，与文档 current 对应
         public const string Platform = "win";
     }
 }

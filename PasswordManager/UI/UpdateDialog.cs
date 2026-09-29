@@ -28,7 +28,7 @@ namespace PasswordManager.UI
             TopMost = true;   // 始终置顶，不可被其它应用覆盖
 
             int w = Theme.S(420);
-            int h = Theme.S(260);
+            int h = _force ? Theme.S(260) : Theme.S(330);   // 非强制：底部留出「忽略」按钮
             ClientSize = new Size(w, h);
 
             int pad = ContentPadding;
@@ -78,8 +78,20 @@ namespace PasswordManager.UI
             };
             Controls.Add(logLabel);
 
-            // 无按钮：FORCE 关闭窗口即视为放弃更新 → 由调用方在 FormClosing 中退出程序；
-            // OPTIONAL 关闭窗口即“暂不更新”。
+            if (!_force)
+            {
+                // 非强制更新：提供「忽略」，点击后关闭当前窗口（不退出程序）
+                var ignoreBtn = new ThemedButton("忽略", ThemedButtonStyle.Secondary)
+                {
+                    Size = new Size(Theme.S(96), ThemedButton.ButtonHeight),
+                    Cursor = Cursors.Hand
+                };
+                ignoreBtn.Click += (_, _) => Close();
+                Controls.Add(ignoreBtn);
+                ignoreBtn.Location = new Point(w - pad - ignoreBtn.Width, h - pad - ignoreBtn.Height);
+            }
+
+            // FORCE：无任何按钮，关闭窗口（×）即视为放弃更新 → 由调用方在 FormClosing 中退出程序。
         }
     }
 }
