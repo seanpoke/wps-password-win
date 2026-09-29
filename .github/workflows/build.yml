@@ -52,7 +52,9 @@ jobs:
 
     - name: Create archive with version and timestamp
       run: |
-        $version = "1.0.0"
+        # 版本号取自 csproj（单一来源，改 csproj 的 <Version> 即可）
+        [xml]$csproj = Get-Content "PasswordManager/PasswordManager.csproj" -Encoding UTF8
+        $version = $csproj.Project.PropertyGroup.Version
         $timestamp = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId((Get-Date), "China Standard Time") | Get-Date -Format "yyyyMMddHHmm"
         $archiveName = "文档密码管理_${version}_${timestamp}"
         $publishDir = "PasswordManager/bin/Release/net6.0-windows/win-x64/publish"
