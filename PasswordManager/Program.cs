@@ -87,12 +87,21 @@ namespace PasswordManager
         /// <summary>登录窗引用，用于在更新弹窗关闭后关闭登录窗、切换到主界面。</summary>
         private static System.Windows.Forms.Form _loginForm;
 
+        /// <summary>本次运行中是否已展示过更新弹窗（启动与登录成功两处触发共用，防止重复弹窗）。</summary>
+        private static bool _updateDialogShown;
+
         /// <summary>在 UI 线程显示版本更新弹窗；FORCE 时关闭后退出程序。
         /// 弹窗置顶（TopMost）并禁用其它窗口，必须先处理弹窗才能进行其它操作。
         /// 使用无模态 Show（而非 ShowDialog），避免模态 DialogResult 语义把
         /// DialogResult 设为 Cancel 导致弹窗被自动关闭。</summary>
         private static void ShowUpdateDialog(VersionCheckInfo info)
         {
+            if (_updateDialogShown)
+            {
+                Logger.Info("更新弹窗本次运行已展示过，跳过重复提示");
+                return;
+            }
+            _updateDialogShown = true;
             Logger.Info($"显示更新弹窗（updateType={info.updateType}）");
             var dlg = new UpdateDialog(info, info.updateType == "FORCE");
 
