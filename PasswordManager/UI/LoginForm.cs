@@ -398,7 +398,9 @@ namespace PasswordManager.UI
         private void HeaderTitle_DoubleClick(object? sender, EventArgs e)
         {
             DeveloperMode = !DeveloperMode;
-            Logger.Info($"开发者模式已{(DeveloperMode ? "开启" : "关闭")}");
+            // 开发者模式：开启后输出 DEBUG 日志，关闭恢复 Info
+            Logger.SetMinLevel(DeveloperMode ? LogLevel.Debug : LogLevel.Info);
+            Logger.Info($"开发者模式已{(DeveloperMode ? "开启" : "关闭")}（日志级别：{Logger.CurrentLevel}）");
             _headerSub.Text = DeveloperMode ? "请使用域账号登录（开发者模式）" : "请使用域账号登录";
         }
 
