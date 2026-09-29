@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>密码管理 · 界面原型（登录 / 账户 / 修改密码 / 重置密码 / 右键菜单 / 日志 / 元数据）</title>
+<title>密码管理 · 界面原型（登录 / 账户 / 修改密码 / 重置密码 / 右键菜单 / 日志 / 元数据 / 文档权限）</title>
 <style>
   :root{
     --canvas:#F3F3F3;
@@ -302,6 +302,126 @@
   .textbox.read input{cursor:default;color:var(--text-primary);}
   .textbox.read.drop{outline:2px dashed var(--accent);outline-offset:-2px;}
 
+  /* ===== Document permission screen (文档权限) ===== */
+  .content.dense{padding:12px;}
+  /* Command bar: 搜索 + 定位 + 动作，与日志工具条同族（32px 控件高度） */
+  .perm-bar{display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--canvas);border-bottom:1px solid var(--divider);flex-wrap:wrap;}
+  .perm-bar .searchbox{flex:1 1 190px;max-width:300px;height:32px;}
+  .perm-bar-right{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .btn-sm{
+    height:32px;min-width:64px;font-family:var(--font-yahei);font-size:13px;line-height:18px;padding:0 14px;border-radius:4px;
+    display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;cursor:pointer;
+  }
+  .btn-sm.primary{background:var(--accent);border:1px solid var(--accent);color:#fff;}
+  .btn-sm.primary:hover:not(:disabled){background:var(--accent-hover);border-color:var(--accent-hover);}
+  .btn-sm.primary:active:not(:disabled){background:var(--accent-pressed);}
+  .btn-sm.primary:disabled{background:var(--accent-disabled);border-color:var(--accent-disabled);cursor:default;}
+  .btn-sm.ghost{background:var(--field-rest);border:1px solid var(--stroke);color:var(--text-primary);}
+  .btn-sm.ghost:hover:not(:disabled){background:var(--field-hover);border-color:var(--stroke-hover);}
+  .btn-sm.ghost:disabled{background:var(--field-disabled);border-color:var(--divider);color:var(--text-tertiary);cursor:default;}
+  .btn-sm .ring{width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,.45);border-top-color:#fff;animation:spin 1.5s linear infinite;display:none;flex:none;}
+  /* 搜索定位：◀ n/N ▶ */
+  .nav-pair{display:flex;align-items:center;gap:4px;}
+  .nav-arrow{
+    width:32px;height:32px;flex:none;display:flex;align-items:center;justify-content:center;
+    background:var(--field-rest);border:1px solid var(--stroke);border-radius:4px;color:var(--text-primary);cursor:pointer;
+  }
+  .nav-arrow:hover:not(:disabled){background:var(--field-hover);border-color:var(--stroke-hover);}
+  .nav-arrow:disabled{background:var(--field-disabled);border-color:var(--divider);color:var(--text-tertiary);cursor:default;}
+  .nav-arrow svg{width:14px;height:14px;}
+  .nav-count{min-width:38px;text-align:center;font-family:var(--font-mono);font-size:12px;color:var(--text-tertiary);}
+  /* 状态反馈：改动提示（warn）与保存成功（success）互斥，紧贴动作按钮 */
+  .bar-flag{display:none;align-items:center;gap:6px;font-size:12px;line-height:16px;}
+  .bar-flag.show{display:inline-flex;}
+  .bar-flag svg{width:14px;height:14px;flex:none;}
+  .bar-flag.dirty{color:var(--warn);}
+  .bar-flag.ok{color:var(--success);}
+  .bar-flag .dot{width:6px;height:6px;border-radius:50%;background:var(--warn);flex:none;}
+
+  /* 双栏主体：左树 / 右已选，等高对齐 */
+  .perm-split{display:grid;grid-template-columns:1fr 1fr;gap:10px;height:clamp(290px,56vh,470px);}
+  .pane{display:flex;flex-direction:column;min-height:0;background:var(--field-rest);border:1px solid var(--divider);border-radius:6px;overflow:hidden;}
+  .pane-head{flex:none;display:flex;align-items:center;gap:6px;height:34px;padding:0 10px;background:#FAFAFA;border-bottom:1px solid var(--divider);}
+  .pane-head .t{font-size:12px;line-height:16px;font-weight:700;color:var(--text-primary);white-space:nowrap;}
+  .pane-head .c{font-family:var(--font-mono);font-size:12px;color:var(--text-secondary);}
+  .pane-head .rule{margin-left:auto;font-size:11px;line-height:14px;color:var(--text-tertiary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .pane-body{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:4px 0;}
+  #perm-tree:focus{outline:none;}
+  .pane-body.center{display:flex;align-items:center;justify-content:center;}
+  .pane-body::-webkit-scrollbar{width:10px;height:10px;}
+  .pane-body::-webkit-scrollbar-thumb{background:#C7C7C7;border-radius:5px;border:3px solid transparent;background-clip:padding-box;}
+  .pane-body::-webkit-scrollbar-thumb:hover{background:#A6A6A6;border:3px solid transparent;background-clip:padding-box;}
+  .pane-body::-webkit-scrollbar-track{background:transparent;}
+  .pane-body::-webkit-scrollbar-corner{background:transparent;}
+  /* 右侧两个已选清单：面板尺寸恒定——高度按固定比例分配（0.42 : 0.58），
+     不因条目数量、部门层级路径长度而增高或增宽；内容超出时用纵向滚动条 +
+     底部横向滚动条拖拽查看完整信息（名称与路径均单行完整保留，不做省略号截断） */
+  .perm-right{display:grid;grid-template-rows:0.42fr 0.58fr;gap:10px;min-height:0;}
+  .perm-right .pane{min-height:0;}
+  .perm-right .pane-body{overflow:auto;}
+
+  /* 树：twisty(20) + 复选(26) + 图标(22) + 标签，缩进 16px/级 */
+  .tnode{display:flex;align-items:center;height:28px;padding-left:calc(6px + var(--d) * 16px);padding-right:8px;cursor:pointer;user-select:none;}
+  .tnode:hover{background:var(--field-hover);}
+  .tnode.focus{background:var(--field-hover);}
+  .tnode.focus-kbd{background:var(--field-hover);box-shadow:inset 0 0 0 2px var(--focus-outer);}
+  .tnode.is-current{background:var(--info-bg);box-shadow:inset 0 0 0 2px var(--accent);}
+  /* 部门级联授权：被已授权部门覆盖的下级整行置灰、不可单独勾选（折叠/展开仍可用） */
+  .tnode.locked{cursor:default;}
+  .tnode.locked:hover{background:transparent;}
+  .tnode.locked.focus{background:transparent;}
+  .tnode.locked .tlabel,.tnode.locked .tico{color:var(--text-tertiary);}
+  .tnode.locked .cbx{background:var(--divider);border-color:var(--divider);}        /* 勾选框同样置灰 */
+  .tnode.locked .cbx svg{color:var(--text-tertiary);}                              /* 对勾转次级灰 */
+  .twisty{
+    width:20px;height:20px;flex:none;display:flex;align-items:center;justify-content:center;
+    background:none;border:none;padding:0;border-radius:4px;color:var(--text-secondary);cursor:pointer;
+  }
+  .twisty:hover{background:rgba(0,0,0,.07);}
+  .twisty svg{width:12px;height:12px;transition:transform .12s ease;}
+  .twisty.open svg{transform:rotate(90deg);}
+  .twisty.leaf{visibility:hidden;}
+  .cbx{
+    width:20px;height:20px;flex:none;margin:0 6px 0 0;border:1px solid var(--stroke);border-radius:4px;
+    background:var(--field-rest);display:flex;align-items:center;justify-content:center;
+  }
+  .tnode:hover .cbx{border-color:var(--stroke-hover);}
+  .cbx svg{width:13px;height:13px;color:#fff;display:none;}
+  .cbx.on,.cbx.mixed{background:var(--accent);border-color:var(--accent);}
+  .cbx.on svg.i-check{display:block;}
+  .cbx.mixed svg.i-mixed{display:block;}
+  .tico{width:16px;height:16px;flex:none;margin-right:6px;color:var(--text-secondary);}
+  .tnode[data-type=dept] .tico{color:var(--accent);}
+  .tlabel{font-size:13px;line-height:18px;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .tnode[data-depth="0"] .tlabel{font-weight:700;}
+  .tlabel b{background:var(--sel-bg);color:inherit;border-radius:2px;font-weight:700;}
+  /* 已选列表：图标 + 名称 + 上级路径 + 悬停移除 */
+  /* 行宽跟随内容（下限撑满面板）：信息完整保留，靠清单的横向滚动条查看 */
+  .sel-row{display:flex;align-items:center;gap:6px;height:32px;padding:0 4px 0 10px;width:max-content;min-width:100%;box-sizing:border-box;}
+  .sel-row:hover{background:var(--field-hover);}
+  .sel-row .tico{margin-right:0;}
+  .sel-row .s-name{flex:none;padding-right:2px;font-size:13px;line-height:18px;color:var(--text-primary);white-space:nowrap;}
+  .sel-row .s-path{flex:none;padding-right:4px;font-size:12px;line-height:16px;color:var(--text-tertiary);white-space:nowrap;}
+  /* 移除按钮吸附在清单可视区右侧：横向滚动时始终够得着（底色不透明，避免文字透出） */
+  .sel-row .rm{
+    position:sticky;right:2px;margin-left:auto;
+    width:24px;height:24px;flex:none;display:flex;align-items:center;justify-content:center;background:var(--field-rest);border:none;
+    border-radius:4px;color:var(--text-secondary);cursor:pointer;opacity:0;
+  }
+  .sel-row:hover .rm{opacity:1;background:var(--field-hover);}
+  .rm:hover{background:#EBEBEB;color:var(--danger);}
+  .rm:focus-visible{opacity:1;outline:2px solid var(--focus-outer);outline-offset:-2px;}
+  .rm svg{width:12px;height:12px;}
+  .sel-empty{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;text-align:center;color:var(--text-tertiary);}
+  .sel-empty svg{width:26px;height:26px;color:#C7C7C7;}
+  .sel-empty .e-t{font-size:12px;line-height:16px;}
+  .sel-empty .e-s{font-size:11px;line-height:15px;}
+  /* 树内空状态（搜索无匹配） */
+  .tree-empty{display:flex;flex-direction:column;align-items:center;gap:6px;padding:28px 16px;text-align:center;color:var(--text-tertiary);}
+  .tree-empty svg{width:28px;height:28px;color:#C7C7C7;}
+  .tree-empty .e-t{font-size:13px;line-height:18px;color:var(--text-secondary);}
+  .tree-empty .e-s{font-size:12px;line-height:16px;}
+
   .legend{max-width:640px;margin-top:18px;font-size:12px;line-height:18px;color:var(--text-tertiary);text-align:center;}
 
   /* Adaptive: touch */
@@ -314,6 +434,19 @@
     .expander-summary{height:44px;}
     .mi{height:44px;}
     .log-row{height:36px;}
+    /* 文档权限：触摸下树行与已选行抬到 44px，移除按钮常显（无 hover） */
+    .btn-sm,.nav-arrow,.perm-bar .searchbox{height:44px;}
+    .btn-sm{padding:0 18px;}
+    .tnode{height:40px;padding-left:calc(8px + var(--d) * 16px);}
+    .cbx{width:22px;height:22px;}
+    .twisty{width:24px;height:24px;}
+    .sel-row{height:44px;}
+    .sel-row .rm{opacity:1;width:32px;height:32px;}
+  }
+  @media (max-width:640px){
+    /* 窄屏：左右栏改为上下堆叠，各栏保留自身最小可操作高度 */
+    .perm-split{grid-template-columns:1fr;grid-auto-rows:minmax(170px,min(38vh,260px));height:auto;}
+    .perm-right{height:min(50vh,420px);}
   }
   @media (max-width:380px){
     .tb-label{width:100%;text-align:center;margin-bottom:2px;}
@@ -334,6 +467,7 @@
       <button data-screen="menu">右键菜单</button>
       <button data-screen="log">日志</button>
       <button data-screen="meta">查询元数据</button>
+      <button data-screen="perm">文档权限</button>
     </div>
     <div class="tb-group" id="state-group">
       <span class="tb-label">状态</span>
@@ -741,15 +875,85 @@
     </div>
   </div>
 
+  <!-- ============ SCREEN 7: 文档权限（部门 / 人员授权） ============ -->
+  <div class="window" id="win-perm" hidden role="dialog" aria-label="文档权限" style="width:min(800px,94vw)">
+    <div class="titlebar">
+      <div class="title">文档权限</div>
+      <div class="controls">
+        <div class="btn close" title="关闭"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.2"/></svg></div>
+      </div>
+    </div>
+
+    <div class="perm-bar">
+      <div class="searchbox">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="6"/><path d="M15.5 15.5 20 20"/></svg>
+        <input id="perm-search" type="text" placeholder="搜索部门或人员" aria-label="搜索部门或人员" />
+      </div>
+      <button class="btn-sm primary" id="perm-search-btn" type="button">搜索</button>
+      <div class="nav-pair" role="group" aria-label="搜索结果定位">
+        <button class="nav-arrow" id="perm-prev" type="button" disabled title="上一处" aria-label="上一处">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 3.5 5.5 8 10 12.5"/></svg>
+        </button>
+        <span class="nav-count" id="perm-count" aria-live="polite">—</span>
+        <button class="nav-arrow" id="perm-next" type="button" disabled title="下一处" aria-label="下一处">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3.5 10.5 8 6 12.5"/></svg>
+        </button>
+      </div>
+      <div class="perm-bar-right">
+        <span class="bar-flag dirty" id="perm-dirty"><span class="dot"></span>有未保存的改动</span>
+        <span class="bar-flag ok" id="perm-ok">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="12" cy="12" r="9"/><path d="M7.5 12.5l3 3 6-6"/></svg>
+          权限已保存
+        </span>
+        <button class="btn-sm ghost" id="perm-reset" type="button" disabled>重置</button>
+        <button class="btn-sm primary" id="perm-save" type="button" disabled>
+          <span class="ring" id="perm-ring"></span><span id="perm-save-text">保存</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="content dense">
+      <div class="perm-split">
+        <div class="pane">
+          <div class="pane-head">
+            <span class="t">选择部门或人员</span>
+            <span class="rule">勾选部门 ＝ 整部门授权</span>
+          </div>
+          <div class="pane-body" id="perm-tree" role="tree" aria-label="组织结构" tabindex="0"></div>
+        </div>
+        <div class="perm-right">
+          <div class="pane grow-dept">
+            <div class="pane-head">
+              <span class="t">已选择的部门</span>
+              <span class="c" id="perm-dept-count">(0)</span>
+              <span class="rule">只保留最上层授权</span>
+            </div>
+            <div class="pane-body" id="perm-dept-list"></div>
+          </div>
+          <div class="pane grow-user">
+            <div class="pane-head">
+              <span class="t">已选择的员工</span>
+              <span class="c" id="perm-user-count">(0)</span>
+              <span class="rule">不含部门已覆盖人员</span>
+            </div>
+            <div class="pane-body" id="perm-user-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <p class="hint-line">勾选部门 ＝ <b>整部门授权</b>：该部门下全部部门与员工自动勾选并整行置灰，不能再单独操作（勾选框一并置灰）；右侧清单只保留<b>最上层</b>授权，被部门覆盖的下级授权会自动合并（例如先勾「测试中心」、再勾上级「智云无限」，清单里只剩「智云无限」）。取消部门勾选会一并撤销其下全部授权；勾选人员仅对该员工单独授权，被部门覆盖的人员不可单独取消。右上角 × 关闭不保存改动。</p>
+    </div>
+  </div>
+
   <div class="legend">
-    七屏可切换（登录 / 账户信息 / 修改密码 / 重置密码 / 右键菜单 / 日志 / 查询元数据）。「状态」随当前界面变化；「分辨率 / DPI」模拟 100%–200% 按监控器缩放（逻辑宽度不变，整体等比放大）。窗口宽度随视口收缩，触屏下热区自动放大到 44px。修改密码保存成功后自动执行注销并返回登录页；重置密码（首次登录）保存成功后直接进入账户信息页。
+    八屏可切换（登录 / 账户信息 / 修改密码 / 重置密码 / 右键菜单 / 日志 / 查询元数据 / 文档权限）。「状态」随当前界面变化；「分辨率 / DPI」模拟 100%–200% 按监控器缩放（逻辑宽度不变，整体等比放大）。窗口宽度随视口收缩，触屏下热区自动放大到 44px。修改密码保存成功后自动执行注销并返回登录页；重置密码（首次登录）保存成功后直接进入账户信息页。文档权限中勾选部门 ＝ 整部门授权，其下全部节点自动勾选并置灰，右侧清单只保留最上层授权。
   </div>
 
 <script>
   const $ = (id) => document.getElementById(id);
   const screenBtns = document.querySelectorAll('.toolbar button[data-screen]');
   const stateGroup = $('state-group');
-  const windows = { login:$('win-login'), home:$('win-home'), pwd:$('win-pwd'), reset:$('win-reset'), menu:$('win-menu'), log:$('win-log'), meta:$('win-meta') };
+  const windows = { login:$('win-login'), home:$('win-home'), pwd:$('win-pwd'), reset:$('win-reset'), menu:$('win-menu'), log:$('win-log'), meta:$('win-meta'), perm:$('win-perm') };
 
   const STATES = {
     login:[['default','默认'],['error','错误'],['loading','加载中'],['server','展开服务器']],
@@ -758,7 +962,8 @@
     reset:[['default','默认'],['invalid','新密码不合规'],['mismatch','两次不一致'],['success','重置成功']],
     menu:[['default','默认'],['danger','悬停「退出」'],['kbd','键盘高亮']],
     log:[['default','默认'],['filter','筛选：错误'],['search','搜索'],['paused','滚动暂停'],['empty','空状态']],
-    meta:[['default','未查询'],['loading','查询中'],['done','查询成功'],['notfound','未找到']]
+    meta:[['default','未查询'],['loading','查询中'],['done','查询成功'],['notfound','未找到']],
+    perm:[['default','默认'],['search','搜索定位'],['nomatch','无匹配'],['selected','部门级联授权'],['merged','收敛到上级'],['saving','保存中'],['saved','已保存']]
   };
 
   let activeScreen = 'login';
@@ -1135,6 +1340,373 @@
     inp.addEventListener('blur',()=>field.classList.remove('show-caps'));
   });
 
+  /* ---------- Document permission screen (文档权限) ---------- */
+  /* 组织结构：dept 可级联勾选（勾父级=勾全部下级部门），user 为叶子且单独授权；两类互不影响。 */
+  const PERM_TREE=[
+    {id:'d-hb',name:'武汉绿网',type:'dept',children:[
+      {id:'d-zgb',name:'总工办',type:'dept'},
+      {id:'d-glc',name:'管理层',type:'dept',children:[
+        {id:'u-yzg',name:'叶志钢',type:'user'},
+        {id:'u-zw', name:'曾伟',  type:'user'},
+        {id:'u-mcx',name:'孟春霞',type:'user'},
+        {id:'u-wwg',name:'吴伟钢',type:'user'},
+        {id:'u-wlg',name:'王立功',type:'user'}
+      ]},
+      {id:'d-cgb',  name:'采购部',       type:'dept'},
+      {id:'d-cwb',  name:'财务部',       type:'dept'},
+      {id:'d-cpzx', name:'产品中心',     type:'dept'},
+      {id:'d-jfzx', name:'交付中心',     type:'dept'},
+      {id:'d-cszx', name:'测试中心',     type:'dept'},
+      {id:'d-yxzx', name:'营销中心',     type:'dept'},
+      {id:'d-yfzx', name:'研发中心',     type:'dept'},
+      {id:'d-rlzyb',name:'人力资源部',   type:'dept'},
+      {id:'d-qyglb',name:'企业管理部',   type:'dept'},
+      {id:'d-zqswb',name:'证券事务部',   type:'dept'},
+      {id:'d-zjbgs',name:'总经理办公室', type:'dept'},
+      {id:'d-gjgw', name:'高级顾问委员会',type:'dept'}
+    ]},
+    {id:'d-zywx',name:'智云无限',type:'dept',children:[
+      {id:'d-zy-cszx',name:'测试中心',type:'dept',children:[
+        {id:'d-zy-ptcsb',name:'平台测试部',type:'dept',children:[
+          {id:'u-zqc',name:'邹其昌',type:'user'},
+          {id:'u-zdf',name:'周丹凤',type:'user'}
+        ]},
+        {id:'d-zy-kdccsb',name:'云宽带测试部',type:'dept',children:[
+          {id:'u-wjw',name:'王建伟',type:'user'},
+          {id:'u-ldh',name:'李东华',type:'user'}
+        ]}
+      ]},
+      {id:'d-zy-yfzx',name:'研发中心',type:'dept',children:[
+        {id:'d-zy-xtrj',name:'系统软件研发部',type:'dept',children:[
+          {id:'d-zy-kdxt',name:'云宽带系统研发组',type:'dept',children:[
+            {id:'u-lih',name:'李恒',type:'user'},
+            {id:'u-zyy',name:'周游',type:'user'},
+            {id:'u-wyy',name:'王游游',type:'user'},
+            {id:'u-cp', name:'陈盼',type:'user'},
+            {id:'u-zmc',name:'周明才',type:'user'},
+            {id:'u-xsn',name:'肖少南',type:'user'},
+            {id:'u-cpe',name:'曹蓬',type:'user'},
+            {id:'u-cjm',name:'曹健明',type:'user'},
+            {id:'u-wpw',name:'吴鹏文',type:'user'},
+            {id:'u-zb', name:'张博',type:'user'},
+            {id:'u-wzz',name:'王祖智',type:'user'},
+            {id:'u-cx', name:'陈旭',type:'user'},
+            {id:'u-zwf',name:'张文锋',type:'user'},
+            {id:'u-lhb',name:'刘恒博',type:'user'}
+          ]}
+        ]},
+        {id:'d-zy-sbrj',name:'软件研发部',type:'dept',children:[
+          {id:'u-hxj',name:'黄晓军',type:'user'},
+          {id:'u-qtl',name:'钱图亮',type:'user'}
+        ]}
+      ]}
+    ]},
+    {id:'d-gsa', name:'公司A',  type:'dept'},
+    {id:'d-gsb', name:'公司B',  type:'dept'}
+  ];
+
+  const PERM_INDEX={}, PERM_ORDER=[];
+  (function permIndex(list,parent,depth){
+    list.forEach(n=>{
+      PERM_INDEX[n.id]={node:n,parent:parent,depth:depth};
+      PERM_ORDER.push(n);
+      if(n.children) permIndex(n.children,n,depth+1);
+    });
+  })(PERM_TREE,null,0);
+
+  const permTreeEl=$('perm-tree'), permDeptListEl=$('perm-dept-list'), permUserListEl=$('perm-user-list');
+  const permSearch=$('perm-search'), permSearchBtn=$('perm-search-btn');
+  const permPrev=$('perm-prev'), permNext=$('perm-next'), permCount=$('perm-count');
+  const permDirtyFlag=$('perm-dirty'), permOkFlag=$('perm-ok');
+  const permResetBtn=$('perm-reset'), permSaveBtn=$('perm-save'), permSaveText=$('perm-save-text'), permRing=$('perm-ring');
+  const permDeptCount=$('perm-dept-count'), permUserCount=$('perm-user-count');
+
+  const ICO_TWISTY='<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 3.5 10.5 8 6 12.5"/></svg>';
+  const ICO_CBX_CHECK='<svg class="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12.5l4.5 4.5L19 7"/></svg>';
+  const ICO_CBX_MIXED='<svg class="i-mixed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2"><path d="M6 12h12"/></svg>';
+  const ICO_DEPT='<svg class="tico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="3.5" width="10" height="17" rx="1"/><path d="M13.5 9.5h7v11h-7"/><path d="M6.5 7h2M6.5 11h2M6.5 15h2M16.5 13h1M16.5 17h1"/></svg>';
+  const ICO_USER='<svg class="tico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.6"/><path d="M5 20c0-3.7 3.1-5.7 7-5.7s7 2 7 5.7"/></svg>';
+
+  let permExpanded=new Set(['d-zywx','d-zy-cszx']);
+  let permDeptOn=new Set();                                    // 显式授权：勾选部门＝整部门授权（下级被覆盖）
+  let permUserOn=new Set();                                    // 显式授权：单个员工
+  let permSaved={dept:new Set(),user:new Set()};               // 上次保存的快照，供「重置」回退
+  let permQuery='', permMatches=[], permCursor=-1, permFocusId=null;
+  let permKbdFocus=false;                                      // 仅键盘导航时绘制焦点环，鼠标点击只留底纹
+
+  const permKids = n => (n.children||[]).filter(c=>c.type==='dept');
+  /* 覆盖判定：祖先部门一旦被授权，其下全部节点即被「覆盖」——整行置灰且不可单独操作 */
+  function permCovered(id){
+    let p=PERM_INDEX[id].parent;
+    while(p){ if(p.type==='dept'&&permDeptOn.has(p.id)) return true; p=PERM_INDEX[p.id].parent; }
+    return false;
+  }
+  /* 显示态：被覆盖或显式授权 → on；部门再自下而上推导（下级全选＝on，部分＝mixed） */
+  function permState(n){
+    if(permCovered(n.id)) return 'on';
+    if(n.type==='user') return permUserOn.has(n.id) ? 'on' : 'off';
+    if(permDeptOn.has(n.id)) return 'on';
+    const kids=n.children||[];
+    if(!kids.length) return 'off';
+    const st=kids.map(permState);
+    if(st.every(s=>s==='on')) return 'on';
+    return st.some(s=>s!=='off') ? 'mixed' : 'off';
+  }
+  function permClearSubtree(node){                            /* 撤销该节点及其下全部授权 */
+    if(node.type==='dept') permDeptOn.delete(node.id);
+    (node.children||[]).forEach(c=>{
+      if(c.type==='dept') permClearSubtree(c); else permUserOn.delete(c.id);
+    });
+  }
+  function permToggle(node){
+    if(permCovered(node.id)) return;                          /* 置灰行不可单独操作 */
+    if(node.type==='dept'){
+      const wasOn = permState(node)==='on';
+      permClearSubtree(node);                                 /* 先清掉下级零散授权 */
+      if(!wasOn) permDeptOn.add(node.id);                     /* 未勾选/半选 → 转为整部门授权 */
+    }else{
+      if(permUserOn.has(node.id)) permUserOn.delete(node.id); else permUserOn.add(node.id);
+    }
+    permFocusId=node.id;
+    permSyncDirty(); permRenderAll();
+  }
+  function permPathOf(n){
+    const parts=[]; let p=PERM_INDEX[n.id].parent;
+    while(p){ parts.unshift(p.name); p=PERM_INDEX[p.id].parent; }
+    return parts.join(' / ');
+  }
+
+  /* 搜索：命中节点 + 其祖先 + 命中部门的全部下级（便于选中部门后接着挑人） */
+  const permMatch = n => !!permQuery && n.name.toLowerCase().indexOf(permQuery.toLowerCase())>=0;
+  const permHasMatchDesc = n => (n.children||[]).some(c=>permMatch(c)||permHasMatchDesc(c));
+  function permRows(){
+    const rows=[];
+    const pushSubtree=(n,d)=>{ rows.push({n:n,d:d}); (n.children||[]).forEach(c=>pushSubtree(c,d+1)); };
+    const walk=(n,d)=>{
+      if(!permQuery){
+        rows.push({n:n,d:d});
+        if(permExpanded.has(n.id)) (n.children||[]).forEach(c=>walk(c,d+1));
+        return;
+      }
+      if(permMatch(n)){ pushSubtree(n,d); return; }
+      if(permHasMatchDesc(n)){ rows.push({n:n,d:d}); (n.children||[]).forEach(c=>walk(c,d+1)); }
+    };
+    PERM_TREE.forEach(n=>walk(n,0));
+    return rows;
+  }
+  function permLabel(name){
+    if(!permQuery) return esc(name);
+    const i=name.toLowerCase().indexOf(permQuery.toLowerCase());
+    if(i<0) return esc(name);
+    return esc(name.slice(0,i))+'<b>'+esc(name.slice(i,i+permQuery.length))+'</b>'+esc(name.slice(i+permQuery.length));
+  }
+  function permRenderTree(){
+    const rows=permRows();
+    if(!rows.length){
+      permTreeEl.classList.add('center');
+      permTreeEl.innerHTML='<div class="tree-empty">'
+        +'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="6"/><path d="M15.5 15.5 20 20"/></svg>'
+        +'<div class="e-t">未找到匹配的部门或人员</div>'
+        +'<div class="e-s">试试更换关键词，或清空搜索框查看全部组织。</div></div>';
+      return;
+    }
+    permTreeEl.classList.remove('center');
+    let html='';
+    rows.forEach(r=>{
+      const n=r.n, d=r.d;
+      const hasKids=!!(n.children&&n.children.length);
+      const open = permQuery ? hasKids : permExpanded.has(n.id);
+      const st = permState(n), lock = permCovered(n.id);
+      const cur = permMatches[permCursor]===n.id;
+      html+='<div class="tnode'+(lock?' locked':'')+(permFocusId===n.id?(permKbdFocus?' focus-kbd':' focus'):'')+(cur?' is-current':'')+'"'
+        +' data-id="'+n.id+'" data-type="'+n.type+'" data-depth="'+d+'" style="--d:'+d+'" role="treeitem"'
+        +' aria-checked="'+(st==='on'?'true':(st==='mixed'?'mixed':'false'))+'"'
+        + (lock ? ' aria-disabled="true" title="已包含在上级部门的授权范围内，如需单独调整请先取消上级部门授权"' : '')
+        +' tabindex="-1">'
+        +'<button class="twisty'+(open?' open':'')+(hasKids?'':' leaf')+'" type="button" tabindex="-1" aria-label="'+(open?'折叠':'展开')+'">'+ICO_TWISTY+'</button>'
+        +'<span class="cbx '+st+'">'+ICO_CBX_CHECK+ICO_CBX_MIXED+'</span>'
+        +(n.type==='dept'?ICO_DEPT:ICO_USER)
+        +'<span class="tlabel">'+permLabel(n.name)+'</span>'
+        +'</div>';
+    });
+    permTreeEl.innerHTML=html;
+    const curEl=permTreeEl.querySelector('.tnode.is-current');
+    if(curEl&&curEl.scrollIntoView) curEl.scrollIntoView({block:'nearest'});
+  }
+  function permSelRow(n){
+    const path=permPathOf(n);
+    return '<div class="sel-row" data-id="'+n.id+'" role="listitem" title="'+esc(n.name+(path?'  '+path:''))+'">'
+      +(n.type==='dept'?ICO_DEPT:ICO_USER)
+      +'<span class="s-name">'+esc(n.name)+'</span>'
+      +'<span class="s-path">'+esc(permPathOf(n))+'</span>'
+      +'<button class="rm" type="button" title="移除" aria-label="移除 '+esc(n.name)+'">'
+      +'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 6l12 12M18 6 6 18"/></svg></button>'
+      +'</div>';
+  }
+  function permEmpty(kind,title,sub){
+    return '<div class="sel-empty">'+(kind==='dept'?ICO_DEPT:ICO_USER)
+      +'<div class="e-t">'+title+'</div><div class="e-s">'+sub+'</div></div>';
+  }
+  /* 右侧清单＝授权的「最上层」：凡被上层已授权节点包含的下级都不再单独列出
+     （先勾部门、再勾其上级部门 → 下级授权被合并，清单只留上级） */
+  function permIsTop(n){
+    let p=PERM_INDEX[n.id].parent;
+    while(p){ if(permState(p)==='on') return false; p=PERM_INDEX[p.id].parent; }
+    return true;
+  }
+  function permRenderSelected(){
+    const shown=PERM_ORDER.filter(n=>permState(n)==='on'&&permIsTop(n));
+    const depts=shown.filter(n=>n.type==='dept');
+    const users=shown.filter(n=>n.type==='user');
+    permDeptCount.textContent='('+depts.length+')';
+    permUserCount.textContent='('+users.length+')';
+    permDeptListEl.innerHTML = depts.length ? depts.map(permSelRow).join('')
+      : permEmpty('dept','尚未选择部门','勾选左侧部门，即授权该部门及其全部下级。');
+    permUserListEl.innerHTML = users.length ? users.map(permSelRow).join('')
+      : permEmpty('user','尚未选择员工','勾选左侧人员可单独授权；已含在部门授权内的人员不在此重复列出。');
+    permDeptListEl.classList.toggle('center',!depts.length);
+    permUserListEl.classList.toggle('center',!users.length);
+  }
+  function permRenderAll(){ permRenderTree(); permRenderSelected(); }
+
+  function permIsDirty(){
+    const {dept,user}=permSaved;
+    return permDeptOn.size!==dept.size || permUserOn.size!==user.size
+      || [...permDeptOn].some(id=>!dept.has(id))
+      || [...permUserOn].some(id=>!user.has(id));
+  }
+  function permSyncDirty(){
+    const d=permIsDirty();
+    permDirtyFlag.classList.toggle('show',d);
+    permOkFlag.classList.remove('show');
+    permResetBtn.disabled=!d;
+    permSaveBtn.disabled=!d;
+    permSaveText.textContent='保存';
+    permRing.style.display='none';
+  }
+  function permUpdateNav(){
+    permCount.textContent = permMatches.length ? (permCursor+1)+'/'+permMatches.length : '—';
+    permPrev.disabled = permNext.disabled = !permMatches.length;
+  }
+  function permRunSearch(){
+    permQuery=(permSearch.value||'').trim();
+    permMatches=[]; permCursor=-1;
+    if(permQuery) PERM_ORDER.forEach(n=>{ if(permMatch(n)) permMatches.push(n.id); });
+    if(permMatches.length){ permCursor=0; permFocusId=permMatches[0]; }
+    permRenderTree(); permUpdateNav();
+  }
+  function permMove(delta){
+    if(!permMatches.length) return;
+    permCursor=(permCursor+delta+permMatches.length)%permMatches.length;
+    permFocusId=permMatches[permCursor];
+    permRenderTree(); permUpdateNav();
+  }
+
+  permSearchBtn.addEventListener('click',permRunSearch);
+  permSearch.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); permRunSearch(); } });
+  permSearch.addEventListener('input',()=>{                    // 清空输入即恢复完整组织树
+    if(!permSearch.value.trim() && permQuery){ permQuery=''; permMatches=[]; permCursor=-1; permRenderTree(); permUpdateNav(); }
+  });
+  permPrev.addEventListener('click',()=>permMove(-1));
+  permNext.addEventListener('click',()=>permMove(1));
+
+  permTreeEl.addEventListener('click',e=>{
+    const row=e.target.closest('.tnode'); if(!row) return;
+    const id=row.dataset.id, tw=e.target.closest('.twisty');
+    permKbdFocus=false;                                       // 鼠标路径：不绘制键盘焦点环
+    if(tw && !tw.classList.contains('leaf')){                 // 点击 twisty 只折叠/展开
+      if(permExpanded.has(id)) permExpanded.delete(id); else permExpanded.add(id);
+      permRenderTree(); return;
+    }
+    permToggle(PERM_INDEX[id].node);                          // 点击行 = 切换勾选
+    permTreeEl.focus({preventScroll:true});
+  });
+  permTreeEl.addEventListener('keydown',e=>{
+    const rows=[...permTreeEl.querySelectorAll('.tnode')]; if(!rows.length) return;
+    permKbdFocus=true;                                        // 键盘路径：恢复焦点环
+    let i=rows.findIndex(r=>r.dataset.id===permFocusId);
+    if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+      e.preventDefault();
+      const ni = i<0 ? 0 : Math.max(0,Math.min(rows.length-1,i+(e.key==='ArrowDown'?1:-1)));
+      permFocusId=rows[ni].dataset.id; permRenderTree(); return;
+    }
+    if(i<0) return;
+    const id=rows[i].dataset.id;
+    if(e.key==='ArrowRight'||e.key==='ArrowLeft'){
+      e.preventDefault();
+      if(e.key==='ArrowRight') permExpanded.add(id); else permExpanded.delete(id);
+      permRenderTree(); return;
+    }
+    if(e.key===' '||e.key==='Spacebar'||e.key==='Enter'){ e.preventDefault(); permToggle(PERM_INDEX[id].node); }
+  });
+
+  [permDeptListEl,permUserListEl].forEach(el=>{
+    el.addEventListener('click',e=>{
+      const rm=e.target.closest('.rm'); if(!rm) return;
+      const id=rm.closest('.sel-row').dataset.id, node=PERM_INDEX[id].node;
+      if(node.type==='dept') permClearSubtree(node); else permUserOn.delete(id);
+      permFocusId=id; permSyncDirty(); permRenderAll();
+    });
+  });
+
+  permResetBtn.addEventListener('click',()=>{                  // 重置 = 回退到上次保存的状态
+    permDeptOn=new Set(permSaved.dept);
+    permUserOn=new Set(permSaved.user);
+    permSyncDirty(); permRenderAll();
+  });
+  permSaveBtn.addEventListener('click',()=>{
+    if(permSaveBtn.disabled) return;
+    permSaveBtn.disabled=true; permResetBtn.disabled=true;
+    permSaveText.textContent='保存中'; permRing.style.display='inline-block';
+    setTimeout(()=>{
+      permSaved={dept:new Set(permDeptOn),user:new Set(permUserOn)};
+      permSyncDirty();                                         // 已无改动 → 按钮回到禁用
+      permOkFlag.classList.add('show');
+      setTimeout(()=>permOkFlag.classList.remove('show'),2400);
+    },700);
+  });
+
+  function permInit(){
+    permDeptOn=new Set(); permUserOn=new Set();
+    permSaved={dept:new Set(),user:new Set()};
+    permExpanded=new Set(['d-zywx','d-zy-cszx']);
+    permSearch.value=''; permQuery=''; permMatches=[]; permCursor=-1; permFocusId=null;
+    permKbdFocus=false;
+    permOkFlag.classList.remove('show');
+    permSyncDirty(); permRenderAll();
+  }
+  /* 演示场景 A：勾选「测试中心」＝整部门授权（其下部门/人员全部勾选并置灰），再单独勾选员工「李恒」 */
+  function permDemoDeptPlusUser(){
+    permDeptOn.add('d-zy-cszx');
+    permUserOn.add('u-lih');
+    permExpanded=new Set(['d-zywx','d-zy-cszx','d-zy-ptcsb','d-zy-yfzx','d-zy-xtrj','d-zy-kdxt']);
+    permFocusId='d-zy-cszx';
+  }
+  function applyPermState(state){
+    permInit();
+    if(state==='default') return;
+    if(state==='search'){ permSearch.value='部'; permRunSearch(); return; }
+    if(state==='nomatch'){ permSearch.value='西南大区'; permRunSearch(); return; }
+    permDemoDeptPlusUser();                                 /* selected / merged / saving / saved 共用同一份改动 */
+    if(state==='merged'){
+      /* 演示场景 B：再勾上级「智云无限」——其下全部勾选并置灰；
+         原先单独授权的「测试中心」「李恒」被合并，右侧清单只剩「智云无限」 */
+      permClearSubtree(PERM_INDEX['d-zywx'].node);
+      permDeptOn.add('d-zywx');
+      permFocusId='d-zywx';
+    }
+    permSyncDirty(); permRenderAll();
+    if(state==='saving'){
+      permSaveBtn.disabled=true; permResetBtn.disabled=true;
+      permSaveText.textContent='保存中'; permRing.style.display='inline-block';
+    }
+    if(state==='saved'){
+      permSaved={dept:new Set(permDeptOn),user:new Set(permUserOn)};
+      permSyncDirty();
+      permOkFlag.classList.add('show');
+    }
+  }
+
   /* ---------- Per-screen state application ---------- */
   function applyState(screen,state,btn){
     stateGroup.querySelectorAll('button').forEach(b=>b.classList.toggle('active', b===btn || (btn===undefined && b.dataset.state===state)));
@@ -1162,6 +1734,7 @@
     if(screen==='menu'){ applyMenuState(state); }
     if(screen==='log'){ applyLogState(state); }
     if(screen==='meta'){ applyMetaState(state); }
+    if(screen==='perm'){ applyPermState(state); }
   }
 
   /* ---------- Init ---------- */

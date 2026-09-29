@@ -73,6 +73,22 @@ namespace PasswordManager.Services.Routing
         /// </summary>
         public string publicKey { get; set; }
     }
+
+    /// <summary>
+    /// 客户端版本检查返回数据（11.1）。updateType 由服务端判定：NONE / OPTIONAL / FORCE。
+    /// minVersion 在平台未设最低版本时可能为 null。
+    /// </summary>
+    public class VersionCheckInfo
+    {
+        public string platform { get; set; }
+        public string currentVersion { get; set; }
+        public string latestVersion { get; set; }
+        public string minVersion { get; set; }
+        public string updateType { get; set; }
+        public string downloadUrl { get; set; }
+        public string changelog { get; set; }
+        public string releaseTime { get; set; }
+    }
     
     /// <summary>
     /// LDAP节点数据结构
