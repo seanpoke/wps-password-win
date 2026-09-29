@@ -61,17 +61,18 @@ jobs:
         Push-Location $publishDir
         Compress-Archive -Path .\* -DestinationPath "${env:GITHUB_WORKSPACE}\${archiveName}.zip" -Force
         Pop-Location
-        Write-Output "::set-output name=archiveName::$archiveName"
         Write-Output "Archive created: ${archiveName}.zip"
+        "archiveName=$archiveName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
       working-directory: ${{ github.workspace }}
       id: create-archive
 
     - name: Upload publish artifacts
       uses: actions/upload-artifact@v4
       with:
+        # artifact 名 = 下载时得到的 zip 名；直接上传 publish 目录，
+        # 下载解压一层即是 exe 本体（避免 zip 套 zip）
         name: ${{ steps.create-archive.outputs.archiveName }}
-        path: |
-          *.zip
+        path: PasswordManager/bin/Release/net6.0-windows/win-x64/publish/*
         if-no-files-found: error
       id: upload-artifact
 
