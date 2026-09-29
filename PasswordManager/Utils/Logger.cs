@@ -31,6 +31,12 @@ namespace PasswordManager.Utils
 
         private static volatile LogLevel _minLogLevel = GetInitialLogLevel();
 
+        /// <summary>运行时调整日志级别（开发者模式开 → Debug，关 → Info）。</summary>
+        public static void SetMinLevel(LogLevel level) => _minLogLevel = level;
+
+        /// <summary>当前生效的日志级别。</summary>
+        public static LogLevel CurrentLevel => _minLogLevel;
+
         private static LogLevel GetInitialLogLevel()
         {
             string envLogLevel = Environment.GetEnvironmentVariable("WPS_PASSWORD_LOG_LEVEL");
