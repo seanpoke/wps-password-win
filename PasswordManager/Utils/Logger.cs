@@ -41,11 +41,8 @@ namespace PasswordManager.Utils
                     return parsedLevel;
                 }
             }
-#if DEBUG
-            return LogLevel.Debug;
-#else
+            // 默认 Info：DEBUG 日志不再写入（需要排查时设置环境变量 WPS_PASSWORD_LOG_LEVEL=Debug）
             return LogLevel.Info;
-#endif
         }
 
         static Logger()
