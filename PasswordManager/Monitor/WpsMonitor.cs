@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -429,7 +429,7 @@ namespace PasswordManager.Monitor
                         {
                             if (File.Exists(path))
                             {
-                                Logger.Info($"[路径匹配] 成功匹配文档路径: {path}");
+                                Logger.Debug($"[路径匹配] 成功匹配文档路径: {path}");
                                 return path;
                             }
                         }
