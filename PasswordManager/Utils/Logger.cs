@@ -37,6 +37,15 @@ namespace PasswordManager.Utils
         /// <summary>当前生效的日志级别。</summary>
         public static LogLevel CurrentLevel => _minLogLevel;
 
+        // 初始值来自持久化状态（%AppData%\PasswordManager\log_record.state），跨启动保持上次选择
+        private static volatile bool _fileLoggingEnabled = StorageManager.LoadLogRecordEnabled();
+
+        /// <summary>开启/关闭日志落盘（仅控制文件写入；日志窗口实时显示不受影响）。</summary>
+        public static void SetFileLoggingEnabled(bool enabled) => _fileLoggingEnabled = enabled;
+
+        /// <summary>当前是否正在写日志文件。</summary>
+        public static bool FileLoggingEnabled => _fileLoggingEnabled;
+
         private static LogLevel GetInitialLogLevel()
         {
             string envLogLevel = Environment.GetEnvironmentVariable("WPS_PASSWORD_LOG_LEVEL");
@@ -114,8 +123,12 @@ namespace PasswordManager.Utils
             {
                 string logEntry = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [{level}] {message}";
                 Console.WriteLine(logEntry);
-                _fileWriteQueue.Enqueue(logEntry);
-                _fileWaitEvent.Set();
+
+                if (_fileLoggingEnabled)
+                {
+                    _fileWriteQueue.Enqueue(logEntry);
+                    _fileWaitEvent.Set();
+                }
 
                 if (!_windowPaused && _logWindowUpdateCallback != null)
                 {

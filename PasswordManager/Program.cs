@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -673,7 +673,7 @@ namespace PasswordManager
                                         // 只有文档真正打开后才初始化元数据和注册文件特征
                                         if (IsDocumentOpen(documentPath))
                                         {
-                                            Logger.Info($"获取到文档路径: {documentPath}");
+                                            Logger.Debug($"获取到文档路径: {documentPath}");
 
                                             // 在文档真正打开后才初始化文件元数据
                                             TryInitializeFileMeta(documentPath);
@@ -717,7 +717,7 @@ namespace PasswordManager
                                     GetWindowText(encryptDialog, dialogTitle, dialogTitle.Capacity);
                                     string title = dialogTitle.ToString();
 
-                                    Logger.Info($"找到对话框: {encryptDialog}, 标题: {title}");
+                                    Logger.Debug($"找到对话框: {encryptDialog}, 标题: {title}");
 
                                     // 只有在加密窗口中显示悬浮按钮，解密窗口不显示
                                     if (title == "密码加密")
@@ -843,7 +843,7 @@ namespace PasswordManager
 
                                     if (title == "文档已加密")
                                     {
-                                        Logger.Info($"找到解密对话框: {decryptDialog}, 标题: {title}");
+                                        Logger.Debug($"找到解密对话框: {decryptDialog}, 标题: {title}");
 
                                         string documentPath = monitor.GetDocumentPath(decryptDialog);
                                         if (!string.IsNullOrEmpty(documentPath))
@@ -853,6 +853,13 @@ namespace PasswordManager
                                             if (extension != ".docx" && extension != ".xlsx" && extension != ".pptx")
                                             {
                                                 Logger.Debug($"不支持的文件格式: {extension}，跳过自动填充");
+                                                continue;
+                                            }
+
+                                            // 用户曾对该文档点过「取消」：不再自动填充/弹窗，避免循环打扰（文档关闭后重置）
+                                            if (AutoFillAttemptManager.Instance.IsUserCancelled(documentPath))
+                                            {
+                                                Logger.Debug($"文档 {System.IO.Path.GetFileName(documentPath)} 此前被用户取消密码输入，跳过自动填充");
                                                 continue;
                                             }
 
@@ -895,7 +902,8 @@ namespace PasswordManager
                                                         }
                                                         else
                                                         {
-                                                            Logger.Info("用户取消了密码输入");
+                                                            Logger.Info("用户取消了密码输入，标记该文档后续不再自动填充");
+                                                            AutoFillAttemptManager.Instance.MarkUserCancelled(documentPath);
                                                             userCancelled = true;
                                                             break;
                                                         }
@@ -1011,7 +1019,7 @@ namespace PasswordManager
                                         // 1.1 遇到权限异常（如微信下载的文件），不做任何清理
                                         if (accessDenied)
                                         {
-                                            Logger.Info($"[检测文档关闭]: {documentPath} 因权限异常跳过本次清理");
+                                            Logger.Debug($"[检测文档关闭]: {documentPath} 因权限异常跳过本次清理");
                                             continue;
                                         }
 
@@ -1224,7 +1232,7 @@ namespace PasswordManager
                         // 检查进程是否有主窗口且窗口可见
                         if (process.MainWindowHandle != IntPtr.Zero && IsWindowVisible(process.MainWindowHandle))
                         {
-                            Logger.Info("检测到WPS窗口进程正在运行");
+                            Logger.Debug("检测到WPS窗口进程正在运行");
                             return true;
                         }
                     }
@@ -1276,7 +1284,7 @@ namespace PasswordManager
             }
             catch (System.IO.IOException)
             {
-                Logger.Info($"[文档打开检测] 文件被其他进程锁定（WPS可能正在打开）: {documentPath}");
+                Logger.Debug($"[文档打开检测] 文件被其他进程锁定（WPS可能正在打开）: {documentPath}");
                 return true;
             }
             catch (System.UnauthorizedAccessException)
@@ -1339,7 +1347,7 @@ namespace PasswordManager
                         unlockedCount++;
                         if (enableLogging)
                         {
-                            Logger.Info($"[检测文档关闭]: {documentPath} 第{i + 1}次检测未被锁定");
+                            Logger.Debug($"[检测文档关闭]: {documentPath} 第{i + 1}次检测未被锁定");
                         }
                     }
                 }
@@ -1347,7 +1355,7 @@ namespace PasswordManager
                 {
                     if (enableLogging)
                     {
-                        Logger.Info($"[检测文档关闭]: {documentPath} 第{i + 1}次检测被锁定");
+                        Logger.Debug($"[检测文档关闭]: {documentPath} 第{i + 1}次检测被锁定");
                     }
                     return false;
                 }
@@ -1436,7 +1444,7 @@ namespace PasswordManager
                 {
                     if (enableLogging)
                     {
-                        Logger.Info($"[检测文档关闭]: {documentPath} 存在临时文件 {tempFilePath}");
+                        Logger.Debug($"[检测文档关闭]: {documentPath} 存在临时文件 {tempFilePath}");
                     }
                     return true;
                 }
@@ -1444,7 +1452,7 @@ namespace PasswordManager
 
             if (enableLogging)
             {
-                Logger.Info($"[检测文档关闭]: {documentPath} 未找到匹配的临时文件");
+                Logger.Debug($"[检测文档关闭]: {documentPath} 未找到匹配的临时文件");
             }
             return false;
         }
@@ -2025,7 +2033,7 @@ namespace PasswordManager
             // 检查文件元数据是否已存在
             if (FileMetaFactory.Instance.HasFileMeta(documentPath))
             {
-                Logger.Info($"TryInitializeFileMeta: 文件 {documentPath} 元数据已存在，跳过初始化");
+                Logger.Debug($"TryInitializeFileMeta: 文件 {documentPath} 元数据已存在，跳过初始化");
                 return;
             }
 
@@ -2084,8 +2092,15 @@ namespace PasswordManager
                     keyVersion = "default";
                 }
                 
+                // 无读/写权限：不调用解密接口，也不能把 ZIP 尾部的加密密码（blob）当成
+                // 打开密码存入 CurrentPassword——否则解密弹窗会自动填充一个必然失败的值
+                if (!readAuth && !writeAuth)
+                {
+                    password = null;
+                    Logger.Info("当前用户对该文档无读/写权限，跳过密码解密，CurrentPassword 置空（由用户手动输入）");
+                }
                 // 如果有读权限且密码不为空，调用 /doc/password 接口获取解密后的密码
-                if ((readAuth || writeAuth) && !string.IsNullOrEmpty(password))
+                else if ((readAuth || writeAuth) && !string.IsNullOrEmpty(password))
                 {
                     try
                     {

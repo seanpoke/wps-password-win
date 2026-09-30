@@ -13,6 +13,7 @@ namespace PasswordManager.Utils
         private static readonly string _userFile = Path.Combine(_appDataPath, "user.json");
         private static readonly string _keyFile = Path.Combine(_appDataPath, "keyinfo.json");
         private static readonly string _loginCacheFile = Path.Combine(_appDataPath, "login_cache.json");
+        private static readonly string _logRecordStateFile = Path.Combine(_appDataPath, "log_record.state");
         private static readonly string _encryptionKey = "PasswordManager_EncryptionKey";
 
         static StorageManager()
@@ -23,6 +24,31 @@ namespace PasswordManager.Utils
                 Directory.CreateDirectory(_appDataPath);
             }
         }
+
+        #region 日志记录开关状态（跨启动持久化）
+
+        /// <summary>保存日志文件记录开关状态。</summary>
+        public static void SaveLogRecordEnabled(bool enabled)
+        {
+            try
+            {
+                File.WriteAllText(_logRecordStateFile, enabled ? "1" : "0");
+            }
+            catch { }
+        }
+
+        /// <summary>读取日志文件记录开关状态（无记录时默认开启）。</summary>
+        public static bool LoadLogRecordEnabled()
+        {
+            try
+            {
+                if (!File.Exists(_logRecordStateFile)) return true;
+                return File.ReadAllText(_logRecordStateFile).Trim() == "1";
+            }
+            catch { return true; }
+        }
+
+        #endregion
 
         #region 配置信息存储
 

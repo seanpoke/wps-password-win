@@ -62,6 +62,8 @@ namespace PasswordManager.UI
         private SegmentedControl _seg = null!;
         private ToggleSwitch _switch = null!;
         private Label _switchLabel = null!;
+        private ToggleSwitch _recordSwitch = null!;
+        private Label _recordSwitchLabel = null!;
         private MiniButton _clearButton = null!;
         private MiniButton _openFolderButton = null!;
         private LogView _logView = null!;
@@ -87,8 +89,8 @@ namespace PasswordManager.UI
         {
             Text = "密码管理 · 日志";
             Resizable = true;   // 允许拖拽边缘缩放
-            // 初始宽度保证工具条单行摆放（单行需约 714 逻辑宽）
-            ClientSize = new Size(Theme.S(730), TitleBarHeight + Theme.S(52) + Theme.S(340));
+            // 初始尺寸调大（920x500），工具条单行摆放（单行需约 822 逻辑宽）
+            ClientSize = new Size(Theme.S(920), Theme.S(500));
 
             // ---- 工具条 ----
             _searchBox = new SearchBox("搜索日志内容");
@@ -103,6 +105,25 @@ namespace PasswordManager.UI
             _switchLabel = new Label
             {
                 Text = "自动滚动",
+                Font = Theme.Small,
+                ForeColor = Theme.TextSecondary,
+                AutoSize = false,
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent
+            };
+
+            // 记录日志开关：仅控制日志文件落盘；日志窗口实时显示不受影响。
+            // 初始状态来自持久化（挂事件前赋值，不触发回写）；切换时立即持久化
+            _recordSwitch = new ToggleSwitch { Checked = StorageManager.LoadLogRecordEnabled() };
+            _recordSwitch.CheckedChanged += (_, _) =>
+            {
+                Logger.SetFileLoggingEnabled(_recordSwitch.Checked);
+                StorageManager.SaveLogRecordEnabled(_recordSwitch.Checked);
+                Logger.Info($"日志文件记录已{(_recordSwitch.Checked ? "开启" : "关闭")}");
+            };
+            _recordSwitchLabel = new Label
+            {
+                Text = "记录日志",
                 Font = Theme.Small,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
@@ -146,7 +167,7 @@ namespace PasswordManager.UI
             _logView.ResumeRequested += (_, _) => _switch.Checked = true;
             _scrollBar = new VScrollBar();
 
-            Controls.AddRange(new Control[] { _searchBox, _seg, _switch, _switchLabel, _clearButton, _openFolderButton, _logView, _scrollBar });
+            Controls.AddRange(new Control[] { _searchBox, _seg, _switch, _switchLabel, _recordSwitch, _recordSwitchLabel, _clearButton, _openFolderButton, _logView, _scrollBar });
 
             _scrollBar.ValueChanged += (_, _) => { _logView.ScrollOffset = _scrollBar.Value; _logView.Invalidate(); };
             _logView.ScrollChanged += offset =>
@@ -178,7 +199,7 @@ namespace PasswordManager.UI
 
             // 原型 .logbar{flex-wrap:wrap}：宽度不足以单行摆放时换行——
             // 行1：搜索框 + 等级筛选；行2（右对齐）：自动滚动开关 + 打开目录 + 清空
-            int singleLineWidth = Theme.S(714);   // 单行布局所需宽度（各元素+间距累加）
+            int singleLineWidth = Theme.S(822);   // 单行布局所需宽度（各元素+间距累加，含「记录日志」开关组）
             bool wrap = ClientSize.Width < singleLineWidth;
 
             _searchBox.SetBounds(edge + Theme.S(12), searchY, searchW, Theme.S(32));
@@ -190,6 +211,8 @@ namespace PasswordManager.UI
                 _openFolderButton.SetBounds(_clearButton.Left - Theme.S(8) - folderW, searchY, folderW, Theme.S(32));
                 _switchLabel.SetBounds(_openFolderButton.Left - Theme.S(8) - Theme.S(64), searchY, Theme.S(64), Theme.S(32));
                 _switch.SetBounds(_switchLabel.Left - Theme.S(8) - Theme.S(36), barTop + Theme.S(16), Theme.S(36), Theme.S(20));
+                _recordSwitchLabel.SetBounds(_switch.Left - Theme.S(8) - Theme.S(64), searchY, Theme.S(64), Theme.S(32));
+                _recordSwitch.SetBounds(_recordSwitchLabel.Left - Theme.S(8) - Theme.S(36), barTop + Theme.S(16), Theme.S(36), Theme.S(20));
                 _barHeight = Theme.S(52);
             }
             else
@@ -199,6 +222,8 @@ namespace PasswordManager.UI
                 _openFolderButton.SetBounds(_clearButton.Left - Theme.S(8) - folderW, row2Y, folderW, Theme.S(32));
                 _switchLabel.SetBounds(_openFolderButton.Left - Theme.S(8) - Theme.S(64), row2Y, Theme.S(64), Theme.S(32));
                 _switch.SetBounds(_switchLabel.Left - Theme.S(8) - Theme.S(36), row2Y + Theme.S(6), Theme.S(36), Theme.S(20));
+                _recordSwitchLabel.SetBounds(_switch.Left - Theme.S(8) - Theme.S(64), row2Y, Theme.S(64), Theme.S(32));
+                _recordSwitch.SetBounds(_recordSwitchLabel.Left - Theme.S(8) - Theme.S(36), row2Y + Theme.S(6), Theme.S(36), Theme.S(20));
                 _barHeight = Theme.S(10) + Theme.S(32) + Theme.S(10) + Theme.S(32) + Theme.S(10);
             }
 
