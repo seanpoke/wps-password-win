@@ -152,8 +152,9 @@ namespace PasswordManager.UI
                 btn.Text = "下载中 0%";
                 Logger.Info($"开始下载新版本安装包: {url} → {savePath}");
 
-                // 无 token 直连（服务端下载接口免鉴权）；流式写盘并回报进度
-                using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+                // 无 token 直连（服务端下载接口免鉴权）；复用共享证书策略（内网自签名 https 可下载），
+                // 流式写盘并回报进度
+                using var client = DynamicHttpClientManager.CreateClientWithTimeout(TimeSpan.FromMinutes(10));
                 using var resp = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
                 resp.EnsureSuccessStatusCode();
 
