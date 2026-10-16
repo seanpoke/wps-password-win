@@ -639,6 +639,12 @@ namespace PasswordManager
                             {
                                 Logger.Info("程序检测机制处于未登录状态，每秒检查一次");
                                 GlobalState.Instance.ClearAllResources();
+                                // 注销时 Reset() 会清空 possiblePaths（GetDocumentPath 依赖它把弹窗里的
+                                // 文件名解析成完整路径）。同时必须重置内核监视器的 _lastPostedFilePath
+                                // 去重标记：否则重新登录后第一次打开"上一会话打开过"的同一加密文档时，
+                                // 唯一的文件打开事件会被去重吞掉，possiblePaths 无法重建，
+                                // 导致"文档已加密"弹窗拿不到路径、无法自动填充密码（第二次打开才恢复）。
+                                _lastPostedFilePath = null;
                                 Thread.Sleep(1000); // 暂停时每秒检查一次
                                 continue;
                             }
